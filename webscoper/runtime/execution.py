@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -49,6 +50,13 @@ from webscoper.schemas.task import TaskSpec
 from webscoper.schemas.version import VersionContext
 from webscoper.tools.browser_tools import StatefulBrowserToolRuntime
 from webscoper.tools.registry import ToolRegistry, create_default_tool_registry
+
+
+@dataclass
+class WebAgentRuntimeComponents:
+    browser_runtime: StatefulBrowserToolRuntime
+    tool_executor: LocalToolExecutor
+    execution_loop: AgentExecutionLoop
 
 
 class WebAgentExecutionHandler:
@@ -102,9 +110,51 @@ class WebAgentExecutionHandler:
         self.last_loop_result: ExecutionLoopResult | None = None
 
     async def run(self, task: TaskSpec) -> PageObservation:
+        context = self.start_run(task)
+        runtime = self.build_runtime_components(context)
+        try:
+            prompt_result = self.build_prompt(context)
+            plan = await self.plan_task(context, prompt_result)
+            self.validate_plan(context, plan)
+            observation = await self.execute_plan(context, plan, runtime)
+            if context.state.status in {"requires_approval", "blocked"}:
+                self.snapshot_context(context)
+                return observation
+
+            context.state.status = "completed"
+            context.state.current_step = 5
+            self.persist_run_artifacts(context, observation)
+            self.finalize_success(context)
+            return observation
+        except Exception as exc:
+            self.finalize_failure(context, exc)
+            raise
+        finally:
+            await runtime.browser_runtime.close()
+
+    def start_run(self, task: TaskSpec) -> WebAgentContext:
         context = self.build_context(task)
         self.last_context = context
         transcript = context.transcript_store
+        transcript.append("task_loaded", _task_payload(task))
+        transcript.append(
+            "context_built",
+            context.snapshot().model_dump(mode="json"),
+        )
+        context.state.status = "running"
+        context.state.current_step = 1
+        transcript.append("execution_started", _state_payload(context))
+        self._emit_event(
+            "task_started",
+            "Task started",
+            {"run_id": context.run_id, "run_dir": str(context.run_dir)},
+        )
+        return context
+
+    def build_runtime_components(
+        self,
+        context: WebAgentContext,
+    ) -> WebAgentRuntimeComponents:
         browser_runtime = StatefulBrowserToolRuntime(
             trace_recorder=context.trace_recorder,
             headless=self.headless,
@@ -124,70 +174,86 @@ class WebAgentExecutionHandler:
             tool_executor=tool_executor,
             event_sink=self.event_sink,
         )
-
-        transcript.append("task_loaded", _task_payload(task))
-        transcript.append(
-            "context_built",
-            context.snapshot().model_dump(mode="json"),
+        return WebAgentRuntimeComponents(
+            browser_runtime=browser_runtime,
+            tool_executor=tool_executor,
+            execution_loop=execution_loop,
         )
 
-        try:
-            context.state.status = "running"
-            context.state.current_step = 1
-            transcript.append("execution_started", _state_payload(context))
-            self._emit_event(
-                "task_started",
-                "Task started",
-                {"run_id": context.run_id, "run_dir": str(context.run_dir)},
-            )
+    def build_prompt(self, context: WebAgentContext) -> PromptBuildResult:
+        context.state.current_step = 2
+        agents_md_instructions = self.agents_md_loader.load(self.workspace)
+        context.transcript_store.append(
+            "agents_md_loaded",
+            {
+                "count": len(agents_md_instructions),
+                "paths": [
+                    instruction.source_path for instruction in agents_md_instructions
+                ],
+            },
+        )
 
-            context.state.current_step = 2
-            agents_md_instructions = self.agents_md_loader.load(self.workspace)
-            transcript.append(
-                "agents_md_loaded",
-                {
-                    "count": len(agents_md_instructions),
-                    "paths": [
-                        instruction.source_path
-                        for instruction in agents_md_instructions
-                    ],
-                },
-            )
+        prompt_result = DynamicPromptBuilder(self.tool_registry).build(
+            context.snapshot(),
+            agents_md_instructions=agents_md_instructions,
+            runtime_reminders=self.runtime_reminders.list(),
+        )
+        self.last_prompt_result = prompt_result
+        _persist_prompt_context(context.run_dir, prompt_result)
+        context.transcript_store.append(
+            "prompt_built",
+            {
+                "prompt_preview_path": str(context.run_dir / "prompt_preview.md"),
+                "prompt_context_path": str(context.run_dir / "prompt_context.json"),
+                "loaded_agents_md_paths": prompt_result.loaded_agents_md_paths,
+                "core_tool_ids": prompt_result.core_tool_ids,
+                "lazy_tool_ids": prompt_result.lazy_tool_ids,
+            },
+        )
+        self._emit_event(
+            "prompt_built",
+            "Prompt built",
+            {
+                "run_id": context.run_id,
+                "prompt_preview_path": str(context.run_dir / "prompt_preview.md"),
+                "prompt_context_path": str(context.run_dir / "prompt_context.json"),
+                "core_tool_ids": prompt_result.core_tool_ids,
+                "lazy_tool_ids": prompt_result.lazy_tool_ids,
+            },
+        )
+        return prompt_result
 
-            prompt_result = DynamicPromptBuilder(self.tool_registry).build(
-                context.snapshot(),
-                agents_md_instructions=agents_md_instructions,
-                runtime_reminders=self.runtime_reminders.list(),
-            )
-            self.last_prompt_result = prompt_result
-            _persist_prompt_context(context.run_dir, prompt_result)
-            transcript.append(
-                "prompt_built",
+    async def plan_task(
+        self,
+        context: WebAgentContext,
+        prompt_result: PromptBuildResult,
+    ) -> ExecutionPlan:
+        context.state.current_step = 3
+        context.transcript_store.append(
+            "planner_selected",
+            {
+                "planner_mode": self.planner_mode,
+                "llm_config_path": str(self.llm_config_path)
+                if self.llm_config_path is not None
+                else None,
+                "llm_provider": self.llm_provider,
+                "model": self.version.model,
+            },
+        )
+        self._emit_event(
+            "planner_started",
+            "Planner started",
+            {
+                "run_id": context.run_id,
+                "planner_mode": self.planner_mode,
+                "model": self.version.model,
+            },
+        )
+        plan = await self._build_plan(context, prompt_result)
+        if self.planner_mode == "real_llm":
+            context.transcript_store.append(
+                "llm_provider_selected",
                 {
-                    "prompt_preview_path": str(context.run_dir / "prompt_preview.md"),
-                    "prompt_context_path": str(context.run_dir / "prompt_context.json"),
-                    "loaded_agents_md_paths": prompt_result.loaded_agents_md_paths,
-                    "core_tool_ids": prompt_result.core_tool_ids,
-                    "lazy_tool_ids": prompt_result.lazy_tool_ids,
-                },
-            )
-            self._emit_event(
-                "prompt_built",
-                "Prompt built",
-                {
-                    "run_id": context.run_id,
-                    "prompt_preview_path": str(context.run_dir / "prompt_preview.md"),
-                    "prompt_context_path": str(context.run_dir / "prompt_context.json"),
-                    "core_tool_ids": prompt_result.core_tool_ids,
-                    "lazy_tool_ids": prompt_result.lazy_tool_ids,
-                },
-            )
-
-            context.state.current_step = 3
-            transcript.append(
-                "planner_selected",
-                {
-                    "planner_mode": self.planner_mode,
                     "llm_config_path": str(self.llm_config_path)
                     if self.llm_config_path is not None
                     else None,
@@ -195,160 +261,192 @@ class WebAgentExecutionHandler:
                     "model": self.version.model,
                 },
             )
-            self._emit_event(
-                "planner_started",
-                "Planner started",
-                {
-                    "run_id": context.run_id,
-                    "planner_mode": self.planner_mode,
-                    "model": self.version.model,
-                },
-            )
-            plan = await self._build_plan(context, prompt_result)
-            if self.planner_mode == "real_llm":
-                transcript.append(
-                    "llm_provider_selected",
-                    {
-                        "llm_config_path": str(self.llm_config_path)
-                        if self.llm_config_path is not None
-                        else None,
-                        "llm_provider": self.llm_provider,
-                        "model": self.version.model,
-                    },
-                )
-            transcript.append("plan_built", plan.model_dump(mode="json"))
-            self._emit_event(
-                "planner_finished",
-                "Planner finished",
-                {
-                    "run_id": context.run_id,
-                    "planner_mode": self.planner_mode,
-                    "step_count": len(plan.steps),
-                },
-            )
-            validation_result = PlanValidator(self.tool_registry).validate(
-                plan,
-                context.snapshot(),
-            )
-            transcript.append(
-                "plan_validation_completed",
+        context.transcript_store.append("plan_built", plan.model_dump(mode="json"))
+        self._emit_event(
+            "planner_finished",
+            "Planner finished",
+            {
+                "run_id": context.run_id,
+                "planner_mode": self.planner_mode,
+                "step_count": len(plan.steps),
+            },
+        )
+        return plan
+
+    def validate_plan(self, context: WebAgentContext, plan: ExecutionPlan):
+        validation_result = PlanValidator(self.tool_registry).validate(
+            plan,
+            context.snapshot(),
+        )
+        context.transcript_store.append(
+            "plan_validation_completed",
+            validation_result.model_dump(mode="json"),
+        )
+        if not validation_result.ok:
+            first_issue = validation_result.issues[0]
+            context.state.status = "failed"
+            context.state.error_type = first_issue.issue_type
+            context.state.error_message = first_issue.message
+            context.transcript_store.append(
+                "plan_validation_failed",
                 validation_result.model_dump(mode="json"),
             )
-            if not validation_result.ok:
-                first_issue = validation_result.issues[0]
-                context.state.status = "failed"
-                context.state.error_type = first_issue.issue_type
-                context.state.error_message = first_issue.message
-                transcript.append(
-                    "plan_validation_failed",
-                    validation_result.model_dump(mode="json"),
-                )
-                transcript.append("execution_failed", _state_payload(context))
-                raise RuntimeError(
-                    f"Plan validation failed: {first_issue.issue_type}: "
-                    f"{first_issue.message}"
-                )
+            context.transcript_store.append("execution_failed", _state_payload(context))
+            raise RuntimeError(
+                f"Plan validation failed: {first_issue.issue_type}: "
+                f"{first_issue.message}"
+            )
+        return validation_result
 
-            transcript.append("browser_tool_runtime_started", _state_payload(context))
-            await browser_runtime.start()
-
-            context.state.current_step = 4
-            loop_result = await execution_loop.run(
-                context,
-                plan,
-                record_plan_built=False,
-            )
-            self.last_loop_result = loop_result
-            if loop_result.status != "success":
-                runtime_status = _status_from_loop_error(loop_result.error_type)
-                context.state.status = runtime_status or "failed"
-                context.state.error_type = loop_result.error_type
-                context.state.error_message = loop_result.error_message
-                transcript.append("execution_failed", _state_payload(context))
-                if runtime_status == "blocked":
-                    self._emit_event(
-                        "task_failed",
-                        "Task stopped by risk gate",
-                        {
-                            "run_id": context.run_id,
-                            "status": runtime_status,
-                            "error_type": loop_result.error_type,
-                            "error": loop_result.error_message,
-                            "run_dir": str(context.run_dir),
-                        },
-                    )
-                if runtime_status is not None:
-                    observation = browser_runtime.last_observation
-                    if observation is not None:
-                        transcript.append(
-                            "context_snapshot",
-                            context.snapshot().model_dump(mode="json"),
-                        )
-                        return observation
-                raise RuntimeError(
-                    f"{loop_result.error_type or 'EXECUTION_LOOP_FAILED'}: "
-                    f"{loop_result.error_message or 'Execution loop failed.'}"
+    async def execute_plan(
+        self,
+        context: WebAgentContext,
+        plan: ExecutionPlan,
+        runtime: WebAgentRuntimeComponents,
+    ) -> PageObservation:
+        context.transcript_store.append("browser_tool_runtime_started", _state_payload(context))
+        await runtime.browser_runtime.start()
+        context.state.current_step = 4
+        loop_result = await runtime.execution_loop.run(
+            context,
+            plan,
+            record_plan_built=False,
+        )
+        self.last_loop_result = loop_result
+        if loop_result.status != "success":
+            runtime_status = _status_from_loop_error(loop_result.error_type)
+            context.state.status = runtime_status or "failed"
+            context.state.error_type = loop_result.error_type
+            context.state.error_message = loop_result.error_message
+            context.transcript_store.append("execution_failed", _state_payload(context))
+            if runtime_status == "blocked":
+                self._emit_event(
+                    "task_failed",
+                    "Task stopped by risk gate",
+                    {
+                        "run_id": context.run_id,
+                        "status": runtime_status,
+                        "error_type": loop_result.error_type,
+                        "error": loop_result.error_message,
+                        "run_dir": str(context.run_dir),
+                    },
                 )
+            if runtime_status is not None:
+                observation = runtime.browser_runtime.last_observation
+                if observation is not None:
+                    return observation
+            raise RuntimeError(
+                f"{loop_result.error_type or 'EXECUTION_LOOP_FAILED'}: "
+                f"{loop_result.error_message or 'Execution loop failed.'}"
+            )
 
-            observation = browser_runtime.last_observation
-            if observation is None:
-                context.state.status = "failed"
-                context.state.error_type = "FINAL_OBSERVATION_MISSING"
-                context.state.error_message = "Execution loop completed without a final observation."
-                transcript.append("execution_failed", _state_payload(context))
-                raise RuntimeError(
-                    "FINAL_OBSERVATION_MISSING: Execution loop completed without a final observation."
-                )
+        observation = runtime.browser_runtime.last_observation
+        if observation is None:
+            context.state.status = "failed"
+            context.state.error_type = "FINAL_OBSERVATION_MISSING"
+            context.state.error_message = "Execution loop completed without a final observation."
+            context.transcript_store.append("execution_failed", _state_payload(context))
+            raise RuntimeError(
+                "FINAL_OBSERVATION_MISSING: Execution loop completed without a final observation."
+            )
+        return observation
 
-            context.state.status = "completed"
-            context.state.current_step = 5
-            _persist_evidence_and_report(
-                context,
-                observation,
-                self.event_sink,
-                reviewer_mode=self.reviewer_mode,
-                revise_attempts=self.revise_attempts,
-                llm_reviewer=self._build_llm_reviewer(),
-            )
-            transcript.append(
-                "context_snapshot",
-                context.snapshot().model_dump(mode="json"),
-            )
-            transcript.append("execution_completed", _state_payload(context))
-            self._emit_event(
-                "task_finished",
-                "Task finished",
-                {
-                    "run_id": context.run_id,
-                    "status": "succeeded",
-                    "run_dir": str(context.run_dir),
-                },
-            )
-            return observation
-        except Exception as exc:
-            if context.state.status != "failed":
-                context.state.status = "failed"
-                context.state.error_type = type(exc).__name__
-                context.state.error_message = str(exc)
-                transcript.append("execution_failed", _state_payload(context))
-            self._emit_event(
-                "task_failed",
-                "Task failed",
-                {
-                    "run_id": context.run_id,
-                    "status": context.state.status,
-                    "error": str(exc),
-                    "error_type": type(exc).__name__,
-                    "run_dir": str(context.run_dir),
-                },
-            )
-            transcript.append(
-                "context_snapshot",
-                context.snapshot().model_dump(mode="json"),
-            )
-            raise
-        finally:
-            await browser_runtime.close()
+    def persist_run_artifacts(
+        self,
+        context: WebAgentContext,
+        observation: PageObservation,
+    ) -> None:
+        _persist_evidence_and_report(
+            context,
+            observation,
+            self.event_sink,
+            reviewer_mode=self.reviewer_mode,
+            revise_attempts=self.revise_attempts,
+            llm_reviewer=self._build_llm_reviewer(),
+        )
+
+    def build_final_report(
+        self,
+        context: WebAgentContext,
+        observation: PageObservation,
+    ) -> tuple[list[EvidenceItem], str]:
+        return _persist_evidence_and_final_report(
+            context,
+            observation,
+            self.event_sink,
+        )
+
+    def review_report(
+        self,
+        context: WebAgentContext,
+        report_text: str,
+        evidence_items: list[EvidenceItem],
+    ):
+        return _persist_review_artifacts(
+            context,
+            report_text,
+            evidence_items,
+            self.event_sink,
+        )
+
+    def compact_context(self, context: WebAgentContext) -> None:
+        _persist_compaction_artifacts(context)
+
+    def maybe_revise_report(
+        self,
+        context: WebAgentContext,
+        report_text: str,
+        evidence_items: list[EvidenceItem],
+    ) -> None:
+        if self.revise_attempts <= 0:
+            return
+        _persist_revise_loop_artifacts(
+            context=context,
+            report_text=report_text,
+            evidence_items=evidence_items,
+            event_sink=self.event_sink,
+            reviewer_mode=self.reviewer_mode,
+            revise_attempts=self.revise_attempts,
+            llm_reviewer=self._build_llm_reviewer(),
+        )
+
+    def snapshot_context(self, context: WebAgentContext) -> None:
+        context.transcript_store.append(
+            "context_snapshot",
+            context.snapshot().model_dump(mode="json"),
+        )
+
+    def finalize_success(self, context: WebAgentContext) -> None:
+        self.snapshot_context(context)
+        context.transcript_store.append("execution_completed", _state_payload(context))
+        self._emit_event(
+            "task_finished",
+            "Task finished",
+            {
+                "run_id": context.run_id,
+                "status": "succeeded",
+                "run_dir": str(context.run_dir),
+            },
+        )
+
+    def finalize_failure(self, context: WebAgentContext, exc: Exception) -> None:
+        if context.state.status != "failed":
+            context.state.status = "failed"
+            context.state.error_type = type(exc).__name__
+            context.state.error_message = str(exc)
+            context.transcript_store.append("execution_failed", _state_payload(context))
+        self._emit_event(
+            "task_failed",
+            "Task failed",
+            {
+                "run_id": context.run_id,
+                "status": context.state.status,
+                "error": str(exc),
+                "error_type": type(exc).__name__,
+                "run_dir": str(context.run_dir),
+            },
+        )
+        self.snapshot_context(context)
 
     def run_sync(self, task: TaskSpec) -> PageObservation:
         return asyncio.run(self.run(task))
@@ -523,7 +621,36 @@ def _persist_evidence_and_report(
     revise_attempts: int = 0,
     llm_reviewer: BaseLLMReportReviewer | None = None,
 ) -> None:
-    evidence_items = []
+    evidence_items, report_text = _persist_evidence_and_final_report(
+        context,
+        observation,
+        event_sink,
+    )
+    _persist_review_artifacts(
+        context,
+        report_text,
+        evidence_items,
+        event_sink,
+    )
+    _persist_compaction_artifacts(context)
+    if revise_attempts > 0:
+        _persist_revise_loop_artifacts(
+            context=context,
+            report_text=report_text,
+            evidence_items=evidence_items,
+            event_sink=event_sink,
+            reviewer_mode=reviewer_mode,
+            revise_attempts=revise_attempts,
+            llm_reviewer=llm_reviewer,
+        )
+
+
+def _persist_evidence_and_final_report(
+    context: WebAgentContext,
+    observation: PageObservation,
+    event_sink: TaskEventSink | None = None,
+) -> tuple[list[EvidenceItem], str]:
+    evidence_items: list[EvidenceItem] = []
     if context.evidence_store is not None:
         context.evidence_store.write_jsonl()
         evidence_items = context.evidence_store.list_items()
@@ -559,6 +686,15 @@ def _persist_evidence_and_report(
             "evidence_count": len(evidence_items),
         },
     )
+    return evidence_items, report_text
+
+
+def _persist_review_artifacts(
+    context: WebAgentContext,
+    report_text: str,
+    evidence_items: list[EvidenceItem],
+    event_sink: TaskEventSink | None = None,
+):
     review_result = ReportReviewer().review(
         report_text,
         evidence_items,
@@ -601,17 +737,7 @@ def _persist_evidence_and_report(
             "issue_count": len(review_result.issues),
         },
     )
-    _persist_compaction_artifacts(context)
-    if revise_attempts > 0:
-        _persist_revise_loop_artifacts(
-            context=context,
-            report_text=report_text,
-            evidence_items=evidence_items,
-            event_sink=event_sink,
-            reviewer_mode=reviewer_mode,
-            revise_attempts=revise_attempts,
-            llm_reviewer=llm_reviewer,
-        )
+    return review_result
 
 
 def _persist_revise_loop_artifacts(

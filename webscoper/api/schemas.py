@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from webscoper.schemas.risk import ApprovalRequest, TaskResumeResult
+from webscoper.schemas.workflow import WorkflowBackend
 
 
 PlannerMode = Literal["deterministic", "fake_llm", "real_llm"]
@@ -26,6 +27,7 @@ class TaskCreateRequest(BaseModel):
     click: str | None = None
     expect: str | None = None
     planner: PlannerMode = "deterministic"
+    workflow: WorkflowBackend = "native"
     reviewer: ReviewerMode = "deterministic"
     workspace: str | None = None
     reminder: str | None = None

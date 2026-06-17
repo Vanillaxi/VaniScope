@@ -40,6 +40,12 @@ def main() -> int:
         default="deterministic",
         help="Planner mode to use.",
     )
+    parser.add_argument(
+        "--workflow",
+        choices=["native", "langgraph"],
+        default="native",
+        help="Workflow backend to use.",
+    )
     parser.add_argument("--model", help="LLM model override for real_llm mode.")
     parser.add_argument(
         "--llm-config",
@@ -75,6 +81,7 @@ def main() -> int:
             click=args.click,
             expect=args.expect,
             planner=args.planner,
+            workflow=args.workflow,
             output_root=Path(args.output_root),
             headed=args.headed,
             workspace=Path(args.workspace) if args.workspace else None,
@@ -100,6 +107,7 @@ def main() -> int:
     print(f"final_url: {observation.url}")
     print(f"title: {observation.title}")
     print(f"planner_mode: {args.planner}")
+    print(f"workflow_backend: {args.workflow}")
     if handler.llm_config_path is not None:
         print(f"llm_config_path: {handler.llm_config_path}")
     if args.llm_provider:
@@ -131,6 +139,8 @@ def main() -> int:
         )
         print(f"prompt_preview_path: {context.run_dir / 'prompt_preview.md'}")
         print(f"prompt_context_path: {context.run_dir / 'prompt_context.json'}")
+        if (context.run_dir / "workflow_state.json").exists():
+            print(f"workflow_state_path: {context.run_dir / 'workflow_state.json'}")
     if prompt_result is not None:
         print(f"loaded_agents_md_count: {len(prompt_result.loaded_agents_md_paths)}")
 

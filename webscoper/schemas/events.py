@@ -35,6 +35,11 @@ TaskEventKind = Literal[
     "report_revised",
     "final_review_finished",
     "revise_loop_finished",
+    "workflow_started",
+    "workflow_node_started",
+    "workflow_node_finished",
+    "workflow_finished",
+    "workflow_failed",
     "task_finished",
     "task_failed",
 ]

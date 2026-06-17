@@ -30,7 +30,11 @@ from webscoper.runtime.execution import (
 from webscoper.runtime.execution_loop import AgentExecutionLoop
 from webscoper.runtime.pending import PendingApprovalManager
 from webscoper.runtime.reminders import RuntimeReminderStore
-from webscoper.runtime.task_runner import build_task_spec, llm_config_path
+from webscoper.runtime.task_runner import (
+    build_task_spec,
+    llm_config_path,
+    run_langgraph_workflow_sync,
+)
 from webscoper.runtime.tool_executor import LocalToolExecutor
 from webscoper.runtime.trace import TraceRecorder
 from webscoper.runtime.transcript import TranscriptStore
@@ -65,6 +69,7 @@ ARTIFACT_ALLOWLIST = {
     "revise_loop.json",
     "prompt_preview.md",
     "prompt_context.json",
+    "workflow_state.json",
     "score.json",
     "report.md",
 }
@@ -92,6 +97,9 @@ class TaskService:
         self,
         request: TaskCreateRequest,
     ) -> TaskCreateResponse:
+        task_id = self._new_task_id()
+        run_dir = self._run_dir(task_id)
+        run_dir.mkdir(parents=True, exist_ok=True)
         reminders = RuntimeReminderStore()
         if request.reminder:
             reminders.add(request.reminder, source="api")
@@ -111,6 +119,8 @@ class TaskService:
                 reviewer=request.reviewer,
             ),
             llm_provider=request.llm_provider,
+            run_id_override=task_id,
+            event_sink=self._make_event_sink(task_id),
             approval_store=self.approval_store,
             pending_manager=self.pending_manager,
         )
@@ -118,15 +128,21 @@ class TaskService:
             url=request.url,
             click=request.click,
             expect=request.expect,
-            task_id="api_task",
+            task_id=task_id,
         )
 
         try:
-            handler.run_sync(task)
+            if request.workflow == "native":
+                handler.run_sync(task)
+            elif request.workflow == "langgraph":
+                run_langgraph_workflow_sync(handler, task)
+            else:
+                raise ValueError(f"Unsupported workflow backend: {request.workflow}")
             context = handler.last_context
             if context is None:
                 raise RuntimeError("Task completed without run context.")
             status = _status_from_context_state(context.state.status)
+            self._write_task_artifacts(context.run_id)
             return TaskCreateResponse(
                 task_id=context.run_id,
                 status=status,
@@ -136,18 +152,19 @@ class TaskService:
             )
         except Exception as exc:
             context = handler.last_context
-            run_dir = context.run_dir if context is not None else self.runs_dir
-            task_id = context.run_id if context is not None else "unknown"
+            failed_run_dir = context.run_dir if context is not None else run_dir
+            failed_task_id = context.run_id if context is not None else task_id
             status = (
                 _status_from_context_state(context.state.status)
                 if context is not None
                 else "failed"
             )
+            self._write_task_artifacts(failed_task_id)
             return TaskCreateResponse(
-                task_id=task_id,
+                task_id=failed_task_id,
                 status=status if status != "succeeded" else "failed",
-                run_dir=str(run_dir),
-                artifacts=self._list_existing_artifacts(run_dir),
+                run_dir=str(failed_run_dir),
+                artifacts=self._list_existing_artifacts(failed_run_dir),
                 error=str(exc),
             )
 
@@ -277,7 +294,12 @@ class TaskService:
 
         state = self._task_states[task_id]
         try:
-            await handler.run(task)
+            if request.workflow == "native":
+                await handler.run(task)
+            elif request.workflow == "langgraph":
+                await asyncio.to_thread(run_langgraph_workflow_sync, handler, task)
+            else:
+                raise ValueError(f"Unsupported workflow backend: {request.workflow}")
             context = handler.last_context
             state.status = (
                 _status_from_context_state(context.state.status)
