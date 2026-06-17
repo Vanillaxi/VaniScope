@@ -10,6 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from webscoper.runtime.execution import WebAgentExecutionHandler
+from webscoper.runtime.reminders import RuntimeReminderStore
 from webscoper.schemas.action import ActionContract, ExpectedEffect
 from webscoper.schemas.task import TaskSpec
 
@@ -19,6 +20,13 @@ def main() -> int:
     parser.add_argument("--url", required=True, help="URL or local file path to open.")
     parser.add_argument("--click", help="Button or link text to click.")
     parser.add_argument("--expect", help="Text expected to appear after the click.")
+    parser.add_argument("--workspace", help="Workspace path used for AGENTS.md loading.")
+    parser.add_argument(
+        "--reminder",
+        action="append",
+        default=[],
+        help="Runtime reminder to inject into the generated prompt. May be repeated.",
+    )
     parser.add_argument(
         "--output-root",
         default="runs",
@@ -40,12 +48,19 @@ def main() -> int:
         expected_effect=_expected_effect(args.expect) if args.expect else None,
         tags=["cli"],
     )
+    reminders = RuntimeReminderStore()
+    for reminder in args.reminder:
+        reminders.add(reminder, source="cli")
+
     handler = WebAgentExecutionHandler(
         output_root=Path(args.output_root),
         headless=not args.headed,
+        workspace=Path(args.workspace) if args.workspace else None,
+        runtime_reminders=reminders,
     )
     observation = asyncio.run(handler.run(task))
     context = handler.last_context
+    prompt_result = handler.last_prompt_result
 
     print(f"task_id: {task.task_id}")
     print(f"final_url: {observation.url}")
@@ -56,6 +71,10 @@ def main() -> int:
         print(f"run_dir: {context.run_dir}")
         print(f"trace_path: {context.trace_recorder.trace_path}")
         print(f"transcript_path: {context.transcript_store.transcript_path}")
+        print(f"prompt_preview_path: {context.run_dir / 'prompt_preview.md'}")
+        print(f"prompt_context_path: {context.run_dir / 'prompt_context.json'}")
+    if prompt_result is not None:
+        print(f"loaded_agents_md_count: {len(prompt_result.loaded_agents_md_paths)}")
 
     return 0
 
