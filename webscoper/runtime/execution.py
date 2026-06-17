@@ -6,17 +6,21 @@ from pathlib import Path
 from typing import Any
 
 from webscoper.runtime.agents_md import AgentsMdLoader
-from webscoper.runtime.browser_runtime import BrowserRuntime
 from webscoper.runtime.context import WebAgentContext
+from webscoper.runtime.execution_loop import AgentExecutionLoop
+from webscoper.runtime.planner import DeterministicTaskPlanner
 from webscoper.runtime.prompt_builder import DynamicPromptBuilder
 from webscoper.runtime.reminders import RuntimeReminderStore
+from webscoper.runtime.tool_executor import LocalToolExecutor
 from webscoper.runtime.trace import TraceRecorder
 from webscoper.runtime.transcript import TranscriptStore
 from webscoper.schemas.context import RuntimeState
+from webscoper.schemas.plan import ExecutionLoopResult
 from webscoper.schemas.observation import PageObservation
 from webscoper.schemas.prompt import PromptBuildResult
 from webscoper.schemas.task import TaskSpec
 from webscoper.schemas.version import VersionContext
+from webscoper.tools.browser_tools import StatefulBrowserToolRuntime
 from webscoper.tools.registry import ToolRegistry, create_default_tool_registry
 
 
@@ -40,14 +44,23 @@ class WebAgentExecutionHandler:
         self.runtime_reminders = runtime_reminders or RuntimeReminderStore()
         self.last_context: WebAgentContext | None = None
         self.last_prompt_result: PromptBuildResult | None = None
+        self.last_loop_result: ExecutionLoopResult | None = None
 
     async def run(self, task: TaskSpec) -> PageObservation:
         context = self.build_context(task)
         self.last_context = context
         transcript = context.transcript_store
-        runtime = BrowserRuntime(
+        browser_runtime = StatefulBrowserToolRuntime(
             trace_recorder=context.trace_recorder,
             headless=self.headless,
+        )
+        tool_executor = LocalToolExecutor(
+            tool_registry=self.tool_registry,
+            browser_runtime=browser_runtime,
+        )
+        execution_loop = AgentExecutionLoop(
+            planner=DeterministicTaskPlanner(),
+            tool_executor=tool_executor,
         )
 
         transcript.append("task_loaded", _task_payload(task))
@@ -93,27 +106,31 @@ class WebAgentExecutionHandler:
             )
 
             context.state.current_step = 3
-            transcript.append(
-                "browser_runtime_started",
-                {
-                    "target_url": task.target_url,
-                    "has_action": task.action is not None,
-                },
-            )
-
-            if task.action is None:
-                observation = await runtime.open_and_observe(task.target_url)
-            else:
-                observation = await runtime.open_click_and_observe(
-                    task.target_url,
-                    task.action,
-                )
+            transcript.append("browser_tool_runtime_started", _state_payload(context))
+            await browser_runtime.start()
 
             context.state.current_step = 4
-            transcript.append(
-                "browser_runtime_completed",
-                _observation_summary(observation),
-            )
+            loop_result = await execution_loop.run(context)
+            self.last_loop_result = loop_result
+            if loop_result.status != "success":
+                context.state.status = "failed"
+                context.state.error_type = loop_result.error_type
+                context.state.error_message = loop_result.error_message
+                transcript.append("execution_failed", _state_payload(context))
+                raise RuntimeError(
+                    f"{loop_result.error_type or 'EXECUTION_LOOP_FAILED'}: "
+                    f"{loop_result.error_message or 'Execution loop failed.'}"
+                )
+
+            observation = browser_runtime.last_observation
+            if observation is None:
+                context.state.status = "failed"
+                context.state.error_type = "FINAL_OBSERVATION_MISSING"
+                context.state.error_message = "Execution loop completed without a final observation."
+                transcript.append("execution_failed", _state_payload(context))
+                raise RuntimeError(
+                    "FINAL_OBSERVATION_MISSING: Execution loop completed without a final observation."
+                )
 
             context.state.status = "completed"
             context.state.current_step = 5
@@ -124,15 +141,18 @@ class WebAgentExecutionHandler:
             transcript.append("execution_completed", _state_payload(context))
             return observation
         except Exception as exc:
-            context.state.status = "failed"
-            context.state.error_type = type(exc).__name__
-            context.state.error_message = str(exc)
-            transcript.append("execution_failed", _state_payload(context))
+            if context.state.status != "failed":
+                context.state.status = "failed"
+                context.state.error_type = type(exc).__name__
+                context.state.error_message = str(exc)
+                transcript.append("execution_failed", _state_payload(context))
             transcript.append(
                 "context_snapshot",
                 context.snapshot().model_dump(mode="json"),
             )
             raise
+        finally:
+            await browser_runtime.close()
 
     def build_context(self, task: TaskSpec) -> WebAgentContext:
         run_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}"

@@ -104,6 +104,20 @@ def create_default_tool_registry() -> ToolRegistry:
             tags=["browser", "extract", "visible", "structured"],
         )
     )
+    registry.register(
+        ToolSpec(
+            tool_id="finish_task",
+            name="Finish Task",
+            description="Mark the current browser task complete and return final summary metadata.",
+            prompt=(
+                "Use this tool after required browser actions and extraction are complete. "
+                "It records a final task summary without performing additional browser interaction."
+            ),
+            loading_mode="core",
+            risk_level="read_only",
+            tags=["finish", "task", "summary"],
+        )
+    )
 
     registry.register(
         ToolSpec(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -65,12 +66,17 @@ def main() -> int:
     print(f"task_id: {task.task_id}")
     print(f"final_url: {observation.url}")
     print(f"title: {observation.title}")
+    print("execution_mode: tool_loop")
     print(f"risk_signals_count: {len(observation.risk_signals)}")
     print(f"interactive_elements_count: {len(observation.interactive_elements)}")
     if context is not None:
         print(f"run_dir: {context.run_dir}")
         print(f"trace_path: {context.trace_recorder.trace_path}")
         print(f"transcript_path: {context.transcript_store.transcript_path}")
+        print(
+            "tool_call_completed_count: "
+            f"{_event_count(context.transcript_store.transcript_path, 'tool_call_completed')}"
+        )
         print(f"prompt_preview_path: {context.run_dir / 'prompt_preview.md'}")
         print(f"prompt_context_path: {context.run_dir / 'prompt_context.json'}")
     if prompt_result is not None:
@@ -110,6 +116,20 @@ def _raw_input(url: str, click: str | None, expect: str | None) -> str:
     if expect:
         parts.append(f"expect {expect}")
     return "; ".join(parts)
+
+
+def _event_count(transcript_path: Path, event_type: str) -> int:
+    if not transcript_path.exists():
+        return 0
+    count = 0
+    for line in transcript_path.read_text(encoding="utf-8").splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("event_type") == event_type:
+            count += 1
+    return count
 
 
 if __name__ == "__main__":
