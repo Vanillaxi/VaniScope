@@ -46,6 +46,7 @@ from webscoper.tools.registry import create_default_tool_registry
 
 ARTIFACT_ALLOWLIST = {
     "events.jsonl",
+    "recovery.jsonl",
     "approvals.jsonl",
     "pending.jsonl",
     "risk_report.json",

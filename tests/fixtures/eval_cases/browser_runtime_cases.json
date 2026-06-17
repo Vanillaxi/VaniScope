@@ -22,6 +22,39 @@
     "tags": ["lazy", "wait", "content"]
   },
   {
+    "case_id": "lazy_button_recovery",
+    "description": "Quickstart appears after a delay and should recover by waiting.",
+    "url": "tests/fixtures/mock_site/lazy_button.html",
+    "click": "Quickstart",
+    "expect": {
+      "status": "success",
+      "must_contain_text": "pip install playwright"
+    },
+    "tags": ["recovery", "lazy", "target_not_found"]
+  },
+  {
+    "case_id": "no_effect_retry_recovery",
+    "description": "First Quickstart click has no effect; retry should reveal expected content.",
+    "url": "tests/fixtures/mock_site/no_effect_click.html",
+    "click": "Quickstart",
+    "expect": {
+      "status": "success",
+      "must_contain_text": "pip install playwright"
+    },
+    "tags": ["recovery", "retry", "postcondition"]
+  },
+  {
+    "case_id": "modal_overlay_recovery",
+    "description": "Safe modal close should unblock Quickstart click.",
+    "url": "tests/fixtures/mock_site/modal_overlay.html",
+    "click": "Quickstart",
+    "expect": {
+      "status": "success",
+      "must_contain_text": "pip install playwright"
+    },
+    "tags": ["recovery", "modal", "covered"]
+  },
+  {
     "case_id": "disabled_button",
     "description": "Disabled Submit button should not be clicked successfully.",
     "url": "tests/fixtures/mock_site/disabled_button.html",

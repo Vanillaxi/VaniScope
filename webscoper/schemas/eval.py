@@ -39,6 +39,10 @@ class BrowserEvalSummary(BaseModel):
     passed_cases: int
     failed_cases: int
     task_success_rate: float
+    recovery_attempt_count: int = 0
+    recovered_case_count: int = 0
+    recovery_success_rate: float = 0.0
+    blocked_recovery_count: int = 0
     results: list[BrowserEvalCaseResult]
 
 

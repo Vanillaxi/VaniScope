@@ -94,6 +94,9 @@ class WebAgentExecutionHandler:
         browser_runtime = StatefulBrowserToolRuntime(
             trace_recorder=context.trace_recorder,
             headless=self.headless,
+            transcript_store=context.transcript_store,
+            event_sink=self.event_sink,
+            evidence_store=context.evidence_store,
         )
         tool_executor = LocalToolExecutor(
             tool_registry=self.tool_registry,

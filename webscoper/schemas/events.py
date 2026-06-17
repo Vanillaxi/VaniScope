@@ -23,6 +23,12 @@ TaskEventKind = Literal[
     "task_resumed",
     "task_rejected",
     "resume_failed",
+    "recovery_started",
+    "recovery_attempt_started",
+    "recovery_attempt_finished",
+    "recovery_succeeded",
+    "recovery_failed",
+    "recovery_blocked",
     "task_finished",
     "task_failed",
 ]

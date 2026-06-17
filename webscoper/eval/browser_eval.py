@@ -74,12 +74,20 @@ class BrowserEvalRunner:
             fatal_message = str(exc)
 
         trace_steps = _read_trace_steps(recorder.trace_path)
+        recovery_attempts = _read_jsonl(case_run_dir / "recovery.jsonl")
         evaluation = _evaluate_case(
             case=case,
             observation=observation,
             trace_steps=trace_steps,
+            recovery_attempts=recovery_attempts,
             fatal_error_type=fatal_error_type,
             fatal_message=fatal_message,
+        )
+        recovered = any(
+            attempt.get("status") == "succeeded" for attempt in recovery_attempts
+        )
+        blocked_recovery_count = sum(
+            1 for attempt in recovery_attempts if attempt.get("status") == "blocked"
         )
 
         return BrowserEvalCaseResult(
@@ -94,6 +102,9 @@ class BrowserEvalRunner:
             metrics={
                 "tags": case.tags,
                 "trace_steps": len(trace_steps),
+                "recovery_attempt_count": len(recovery_attempts),
+                "recovered": recovered,
+                "blocked_recovery_count": blocked_recovery_count,
             },
         )
 
@@ -114,6 +125,10 @@ class BrowserEvalRunner:
             f"- passed_cases: {summary.passed_cases}",
             f"- failed_cases: {summary.failed_cases}",
             f"- task_success_rate: {summary.task_success_rate:.4f}",
+            f"- recovery_attempt_count: {summary.recovery_attempt_count}",
+            f"- recovered_case_count: {summary.recovered_case_count}",
+            f"- recovery_success_rate: {summary.recovery_success_rate:.4f}",
+            f"- blocked_recovery_count: {summary.blocked_recovery_count}",
             "",
             "| case_id | passed | status | error_type | trace_path |",
             "| --- | --- | --- | --- | --- |",
@@ -157,10 +172,14 @@ def _as_url(value: str) -> str:
 
 
 def _read_trace_steps(trace_path: Path) -> list[dict[str, Any]]:
+    return _read_jsonl(trace_path)
+
+
+def _read_jsonl(trace_path: Path) -> list[dict[str, Any]]:
     if not trace_path.exists():
         return []
 
-    steps: list[dict[str, Any]] = []
+    items: list[dict[str, Any]] = []
     for line in trace_path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
@@ -169,14 +188,15 @@ def _read_trace_steps(trace_path: Path) -> list[dict[str, Any]]:
         except json.JSONDecodeError:
             continue
         if isinstance(payload, dict):
-            steps.append(payload)
-    return steps
+            items.append(payload)
+    return items
 
 
 def _evaluate_case(
     case: BrowserEvalCase,
     observation: PageObservation | None,
     trace_steps: list[dict[str, Any]],
+    recovery_attempts: list[dict[str, Any]],
     fatal_error_type: str | None,
     fatal_message: str | None,
 ) -> dict[str, Any]:
@@ -207,7 +227,11 @@ def _evaluate_case(
         if matched_error_type is None:
             failures.append(f"Missing error type: {case.expect.expected_error_type}")
 
-    unexpected_action_error = _unexpected_action_error(case, trace_steps)
+    unexpected_action_error = _unexpected_action_error(
+        case,
+        trace_steps,
+        recovery_attempts,
+    )
     if unexpected_action_error:
         failures.append(f"Unexpected action error: {unexpected_action_error}")
         matched_error_type = matched_error_type or unexpected_action_error
@@ -239,12 +263,18 @@ def _find_error_type(
 def _unexpected_action_error(
     case: BrowserEvalCase,
     trace_steps: list[dict[str, Any]],
+    recovery_attempts: list[dict[str, Any]],
 ) -> str | None:
     expected_error = case.expect.expected_error_type
+    recovered = any(
+        attempt.get("status") == "succeeded" for attempt in recovery_attempts
+    )
     for step in trace_steps:
         if step.get("action_type") != "browser_click_intent":
             continue
         error_type = step.get("error_type")
+        if error_type and recovered:
+            continue
         if error_type and error_type != expected_error:
             return str(error_type)
     return None

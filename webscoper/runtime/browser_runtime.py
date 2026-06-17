@@ -8,19 +8,35 @@ from playwright.async_api import Page
 from webscoper.browser.actions import ActionExecutor
 from webscoper.browser.effects import EffectVerifier
 from webscoper.browser.observer import observe_page
+from webscoper.browser.recovery import RecoveryManager
 from webscoper.browser.session import BrowserSession
+from webscoper.runtime.events import TaskEventSink
+from webscoper.runtime.evidence import EvidenceStore
 from webscoper.runtime.trace import TraceRecorder
+from webscoper.runtime.transcript import TranscriptStore
 from webscoper.schemas.action import ActionContract
 from webscoper.schemas.observation import PageObservation
 from webscoper.schemas.trace import TraceStep
 
 
 class BrowserRuntime:
-    def __init__(self, trace_recorder: TraceRecorder, headless: bool = True) -> None:
+    def __init__(
+        self,
+        trace_recorder: TraceRecorder,
+        headless: bool = True,
+        transcript_store: TranscriptStore | None = None,
+        event_sink: TaskEventSink | None = None,
+        evidence_store: EvidenceStore | None = None,
+        recovery_manager: RecoveryManager | None = None,
+    ) -> None:
         self.trace_recorder = trace_recorder
         self.headless = headless
+        self.transcript_store = transcript_store
+        self.event_sink = event_sink
+        self.evidence_store = evidence_store
         self.action_executor = ActionExecutor()
         self.effect_verifier = EffectVerifier()
+        self.recovery_manager = recovery_manager or RecoveryManager()
 
     async def open_and_observe(self, url: str) -> PageObservation:
         step_id = "step_001"
@@ -161,6 +177,89 @@ class BrowserRuntime:
                         latency_ms=_elapsed_ms(verify_start),
                     )
                 )
+
+                if action_result.status != "success" or not verification_result.satisfied:
+                    recovery_observation = await observe_page(page)
+                    error_type = self.recovery_manager.classify_failure(
+                        action_result=action_result,
+                        verification_result=verification_result,
+                        observation=recovery_observation,
+                        target_hint=action.target_hint,
+                    )
+
+                    async def recover_observe() -> PageObservation:
+                        return await observe_page(page)
+
+                    async def recover_resolve():
+                        return await self.action_executor.target_resolver.resolve(
+                            page,
+                            target_hint=action.target_hint,
+                            preferred_roles=action.preferred_roles,
+                        )
+
+                    async def recover_click(candidate=None):
+                        if candidate is None:
+                            return await self.action_executor.click(page, action)
+                        return await self.action_executor.click_candidate(
+                            page,
+                            action,
+                            candidate,
+                        )
+
+                    async def recover_verify():
+                        return await self.effect_verifier.verify(
+                            page,
+                            expected=action.expected_effect,
+                            url_before=action_result.url_before,
+                            body_text_before=body_text_before,
+                        )
+
+                    recovery_result = await self.recovery_manager.recover_click_intent(
+                        page=page,
+                        task_id=run_id,
+                        target_hint=action.target_hint,
+                        expected_content=action.expected_effect.value
+                        if action.expected_effect.type == "content_appears"
+                        else None,
+                        observe_fn=recover_observe,
+                        resolve_fn=recover_resolve,
+                        execute_click_fn=recover_click,
+                        verify_fn=recover_verify,
+                        trace_recorder=self.trace_recorder,
+                        event_sink=self.event_sink,
+                        evidence_store=self.evidence_store,
+                        transcript_store=self.transcript_store,
+                        initial_error_type=error_type,
+                        initial_observation=recovery_observation,
+                        action_result=action_result,
+                        verification_result=verification_result,
+                    )
+                    if recovery_result.blocked:
+                        final_screenshot = self.trace_recorder.run_dir / "step_004_after.png"
+                        final_observation = await observe_page(
+                            page,
+                            screenshot_path=final_screenshot,
+                        )
+                        self.trace_recorder.record(
+                            TraceStep(
+                                step_id="step_004",
+                                run_id=run_id,
+                                phase="browser_runtime",
+                                actor="system",
+                                action_type="browser_final_observe",
+                                status="blocked",
+                                url_before=initial_observation.url,
+                                url_after=final_observation.url,
+                                title=final_observation.title,
+                                observation=_model_dump(final_observation),
+                                screenshot_path=str(final_screenshot),
+                                error_type=recovery_result.final_error_type.value
+                                if recovery_result.final_error_type is not None
+                                else None,
+                                error_message=recovery_result.message,
+                            )
+                        )
+                        return final_observation
 
                 final_start = perf_counter()
                 final_screenshot = self.trace_recorder.run_dir / "step_004_after.png"
