@@ -33,7 +33,6 @@ from webscoper.runtime.reminders import RuntimeReminderStore
 from webscoper.runtime.task_runner import (
     build_task_spec,
     llm_config_path,
-    run_langgraph_workflow_sync,
 )
 from webscoper.runtime.tool_executor import LocalToolExecutor
 from webscoper.runtime.trace import TraceRecorder
@@ -44,6 +43,7 @@ from webscoper.schemas.plan import ExecutionPlan, PlannedStep
 from webscoper.schemas.risk import ApprovalRequest, TaskResumeResult
 from webscoper.schemas.task import TaskSpec
 from webscoper.schemas.tool_call import ToolCall
+from webscoper.schemas.workflow import LangGraphResumeResult
 from webscoper.tools.browser_tools import StatefulBrowserToolRuntime
 from webscoper.tools.registry import create_default_tool_registry
 
@@ -70,6 +70,7 @@ ARTIFACT_ALLOWLIST = {
     "prompt_preview.md",
     "prompt_context.json",
     "workflow_state.json",
+    "langgraph_interrupts.jsonl",
     "score.json",
     "report.md",
 }
@@ -80,6 +81,8 @@ class _TaskState:
     task_id: str
     status: str
     run_dir: Path
+    workflow: str = "native"
+    thread_id: str | None = None
     artifacts: list[str] = field(default_factory=list)
     error: str | None = None
 
@@ -92,6 +95,7 @@ class TaskService:
         self.approval_store = ApprovalStore()
         self.pending_manager = PendingApprovalManager()
         self._task_states: dict[str, _TaskState] = {}
+        self._langgraph_adapters: dict[str, Any] = {}
 
     def create_and_run_task(
         self,
@@ -135,7 +139,7 @@ class TaskService:
             if request.workflow == "native":
                 handler.run_sync(task)
             elif request.workflow == "langgraph":
-                run_langgraph_workflow_sync(handler, task)
+                self._run_langgraph_workflow(handler, task, task_id)
             else:
                 raise ValueError(f"Unsupported workflow backend: {request.workflow}")
             context = handler.last_context
@@ -179,6 +183,8 @@ class TaskService:
             task_id=task_id,
             status="running",
             run_dir=run_dir,
+            workflow=request.workflow,
+            thread_id=task_id if request.workflow == "langgraph" else None,
         )
         self._publish_task_event(
             task_id,
@@ -297,7 +303,12 @@ class TaskService:
             if request.workflow == "native":
                 await handler.run(task)
             elif request.workflow == "langgraph":
-                await asyncio.to_thread(run_langgraph_workflow_sync, handler, task)
+                await asyncio.to_thread(
+                    self._run_langgraph_workflow,
+                    handler,
+                    task,
+                    task_id,
+                )
             else:
                 raise ValueError(f"Unsupported workflow backend: {request.workflow}")
             context = handler.last_context
@@ -401,7 +412,7 @@ class TaskService:
             raise ValueError(str(exc)) from exc
 
         run_dir = self._run_dir(approval.task_id)
-        resume_result: TaskResumeResult | None = None
+        resume_result: TaskResumeResult | LangGraphResumeResult | None = None
         try:
             self.approval_store.write_jsonl_for_task(
                 approval.task_id,
@@ -421,7 +432,14 @@ class TaskService:
             pass
 
         if approved:
-            resume_result = asyncio.run(self.resume_after_approval(approval_id))
+            workflow = self._workflow_for_task(approval.task_id)
+            if workflow == "langgraph":
+                resume_result = self.resume_langgraph_after_approval(
+                    approval_id,
+                    approval.decision,
+                )
+            else:
+                resume_result = asyncio.run(self.resume_after_approval(approval_id))
         else:
             pending = self.pending_manager.pop_by_approval_id(approval_id)
             if pending is not None:
@@ -449,6 +467,116 @@ class TaskService:
                 error=None,
             )
         return ApprovalDecisionResponse(approval=approval, resume_result=resume_result)
+
+    def resume_langgraph_after_approval(
+        self,
+        approval_id: str,
+        decision,
+    ) -> LangGraphResumeResult:
+        approval = self.approval_store.get(approval_id)
+        if approval is None:
+            return LangGraphResumeResult(
+                task_id="unknown",
+                approval_id=approval_id,
+                resumed=False,
+                status="failed",
+                message="Approval request not found.",
+                error=f"Approval request not found: {approval_id}",
+            )
+        if decision is None:
+            return LangGraphResumeResult(
+                task_id=approval.task_id,
+                approval_id=approval_id,
+                resumed=False,
+                status="failed",
+                message="Approval decision missing.",
+                error="Approval decision missing.",
+            )
+
+        task_id = approval.task_id
+        state = self._task_states.get(task_id)
+        thread_id = state.thread_id if state is not None else task_id
+        adapter = self._langgraph_adapters.get(task_id)
+        if adapter is None:
+            result = LangGraphResumeResult(
+                task_id=task_id,
+                approval_id=approval_id,
+                resumed=False,
+                status="failed",
+                message="No LangGraph adapter found for approval.",
+                error="LangGraph interrupted tasks can only resume in the current process.",
+                metadata={"thread_id": thread_id},
+            )
+            self._set_task_state(task_id, "failed", result.error)
+            self._publish_task_event(
+                task_id,
+                "langgraph_resume_failed",
+                "LangGraph resume failed",
+                result.model_dump(mode="json"),
+            )
+            self._publish_task_event(
+                task_id,
+                "task_failed",
+                "Task failed while resuming LangGraph workflow",
+                result.model_dump(mode="json"),
+            )
+            return result
+
+        resume_payload = adapter.approval_bridge.build_resume_payload(
+            approval_id=approval_id,
+            approved=decision.approved,
+            decided_by=decision.decided_by,
+            reason=decision.reason,
+        )
+        self._set_task_state(task_id, "resuming", None)
+        self._publish_task_event(
+            task_id,
+            "langgraph_resumed",
+            "LangGraph resume command submitted",
+            {
+                "approval_id": approval_id,
+                "thread_id": thread_id,
+                "resume_payload": resume_payload.model_dump(mode="json"),
+            },
+        )
+        pending = self.pending_manager.get_by_approval_id(approval_id)
+        self._publish_task_event(
+            task_id,
+            "task_resumed",
+            "Task resumed after approval",
+            {
+                "approval_id": approval_id,
+                "thread_id": thread_id,
+                "pending_tool_call": pending.model_dump(mode="json")
+                if pending is not None
+                else None,
+            },
+        )
+
+        result = adapter.resume(
+            task_id=task_id,
+            thread_id=thread_id or task_id,
+            resume_payload=resume_payload,
+        )
+        status = result.status
+        self._set_task_state(task_id, status, result.error)
+        self._write_task_artifacts(task_id)
+        if result.resumed:
+            self._langgraph_adapters.pop(task_id, None)
+        else:
+            self._publish_task_event(
+                task_id,
+                "langgraph_resume_failed",
+                "LangGraph resume failed",
+                result.model_dump(mode="json"),
+            )
+            self._publish_task_event(
+                task_id,
+                "task_failed",
+                "Task failed while resuming LangGraph workflow",
+                result.model_dump(mode="json"),
+            )
+        return result
 
     async def resume_after_approval(self, approval_id: str) -> TaskResumeResult:
         pending = self.pending_manager.pop_by_approval_id(approval_id)
@@ -639,8 +767,40 @@ class TaskService:
             self.approval_store.write_jsonl_for_task(task_id, run_dir / "approvals.jsonl")
             self.approval_store.write_risk_report(task_id, run_dir / "risk_report.json")
             self.pending_manager.write_jsonl(task_id, run_dir / "pending.jsonl")
+            adapter = self._langgraph_adapters.get(task_id)
+            if adapter is not None:
+                adapter.approval_bridge.write_jsonl_for_task(
+                    task_id,
+                    run_dir / "langgraph_interrupts.jsonl",
+                )
         except Exception:
             pass
+
+    def _run_langgraph_workflow(
+        self,
+        handler: WebAgentExecutionHandler,
+        task: TaskSpec,
+        task_id: str,
+    ):
+        try:
+            from webscoper.workflows.langgraph_adapter import LangGraphWorkflowAdapter
+        except ImportError as exc:
+            raise RuntimeError(
+                "LangGraph workflow requested but langgraph is not installed"
+            ) from exc
+        adapter = LangGraphWorkflowAdapter(handler)
+        self._langgraph_adapters[task_id] = adapter
+        return adapter.run(task)
+
+    def _workflow_for_task(self, task_id: str) -> str:
+        state = self._task_states.get(task_id)
+        if state is not None:
+            return state.workflow
+        approval = self.approval_store.list_for_task(task_id)
+        for item in approval:
+            if item.metadata.get("workflow") == "langgraph":
+                return "langgraph"
+        return "native"
 
     def _run_dir(self, task_id: str) -> Path:
         return self.runs_dir / task_id

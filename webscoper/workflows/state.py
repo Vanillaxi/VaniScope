@@ -8,6 +8,7 @@ class VaniScopeGraphState(TypedDict, total=False):
     task_goal: str | None
     request: dict[str, Any]
     run_dir: str
+    thread_id: str
     workspace: str | None
 
     prompt_markdown: str | None
@@ -19,6 +20,8 @@ class VaniScopeGraphState(TypedDict, total=False):
 
     execution_result: dict[str, Any] | None
     final_observation: dict[str, Any] | None
+    langgraph_interrupt: dict[str, Any] | None
+    langgraph_resume: dict[str, Any] | None
 
     evidence_items: list[dict[str, Any]]
     report_markdown: str | None

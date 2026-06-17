@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from webscoper.schemas.risk import ApprovalRequest, TaskResumeResult
-from webscoper.schemas.workflow import WorkflowBackend
+from webscoper.schemas.workflow import LangGraphResumeResult, WorkflowBackend
 
 
 PlannerMode = Literal["deterministic", "fake_llm", "real_llm"]
@@ -81,4 +81,4 @@ class ApprovalDecisionRequest(BaseModel):
 
 class ApprovalDecisionResponse(BaseModel):
     approval: ApprovalRequest
-    resume_result: TaskResumeResult | None = None
+    resume_result: TaskResumeResult | LangGraphResumeResult | None = None
