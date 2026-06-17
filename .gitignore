@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 .env
 .idea/
+runs/*
+!runs/.gitkeep
 traces/*
 !traces/.gitkeep
 eval_results/*
