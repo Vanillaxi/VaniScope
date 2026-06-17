@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -29,3 +31,4 @@ class PromptBuildResult(BaseModel):
     loaded_agents_md_paths: list[str] = Field(default_factory=list)
     core_tool_ids: list[str] = Field(default_factory=list)
     lazy_tool_ids: list[str] = Field(default_factory=list)
+    compact_context_metadata: dict[str, Any] | None = None

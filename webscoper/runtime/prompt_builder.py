@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from webscoper.schemas.compaction import ContextPack
 from webscoper.schemas.context import WebAgentContextSnapshot
 from webscoper.schemas.prompt import (
     AgentsMdInstruction,
@@ -19,6 +20,7 @@ class DynamicPromptBuilder:
         context: WebAgentContextSnapshot,
         agents_md_instructions: list[AgentsMdInstruction] | None = None,
         runtime_reminders: list[RuntimeReminder] | None = None,
+        context_pack: ContextPack | None = None,
     ) -> PromptBuildResult:
         agents_md_instructions = agents_md_instructions or []
         runtime_reminders = runtime_reminders or []
@@ -48,6 +50,9 @@ class DynamicPromptBuilder:
             "runtime_reminders",
             "output_rules",
         ]
+        if context_pack is not None:
+            sections["compacted_context"] = _compacted_context_section(context_pack)
+            ordered_keys.insert(3, "compacted_context")
         prompt_text = "\n\n".join(sections[key] for key in ordered_keys)
 
         return PromptBuildResult(
@@ -58,6 +63,9 @@ class DynamicPromptBuilder:
             ],
             core_tool_ids=[tool.tool_id for tool in catalog.core_tools],
             lazy_tool_ids=[tool.tool_id for tool in catalog.lazy_tools],
+            compact_context_metadata=context_pack.model_dump(mode="json")
+            if context_pack is not None
+            else None,
         )
 
 
@@ -186,6 +194,86 @@ def _runtime_reminders_section(reminders: list[RuntimeReminder]) -> str:
                 "</system-reminder>",
             ]
         )
+    return "\n".join(lines)
+
+
+def _compacted_context_section(context_pack: ContextPack) -> str:
+    lines = [
+        "# Compacted Runtime Context",
+        "",
+        f"- task_goal: {context_pack.task_goal or 'none'}",
+    ]
+    state = context_pack.current_state
+    lines.append("- current_browser_state:")
+    if state is None:
+        lines.append("  - unavailable")
+    else:
+        lines.extend(
+            [
+                f"  - current_url: {state.current_url or 'none'}",
+                f"  - current_title: {state.current_title or 'none'}",
+                f"  - visible_text_preview: {state.visible_text_preview or 'none'}",
+                f"  - screenshot_path: {state.screenshot_path or 'none'}",
+            ]
+        )
+
+    lines.append("- key_previous_steps:")
+    if not context_pack.key_steps:
+        lines.append("  - none")
+    for step in context_pack.key_steps[:8]:
+        lines.append(
+            f"  - {step.step_id}: [{step.kind}] {step.status or 'unknown'} "
+            f"{step.summary}"
+        )
+
+    lines.append("- recent_steps:")
+    if not context_pack.recent_steps:
+        lines.append("  - none")
+    for step in context_pack.recent_steps[:8]:
+        lines.append(
+            f"  - {step.step_id}: [{step.kind}] {step.status or 'unknown'} "
+            f"{step.summary}"
+        )
+
+    lines.append("- evidence_refs:")
+    if not context_pack.evidence_refs:
+        lines.append("  - none")
+    for ref in context_pack.evidence_refs[:12]:
+        lines.append(
+            f"  - {ref.evidence_id}: {ref.kind}; {ref.source_url or 'no-url'}; "
+            f"{ref.text_preview or ''}"
+        )
+
+    recovery = context_pack.recovery_state
+    lines.append("- recovery_state:")
+    if recovery is None:
+        lines.append("  - none")
+    else:
+        lines.extend(
+            [
+                f"  - total_attempts: {recovery.total_attempts}",
+                f"  - recovered_count: {recovery.recovered_count}",
+                f"  - failed_count: {recovery.failed_count}",
+                f"  - blocked_count: {recovery.blocked_count}",
+            ]
+        )
+
+    risk = context_pack.risk_state
+    lines.append("- risk_approval_state:")
+    if risk is None:
+        lines.append("  - none")
+    else:
+        lines.extend(
+            [
+                f"  - has_pending_approval: {risk.has_pending_approval}",
+                f"  - pending_approval_ids: {', '.join(risk.pending_approval_ids) or 'none'}",
+                f"  - blocked: {risk.blocked}",
+                f"  - risk_signal_count: {len(risk.risk_signals)}",
+            ]
+        )
+
+    if context_pack.next_action_hint:
+        lines.extend(["- next_action_hint:", f"  - {context_pack.next_action_hint}"])
     return "\n".join(lines)
 
 

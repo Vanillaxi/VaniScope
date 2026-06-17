@@ -8,6 +8,7 @@ from typing import Any
 
 from webscoper.runtime.agents_md import AgentsMdLoader
 from webscoper.runtime.approvals import ApprovalStore
+from webscoper.runtime.compaction import ContextCompactor, load_jsonl
 from webscoper.runtime.context import WebAgentContext
 from webscoper.runtime.evidence import EvidenceStore
 from webscoper.runtime.events import TaskEventSink
@@ -556,6 +557,47 @@ def _persist_evidence_and_report(
             "issue_count": len(review_result.issues),
         },
     )
+    _persist_compaction_artifacts(context)
+
+
+def _persist_compaction_artifacts(context: WebAgentContext) -> None:
+    run_dir = context.run_dir
+    compactor = ContextCompactor()
+    risk_report = _read_json_object(run_dir / "risk_report.json")
+    result = compactor.compact(
+        task_id=context.run_id,
+        task_goal=context.task.raw_input,
+        transcript_events=load_jsonl(context.transcript_store.transcript_path),
+        trace_events=load_jsonl(context.trace_recorder.trace_path),
+        evidence_items=context.evidence_store.list_items()
+        if context.evidence_store is not None
+        else [],
+        recovery_attempts=load_jsonl(run_dir / "recovery.jsonl"),
+        approval_requests=load_jsonl(run_dir / "approvals.jsonl"),
+        risk_report=risk_report,
+    )
+    compactor.write_artifacts(result, run_dir)
+    context.transcript_store.append(
+        "compaction_written",
+        {
+            "compact_context_path": str(run_dir / "compact_context.json"),
+            "compact_summary_path": str(run_dir / "compact_summary.md"),
+            "compacted": result.compacted,
+            "before_counts": result.before_counts,
+            "after_counts": result.after_counts,
+            "warning_count": len(result.warnings),
+        },
+    )
+
+
+def _read_json_object(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def _emit_report_event(

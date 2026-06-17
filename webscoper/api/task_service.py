@@ -53,6 +53,8 @@ ARTIFACT_ALLOWLIST = {
     "trace.jsonl",
     "transcript.jsonl",
     "evidence.jsonl",
+    "compact_context.json",
+    "compact_summary.md",
     "final_report.md",
     "review.json",
     "review_summary.md",
