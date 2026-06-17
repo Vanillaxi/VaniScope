@@ -13,6 +13,7 @@ traces/run_*/
 !traces/.gitkeep
 eval_results/*
 eval_results/eval_*/
+eval_results/reviewer_eval_*/
 !eval_results/.gitkeep
 .pytest_cache/
 .DS_Store

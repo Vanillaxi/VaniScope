@@ -197,6 +197,9 @@ def _claims_from_section(section: str) -> list[str]:
         if stripped.startswith("- "):
             claims.append(stripped[2:].strip())
             continue
+        if _evidence_refs(stripped):
+            claims.append(stripped)
+            continue
         claims.extend(_sentence_claims(stripped))
     return [claim for claim in claims if claim]
 

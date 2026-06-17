@@ -40,3 +40,41 @@ class BrowserEvalSummary(BaseModel):
     failed_cases: int
     task_success_rate: float
     results: list[BrowserEvalCaseResult]
+
+
+class ReviewerEvalExpected(BaseModel):
+    passed: bool | None = None
+    min_score: float | None = None
+    max_score: float | None = None
+    issue_types: list[str] = Field(default_factory=list)
+
+
+class ReviewerEvalCase(BaseModel):
+    case_id: str
+    description: str
+    report_markdown: str
+    evidence_items: list[dict[str, Any]] = Field(default_factory=list)
+    expected_text: str | None = None
+    expected: ReviewerEvalExpected = Field(default_factory=ReviewerEvalExpected)
+
+
+class ReviewerEvalCaseResult(BaseModel):
+    case_id: str
+    passed: bool
+    reviewer_passed: bool
+    score: float
+    expected_passed: bool | None = None
+    expected_issue_types: list[str] = Field(default_factory=list)
+    actual_issue_types: list[str] = Field(default_factory=list)
+    missing_issue_types: list[str] = Field(default_factory=list)
+    unexpected_issue_types: list[str] = Field(default_factory=list)
+    error: str | None = None
+
+
+class ReviewerEvalSummary(BaseModel):
+    total: int
+    passed: int
+    failed: int
+    pass_rate: float
+    average_review_score: float
+    case_results: list[ReviewerEvalCaseResult] = Field(default_factory=list)
