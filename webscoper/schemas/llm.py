@@ -43,3 +43,23 @@ class LLMClientConfig(BaseModel):
     timeout_ms: int = 30000
     temperature: float = 0.0
     max_tokens: int = 2048
+    extra_headers: dict[str, str] = Field(default_factory=dict)
+
+
+class LLMProviderConfig(BaseModel):
+    provider_id: str
+    enabled: bool = True
+    provider_type: str = "openai_compatible"
+    base_url: str
+    api_key: str | None = None
+    api_key_env: str | None = None
+    model: str
+    timeout_ms: int = 30000
+    temperature: float = 0.0
+    max_tokens: int = 2048
+    extra_headers: dict[str, str] = Field(default_factory=dict)
+
+
+class LLMRouterConfig(BaseModel):
+    default_provider: str
+    providers: dict[str, LLMProviderConfig] = Field(default_factory=dict)

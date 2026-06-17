@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import urllib.error
 import urllib.request
-import asyncio
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -116,13 +116,15 @@ class OpenAICompatibleLLMClient(BaseLLMClient):
             "max_tokens": request.max_tokens,
         }
         body = json.dumps(payload).encode("utf-8")
+        headers = {
+            **_safe_extra_headers(self.config.extra_headers),
+            "Authorization": f"Bearer {self.config.api_key}",
+            "Content-Type": "application/json",
+        }
         http_request = urllib.request.Request(
             url,
             data=body,
-            headers={
-                "Authorization": f"Bearer {self.config.api_key}",
-                "Content-Type": "application/json",
-            },
+            headers=headers,
             method="POST",
         )
 
@@ -171,3 +173,11 @@ def _request_model(request_model: str | None, config_model: str) -> str:
     if request_model and request_model not in {"none", "fake-llm"}:
         return request_model
     return config_model
+
+
+def _safe_extra_headers(headers: dict[str, str]) -> dict[str, str]:
+    return {
+        key: value
+        for key, value in headers.items()
+        if key.lower() != "authorization"
+    }

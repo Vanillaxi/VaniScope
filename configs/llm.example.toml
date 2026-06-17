@@ -1,0 +1,65 @@
+# VaniScope LLM provider config example.
+# Copy this file to configs/llm.local.toml and fill in your real keys.
+# configs/llm.local.toml is ignored by Git.
+
+default_provider = "deepseek"
+
+[providers.openai]
+enabled = false
+provider_type = "openai_compatible"
+base_url = "https://YOUR_OPENAI_COMPATIBLE_BASE_URL/v1"
+api_key = "YOUR_OPENAI_API_KEY"
+model = "YOUR_OPENAI_MODEL"
+timeout_ms = 30000
+temperature = 0.0
+max_tokens = 2048
+
+[providers.deepseek]
+enabled = false
+provider_type = "openai_compatible"
+base_url = "https://YOUR_DEEPSEEK_OPENAI_COMPATIBLE_BASE_URL/v1"
+api_key = "YOUR_DEEPSEEK_API_KEY"
+model = "YOUR_DEEPSEEK_MODEL"
+timeout_ms = 30000
+temperature = 0.0
+max_tokens = 2048
+
+[providers.glm]
+enabled = false
+provider_type = "openai_compatible"
+base_url = "https://YOUR_GLM_OPENAI_COMPATIBLE_BASE_URL/v1"
+api_key = "YOUR_GLM_API_KEY"
+model = "YOUR_GLM_MODEL"
+timeout_ms = 30000
+temperature = 0.0
+max_tokens = 2048
+
+[providers.doubao]
+enabled = false
+provider_type = "openai_compatible"
+base_url = "https://YOUR_DOUBAO_OPENAI_COMPATIBLE_BASE_URL/v1"
+api_key = "YOUR_DOUBAO_API_KEY"
+model = "YOUR_DOUBAO_MODEL"
+timeout_ms = 30000
+temperature = 0.0
+max_tokens = 2048
+
+[providers.xiaomi]
+enabled = false
+provider_type = "openai_compatible"
+base_url = "https://YOUR_XIAOMI_OPENAI_COMPATIBLE_BASE_URL/v1"
+api_key = "YOUR_XIAOMI_API_KEY"
+model = "YOUR_XIAOMI_MODEL"
+timeout_ms = 30000
+temperature = 0.0
+max_tokens = 2048
+
+[providers.custom]
+enabled = false
+provider_type = "openai_compatible"
+base_url = "https://YOUR_CUSTOM_OPENAI_COMPATIBLE_BASE_URL/v1"
+api_key = "YOUR_CUSTOM_API_KEY"
+model = "YOUR_CUSTOM_MODEL"
+timeout_ms = 30000
+temperature = 0.0
+max_tokens = 2048

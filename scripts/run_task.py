@@ -46,6 +46,14 @@ def main() -> int:
     )
     parser.add_argument("--model", help="LLM model override for real_llm mode.")
     parser.add_argument(
+        "--llm-config",
+        help="Path to LLM provider TOML config for real_llm mode.",
+    )
+    parser.add_argument(
+        "--llm-provider",
+        help="Provider ID from the LLM config to use for real_llm mode.",
+    )
+    parser.add_argument(
         "--repair-attempts",
         type=int,
         default=0,
@@ -74,6 +82,8 @@ def main() -> int:
         planner_mode=args.planner,
         model_override=args.model,
         repair_attempts=args.repair_attempts,
+        llm_config_path=_llm_config_path(args.planner, args.llm_config),
+        llm_provider=args.llm_provider,
     )
     try:
         observation = asyncio.run(handler.run(task))
@@ -87,6 +97,10 @@ def main() -> int:
     print(f"final_url: {observation.url}")
     print(f"title: {observation.title}")
     print(f"planner_mode: {args.planner}")
+    if handler.llm_config_path is not None:
+        print(f"llm_config_path: {handler.llm_config_path}")
+    if args.llm_provider:
+        print(f"llm_provider: {args.llm_provider}")
     if handler.version.model != "none":
         print(f"model: {handler.version.model}")
     print(f"repair_attempts: {args.repair_attempts}")
@@ -140,6 +154,15 @@ def _raw_input(url: str, click: str | None, expect: str | None) -> str:
     if expect:
         parts.append(f"expect {expect}")
     return "; ".join(parts)
+
+
+def _llm_config_path(planner: str, value: str | None) -> Path | None:
+    if planner != "real_llm":
+        return None
+    if value:
+        return Path(value)
+    default_path = Path("configs/llm.local.toml")
+    return default_path if default_path.exists() else None
 
 
 def _event_count(transcript_path: Path, event_type: str) -> int:

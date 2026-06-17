@@ -15,6 +15,7 @@ from webscoper.runtime.llm_client import (
 )
 from webscoper.runtime.llm_config import load_llm_config_from_env
 from webscoper.runtime.llm_planner import LLMTaskPlanner
+from webscoper.runtime.llm_router import LLMProviderRouter
 from webscoper.runtime.plan_validator import PlanValidator
 from webscoper.runtime.planner import DeterministicTaskPlanner, normalize_planner_mode
 from webscoper.runtime.prompt_builder import DynamicPromptBuilder
@@ -46,6 +47,8 @@ class WebAgentExecutionHandler:
         llm_client: BaseLLMClient | None = None,
         model_override: str | None = None,
         repair_attempts: int = 0,
+        llm_config_path: Path | None = None,
+        llm_provider: str | None = None,
     ) -> None:
         self.output_root = output_root
         self.headless = headless
@@ -58,6 +61,8 @@ class WebAgentExecutionHandler:
         self.llm_client = llm_client
         self.model_override = model_override
         self.repair_attempts = max(0, repair_attempts)
+        self.llm_config_path = llm_config_path
+        self.llm_provider = llm_provider
         if self.model_override:
             self.version.model = self.model_override
         self.last_context: WebAgentContext | None = None
@@ -127,9 +132,25 @@ class WebAgentExecutionHandler:
                 "planner_selected",
                 {
                     "planner_mode": self.planner_mode,
+                    "llm_config_path": str(self.llm_config_path)
+                    if self.llm_config_path is not None
+                    else None,
+                    "llm_provider": self.llm_provider,
+                    "model": self.version.model,
                 },
             )
             plan = await self._build_plan(context, prompt_result)
+            if self.planner_mode == "real_llm":
+                transcript.append(
+                    "llm_provider_selected",
+                    {
+                        "llm_config_path": str(self.llm_config_path)
+                        if self.llm_config_path is not None
+                        else None,
+                        "llm_provider": self.llm_provider,
+                        "model": self.version.model,
+                    },
+                )
             transcript.append("plan_built", plan.model_dump(mode="json"))
             validation_result = PlanValidator(self.tool_registry).validate(
                 plan,
@@ -229,6 +250,14 @@ class WebAgentExecutionHandler:
         if self.planner_mode == "fake_llm":
             return FakeLLMClient()
         if self.planner_mode == "real_llm":
+            if self.llm_config_path is not None:
+                client = LLMProviderRouter(self.llm_config_path).create_client(
+                    provider_id=self.llm_provider,
+                    model_override=self.model_override,
+                )
+                if isinstance(client, OpenAICompatibleLLMClient):
+                    self.version.model = client.config.model
+                return client
             config = load_llm_config_from_env(self.model_override)
             self.version.model = config.model
             return OpenAICompatibleLLMClient(config)

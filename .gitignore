@@ -2,6 +2,8 @@
 __pycache__/
 *.pyc
 .env
+configs/llm.local.toml
+configs/*.local.toml
 .idea/
 runs/*
 !runs/.gitkeep
