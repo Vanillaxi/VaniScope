@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from webscoper.runtime.context import WebAgentContext
+from webscoper.runtime.events import TaskEventSink
 from webscoper.runtime.tool_executor import LocalToolExecutor
 from webscoper.schemas.plan import ExecutionLoopResult, ExecutionPlan
 from webscoper.schemas.tool_call import ToolCall, ToolResult
@@ -11,8 +12,10 @@ class AgentExecutionLoop:
     def __init__(
         self,
         tool_executor: LocalToolExecutor,
+        event_sink: TaskEventSink | None = None,
     ) -> None:
         self.tool_executor = tool_executor
+        self.event_sink = event_sink
 
     async def run(
         self,
@@ -50,6 +53,16 @@ class AgentExecutionLoop:
                     "call": step.tool_call.model_dump(mode="json"),
                 },
             )
+            self._emit(
+                context,
+                "tool_call_started",
+                f"Tool call started: {step.tool_call.tool_id}",
+                {
+                    "step_id": step.step_id,
+                    "tool_name": step.tool_call.tool_id,
+                    "call_id": step.tool_call.call_id,
+                },
+            )
             tool_result = await self.tool_executor.execute(
                 step.tool_call,
                 context.snapshot(),
@@ -59,6 +72,19 @@ class AgentExecutionLoop:
             transcript.append(
                 "tool_call_completed",
                 record.model_dump(mode="json"),
+            )
+            self._emit(
+                context,
+                "tool_call_finished",
+                f"Tool call finished: {step.tool_call.tool_id}",
+                {
+                    "step_id": step.step_id,
+                    "tool_name": step.tool_call.tool_id,
+                    "call_id": step.tool_call.call_id,
+                    "ok": tool_result.status == "success",
+                    "status": tool_result.status,
+                    "error_type": tool_result.error_type,
+                },
             )
             evidence_item = _record_evidence(
                 context,
@@ -70,6 +96,16 @@ class AgentExecutionLoop:
                 transcript.append(
                     "evidence_recorded",
                     evidence_item.model_dump(mode="json"),
+                )
+                self._emit(
+                    context,
+                    "evidence_added",
+                    f"Evidence added: {evidence_item.evidence_id}",
+                    {
+                        "evidence_id": evidence_item.evidence_id,
+                        "kind": evidence_item.kind,
+                        "tool_name": step.tool_call.tool_id,
+                    },
                 )
 
             _merge_final_output(final_output, tool_result.output)
@@ -97,6 +133,22 @@ class AgentExecutionLoop:
         )
         transcript.append("execution_loop_completed", result.model_dump(mode="json"))
         return result
+
+    def _emit(
+        self,
+        context: WebAgentContext,
+        kind: str,
+        message: str,
+        payload: dict | None = None,
+    ) -> None:
+        if self.event_sink is None:
+            return
+        try:
+            event_payload = {"run_id": context.run_id}
+            event_payload.update(payload or {})
+            self.event_sink(kind, message, event_payload)
+        except Exception:
+            return
 
 
 def _merge_final_output(final_output: dict, output: dict) -> None:

@@ -9,6 +9,7 @@ from typing import Any
 from webscoper.runtime.agents_md import AgentsMdLoader
 from webscoper.runtime.context import WebAgentContext
 from webscoper.runtime.evidence import EvidenceStore
+from webscoper.runtime.events import TaskEventSink
 from webscoper.runtime.execution_loop import AgentExecutionLoop
 from webscoper.runtime.llm_client import (
     BaseLLMClient,
@@ -53,6 +54,8 @@ class WebAgentExecutionHandler:
         repair_attempts: int = 0,
         llm_config_path: Path | None = None,
         llm_provider: str | None = None,
+        run_id_override: str | None = None,
+        event_sink: TaskEventSink | None = None,
     ) -> None:
         self.output_root = output_root
         self.headless = headless
@@ -67,6 +70,8 @@ class WebAgentExecutionHandler:
         self.repair_attempts = max(0, repair_attempts)
         self.llm_config_path = llm_config_path
         self.llm_provider = llm_provider
+        self.run_id_override = run_id_override
+        self.event_sink = event_sink
         if self.model_override:
             self.version.model = self.model_override
         self.last_context: WebAgentContext | None = None
@@ -87,6 +92,7 @@ class WebAgentExecutionHandler:
         )
         execution_loop = AgentExecutionLoop(
             tool_executor=tool_executor,
+            event_sink=self.event_sink,
         )
 
         transcript.append("task_loaded", _task_payload(task))
@@ -99,6 +105,11 @@ class WebAgentExecutionHandler:
             context.state.status = "running"
             context.state.current_step = 1
             transcript.append("execution_started", _state_payload(context))
+            self._emit_event(
+                "task_started",
+                "Task started",
+                {"run_id": context.run_id, "run_dir": str(context.run_dir)},
+            )
 
             context.state.current_step = 2
             agents_md_instructions = self.agents_md_loader.load(self.workspace)
@@ -130,6 +141,17 @@ class WebAgentExecutionHandler:
                     "lazy_tool_ids": prompt_result.lazy_tool_ids,
                 },
             )
+            self._emit_event(
+                "prompt_built",
+                "Prompt built",
+                {
+                    "run_id": context.run_id,
+                    "prompt_preview_path": str(context.run_dir / "prompt_preview.md"),
+                    "prompt_context_path": str(context.run_dir / "prompt_context.json"),
+                    "core_tool_ids": prompt_result.core_tool_ids,
+                    "lazy_tool_ids": prompt_result.lazy_tool_ids,
+                },
+            )
 
             context.state.current_step = 3
             transcript.append(
@@ -140,6 +162,15 @@ class WebAgentExecutionHandler:
                     if self.llm_config_path is not None
                     else None,
                     "llm_provider": self.llm_provider,
+                    "model": self.version.model,
+                },
+            )
+            self._emit_event(
+                "planner_started",
+                "Planner started",
+                {
+                    "run_id": context.run_id,
+                    "planner_mode": self.planner_mode,
                     "model": self.version.model,
                 },
             )
@@ -156,6 +187,15 @@ class WebAgentExecutionHandler:
                     },
                 )
             transcript.append("plan_built", plan.model_dump(mode="json"))
+            self._emit_event(
+                "planner_finished",
+                "Planner finished",
+                {
+                    "run_id": context.run_id,
+                    "planner_mode": self.planner_mode,
+                    "step_count": len(plan.steps),
+                },
+            )
             validation_result = PlanValidator(self.tool_registry).validate(
                 plan,
                 context.snapshot(),
@@ -211,12 +251,21 @@ class WebAgentExecutionHandler:
 
             context.state.status = "completed"
             context.state.current_step = 5
-            _persist_evidence_and_report(context, observation)
+            _persist_evidence_and_report(context, observation, self.event_sink)
             transcript.append(
                 "context_snapshot",
                 context.snapshot().model_dump(mode="json"),
             )
             transcript.append("execution_completed", _state_payload(context))
+            self._emit_event(
+                "task_finished",
+                "Task finished",
+                {
+                    "run_id": context.run_id,
+                    "status": "succeeded",
+                    "run_dir": str(context.run_dir),
+                },
+            )
             return observation
         except Exception as exc:
             if context.state.status != "failed":
@@ -224,6 +273,17 @@ class WebAgentExecutionHandler:
                 context.state.error_type = type(exc).__name__
                 context.state.error_message = str(exc)
                 transcript.append("execution_failed", _state_payload(context))
+            self._emit_event(
+                "task_failed",
+                "Task failed",
+                {
+                    "run_id": context.run_id,
+                    "status": "failed",
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "run_dir": str(context.run_dir),
+                },
+            )
             transcript.append(
                 "context_snapshot",
                 context.snapshot().model_dump(mode="json"),
@@ -272,7 +332,7 @@ class WebAgentExecutionHandler:
         raise ValueError(f"Unsupported planner mode: {self.planner_mode}")
 
     def build_context(self, task: TaskSpec) -> WebAgentContext:
-        run_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        run_id = self.run_id_override or f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         run_dir = self.output_root / run_id
         trace_recorder = TraceRecorder(run_dir=run_dir, run_id=run_id)
         transcript_store = TranscriptStore(run_dir=run_dir, run_id=run_id)
@@ -286,6 +346,19 @@ class WebAgentExecutionHandler:
             version=self.version,
             state=RuntimeState(status="context_built"),
         )
+
+    def _emit_event(
+        self,
+        kind: str,
+        message: str,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        if self.event_sink is None:
+            return
+        try:
+            self.event_sink(kind, message, payload or {})
+        except Exception:
+            return
 
 
 def _task_payload(task: TaskSpec) -> dict[str, Any]:
@@ -358,6 +431,7 @@ def _append_llm_planner_transcript(
 def _persist_evidence_and_report(
     context: WebAgentContext,
     observation: PageObservation,
+    event_sink: TaskEventSink | None = None,
 ) -> None:
     evidence_items = []
     if context.evidence_store is not None:
@@ -382,6 +456,16 @@ def _persist_evidence_and_report(
         "final_report_built",
         {
             "final_report_path": str(report_path),
+            "evidence_count": len(evidence_items),
+        },
+    )
+    _emit_report_event(
+        event_sink,
+        "report_written",
+        "Report written",
+        {
+            "run_id": context.run_id,
+            "report_path": str(report_path),
             "evidence_count": len(evidence_items),
         },
     )
@@ -414,6 +498,33 @@ def _persist_evidence_and_report(
             "issue_count": len(review_result.issues),
         },
     )
+    _emit_report_event(
+        event_sink,
+        "review_finished",
+        "Review finished",
+        {
+            "run_id": context.run_id,
+            "review_path": str(review_path),
+            "review_summary_path": str(review_summary_path),
+            "passed": review_result.passed,
+            "score": review_result.score,
+            "issue_count": len(review_result.issues),
+        },
+    )
+
+
+def _emit_report_event(
+    event_sink: TaskEventSink | None,
+    kind: str,
+    message: str,
+    payload: dict[str, Any],
+) -> None:
+    if event_sink is None:
+        return
+    try:
+        event_sink(kind, message, payload)
+    except Exception:
+        return
 
 
 def _observation_summary(observation: PageObservation) -> dict[str, Any]:
