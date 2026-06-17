@@ -21,6 +21,7 @@ from webscoper.runtime.plan_validator import PlanValidator
 from webscoper.runtime.planner import DeterministicTaskPlanner, normalize_planner_mode
 from webscoper.runtime.prompt_builder import DynamicPromptBuilder
 from webscoper.runtime.report import FinalReportBuilder
+from webscoper.runtime.reviewer import ReportReviewer, build_review_summary_markdown
 from webscoper.runtime.reminders import RuntimeReminderStore
 from webscoper.runtime.tool_executor import LocalToolExecutor
 from webscoper.runtime.trace import TraceRecorder
@@ -378,6 +379,35 @@ def _persist_evidence_and_report(
         {
             "final_report_path": str(report_path),
             "evidence_count": len(evidence_items),
+        },
+    )
+    review_result = ReportReviewer().review(
+        report_text,
+        evidence_items,
+        task_spec=context.task,
+    )
+    review_path = context.run_dir / "review.json"
+    review_path.write_text(
+        json.dumps(
+            review_result.model_dump(mode="json"),
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    review_summary_path = context.run_dir / "review_summary.md"
+    review_summary_path.write_text(
+        build_review_summary_markdown(review_result),
+        encoding="utf-8",
+    )
+    context.transcript_store.append(
+        "review_completed",
+        {
+            "review_path": str(review_path),
+            "review_summary_path": str(review_summary_path),
+            "passed": review_result.passed,
+            "score": review_result.score,
+            "issue_count": len(review_result.issues),
         },
     )
 

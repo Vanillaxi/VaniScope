@@ -23,7 +23,7 @@ class FinalReportBuilder:
             "",
             "## Result",
             "",
-            _result_line(final_observation),
+            _result_line(final_observation, evidence_items),
             "",
             "## Evidence",
             "",
@@ -45,13 +45,17 @@ class FinalReportBuilder:
         return "\n".join(lines)
 
 
-def _result_line(final_observation: PageObservation | None) -> str:
+def _result_line(
+    final_observation: PageObservation | None,
+    evidence_items: list[EvidenceItem],
+) -> str:
     if final_observation is None:
         return "No final observation was available."
     summary = final_observation.visible_text_summary.replace("\n", " ")
+    refs = _evidence_refs(evidence_items)
     return (
         f"Final page: {final_observation.title} "
-        f"({final_observation.url}). Visible text: {summary}"
+        f"({final_observation.url}); visible text: {summary}{refs}"
     )
 
 
@@ -71,3 +75,10 @@ def _evidence_lines(evidence_items: list[EvidenceItem]) -> list[str]:
         else:
             lines.append(f"- [{item.evidence_id}] {item.kind} from {source}: {text}")
     return lines
+
+
+def _evidence_refs(evidence_items: list[EvidenceItem]) -> str:
+    if not evidence_items:
+        return ""
+    refs = ", ".join(f"[{item.evidence_id}]" for item in evidence_items[:3])
+    return f" Evidence: {refs}."

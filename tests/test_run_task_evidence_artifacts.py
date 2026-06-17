@@ -41,9 +41,13 @@ async def test_execution_handler_writes_evidence_and_report(
     assert context is not None
     evidence_path = context.run_dir / "evidence.jsonl"
     report_path = context.run_dir / "final_report.md"
+    review_path = context.run_dir / "review.json"
+    review_summary_path = context.run_dir / "review_summary.md"
     assert "pip install playwright" in observation.visible_text_summary
     assert evidence_path.exists()
     assert report_path.exists()
+    assert review_path.exists()
+    assert review_summary_path.exists()
 
     evidence_items = [
         json.loads(line)
@@ -52,6 +56,8 @@ async def test_execution_handler_writes_evidence_and_report(
     evidence_ids = [item["evidence_id"] for item in evidence_items]
     kinds = {item["kind"] for item in evidence_items}
     report = report_path.read_text(encoding="utf-8")
+    review = json.loads(review_path.read_text(encoding="utf-8"))
+    review_summary = review_summary_path.read_text(encoding="utf-8")
     transcript_events = _jsonl_values(
         context.transcript_store.transcript_path,
         "event_type",
@@ -62,8 +68,11 @@ async def test_execution_handler_writes_evidence_and_report(
     assert "action_result" in kinds
     assert "text_excerpt" in kinds
     assert "ev_000001" in report
+    assert review["passed"] is True
+    assert "VaniScope Review Summary" in review_summary
     assert "evidence_written" in transcript_events
     assert "final_report_built" in transcript_events
+    assert "review_completed" in transcript_events
 
 
 def _jsonl_values(path: Path, key: str) -> list[str]:
