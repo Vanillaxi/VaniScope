@@ -55,6 +55,18 @@ def main() -> int:
         default=0,
         help="Number of tool-call repair attempts for LLM planner modes.",
     )
+    parser.add_argument(
+        "--reviewer",
+        choices=["deterministic", "fake_llm", "real_llm"],
+        default="deterministic",
+        help="Reviewer mode to use for optional revise loop.",
+    )
+    parser.add_argument(
+        "--revise-attempts",
+        type=int,
+        default=0,
+        help="Number of reviewer revise attempts to run after final report generation.",
+    )
     args = parser.parse_args()
 
     try:
@@ -69,6 +81,8 @@ def main() -> int:
             reminders=args.reminder,
             model_override=args.model,
             repair_attempts=args.repair_attempts,
+            reviewer=args.reviewer,
+            revise_attempts=args.revise_attempts,
             llm_config=args.llm_config,
             llm_provider=args.llm_provider,
             reminder_source="cli",
@@ -93,6 +107,8 @@ def main() -> int:
     if handler.version.model != "none":
         print(f"model: {handler.version.model}")
     print(f"repair_attempts: {args.repair_attempts}")
+    print(f"reviewer_mode: {args.reviewer}")
+    print(f"revise_attempts: {args.revise_attempts}")
     print("execution_mode: tool_loop")
     print(f"risk_signals_count: {len(observation.risk_signals)}")
     print(f"interactive_elements_count: {len(observation.interactive_elements)}")
@@ -104,6 +120,11 @@ def main() -> int:
         print(f"final_report_path: {context.run_dir / 'final_report.md'}")
         print(f"review_path: {context.run_dir / 'review.json'}")
         print(f"review_summary_path: {context.run_dir / 'review_summary.md'}")
+        if (context.run_dir / "revise_loop.json").exists():
+            print(f"revision_plan_path: {context.run_dir / 'revision_plan.json'}")
+            print(f"revised_report_path: {context.run_dir / 'revised_report.md'}")
+            print(f"final_review_path: {context.run_dir / 'final_review.json'}")
+            print(f"revise_loop_path: {context.run_dir / 'revise_loop.json'}")
         print(
             "tool_call_completed_count: "
             f"{_event_count(context.transcript_store.transcript_path, 'tool_call_completed')}"

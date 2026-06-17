@@ -20,6 +20,11 @@ from webscoper.runtime.llm_client import (
 )
 from webscoper.runtime.llm_config import load_llm_config_from_env
 from webscoper.runtime.llm_planner import LLMTaskPlanner
+from webscoper.runtime.llm_reviewer import (
+    BaseLLMReportReviewer,
+    FakeLLMReportReviewer,
+    OpenAICompatibleLLMReportReviewer,
+)
 from webscoper.runtime.llm_router import LLMProviderRouter
 from webscoper.runtime.pending import PendingApprovalManager
 from webscoper.runtime.plan_validator import PlanValidator
@@ -27,15 +32,19 @@ from webscoper.runtime.planner import DeterministicTaskPlanner, normalize_planne
 from webscoper.runtime.prompt_builder import DynamicPromptBuilder
 from webscoper.runtime.report import FinalReportBuilder
 from webscoper.runtime.reviewer import ReportReviewer, build_review_summary_markdown
+from webscoper.runtime.revise_loop import ReviewReviseLoop
+from webscoper.runtime.revision import ReportReviser, ReviewRevisionPlanner
 from webscoper.runtime.reminders import RuntimeReminderStore
 from webscoper.runtime.risk_gate import RiskGate
 from webscoper.runtime.tool_executor import LocalToolExecutor
 from webscoper.runtime.trace import TraceRecorder
 from webscoper.runtime.transcript import TranscriptStore
 from webscoper.schemas.context import RuntimeState
+from webscoper.schemas.evidence import EvidenceItem
 from webscoper.schemas.plan import ExecutionLoopResult, ExecutionPlan
 from webscoper.schemas.observation import PageObservation
 from webscoper.schemas.prompt import PromptBuildResult
+from webscoper.schemas.revise import ReviewerMode
 from webscoper.schemas.task import TaskSpec
 from webscoper.schemas.version import VersionContext
 from webscoper.tools.browser_tools import StatefulBrowserToolRuntime
@@ -63,6 +72,8 @@ class WebAgentExecutionHandler:
         risk_gate: RiskGate | None = None,
         approval_store: ApprovalStore | None = None,
         pending_manager: PendingApprovalManager | None = None,
+        reviewer_mode: str = "deterministic",
+        revise_attempts: int = 0,
     ) -> None:
         self.output_root = output_root
         self.headless = headless
@@ -82,6 +93,8 @@ class WebAgentExecutionHandler:
         self.risk_gate = risk_gate or RiskGate()
         self.approval_store = approval_store or ApprovalStore()
         self.pending_manager = pending_manager or PendingApprovalManager()
+        self.reviewer_mode = ReviewerMode(reviewer_mode)
+        self.revise_attempts = max(0, revise_attempts)
         if self.model_override:
             self.version.model = self.model_override
         self.last_context: WebAgentContext | None = None
@@ -289,7 +302,14 @@ class WebAgentExecutionHandler:
 
             context.state.status = "completed"
             context.state.current_step = 5
-            _persist_evidence_and_report(context, observation, self.event_sink)
+            _persist_evidence_and_report(
+                context,
+                observation,
+                self.event_sink,
+                reviewer_mode=self.reviewer_mode,
+                revise_attempts=self.revise_attempts,
+                llm_reviewer=self._build_llm_reviewer(),
+            )
             transcript.append(
                 "context_snapshot",
                 context.snapshot().model_dump(mode="json"),
@@ -332,6 +352,27 @@ class WebAgentExecutionHandler:
 
     def run_sync(self, task: TaskSpec) -> PageObservation:
         return asyncio.run(self.run(task))
+
+    def _build_llm_reviewer(self) -> BaseLLMReportReviewer | None:
+        if self.revise_attempts <= 0:
+            return None
+        if self.reviewer_mode == ReviewerMode.DETERMINISTIC:
+            return None
+        if self.reviewer_mode == ReviewerMode.FAKE_LLM:
+            return FakeLLMReportReviewer()
+        if self.reviewer_mode == ReviewerMode.REAL_LLM:
+            if self.llm_config_path is not None:
+                client = LLMProviderRouter(self.llm_config_path).create_client(
+                    provider_id=self.llm_provider,
+                    model_override=self.model_override,
+                )
+            else:
+                client = self._build_llm_client()
+            return OpenAICompatibleLLMReportReviewer(
+                client=client,
+                model=self.version.model,
+            )
+        return None
 
     async def _build_plan(
         self,
@@ -478,6 +519,9 @@ def _persist_evidence_and_report(
     context: WebAgentContext,
     observation: PageObservation,
     event_sink: TaskEventSink | None = None,
+    reviewer_mode: ReviewerMode = ReviewerMode.DETERMINISTIC,
+    revise_attempts: int = 0,
+    llm_reviewer: BaseLLMReportReviewer | None = None,
 ) -> None:
     evidence_items = []
     if context.evidence_store is not None:
@@ -558,6 +602,139 @@ def _persist_evidence_and_report(
         },
     )
     _persist_compaction_artifacts(context)
+    if revise_attempts > 0:
+        _persist_revise_loop_artifacts(
+            context=context,
+            report_text=report_text,
+            evidence_items=evidence_items,
+            event_sink=event_sink,
+            reviewer_mode=reviewer_mode,
+            revise_attempts=revise_attempts,
+            llm_reviewer=llm_reviewer,
+        )
+
+
+def _persist_revise_loop_artifacts(
+    *,
+    context: WebAgentContext,
+    report_text: str,
+    evidence_items: list[EvidenceItem],
+    event_sink: TaskEventSink | None,
+    reviewer_mode: ReviewerMode,
+    revise_attempts: int,
+    llm_reviewer: BaseLLMReportReviewer | None,
+) -> None:
+    compact_context = _read_json_object(context.run_dir / "compact_context.json")
+    if llm_reviewer is not None:
+        context.transcript_store.append(
+            "llm_review_started",
+            {"reviewer_mode": reviewer_mode.value},
+        )
+        _emit_report_event(
+            event_sink,
+            "llm_review_started",
+            "LLM review started",
+            {"run_id": context.run_id, "reviewer_mode": reviewer_mode.value},
+        )
+
+    loop = ReviewReviseLoop(
+        deterministic_reviewer=ReportReviewer(),
+        revision_planner=ReviewRevisionPlanner(),
+        report_reviser=ReportReviser(),
+        llm_reviewer=llm_reviewer,
+        max_revisions=revise_attempts,
+    )
+    result = loop.run(
+        task_id=context.run_id,
+        task_goal=context.task.raw_input,
+        report_markdown=report_text,
+        evidence_items=evidence_items,
+        compact_context=compact_context,
+        output_dir=context.run_dir,
+    )
+    if llm_reviewer is not None:
+        context.transcript_store.append(
+            "llm_review_finished",
+            {
+                "reviewer_mode": reviewer_mode.value,
+                "passed": result.llm_review.passed if result.llm_review else None,
+                "finding_count": len(result.llm_review.findings)
+                if result.llm_review
+                else 0,
+            },
+        )
+        _emit_report_event(
+            event_sink,
+            "llm_review_finished",
+            "LLM review finished",
+            {
+                "run_id": context.run_id,
+                "reviewer_mode": reviewer_mode.value,
+                "passed": result.llm_review.passed if result.llm_review else None,
+            },
+        )
+
+    context.transcript_store.append(
+        "revision_plan_created",
+        {
+            "revision_plan_path": str(context.run_dir / "revision_plan.json"),
+            "action_count": len(result.revision_plan.actions),
+        },
+    )
+    context.transcript_store.append(
+        "report_revised",
+        {
+            "revised_report_path": str(context.run_dir / "revised_report.md"),
+            "revised": result.revision_result.revised,
+            "applied_action_count": len(result.revision_result.applied_actions),
+        },
+    )
+    context.transcript_store.append(
+        "final_review_finished",
+        {
+            "final_review_path": str(context.run_dir / "final_review.json"),
+            "passed": result.passed,
+        },
+    )
+    context.transcript_store.append(
+        "revise_loop_finished",
+        {
+            "revise_loop_path": str(context.run_dir / "revise_loop.json"),
+            "artifacts": result.artifacts,
+            "passed": result.passed,
+        },
+    )
+    _emit_report_event(
+        event_sink,
+        "revision_plan_created",
+        "Revision plan created",
+        {
+            "run_id": context.run_id,
+            "action_count": len(result.revision_plan.actions),
+        },
+    )
+    _emit_report_event(
+        event_sink,
+        "report_revised",
+        "Report revised",
+        {
+            "run_id": context.run_id,
+            "revised": result.revision_result.revised,
+            "applied_action_count": len(result.revision_result.applied_actions),
+        },
+    )
+    _emit_report_event(
+        event_sink,
+        "final_review_finished",
+        "Final review finished",
+        {"run_id": context.run_id, "passed": result.passed},
+    )
+    _emit_report_event(
+        event_sink,
+        "revise_loop_finished",
+        "Revise loop finished",
+        {"run_id": context.run_id, "artifacts": result.artifacts},
+    )
 
 
 def _persist_compaction_artifacts(context: WebAgentContext) -> None:

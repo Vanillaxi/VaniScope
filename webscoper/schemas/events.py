@@ -29,6 +29,12 @@ TaskEventKind = Literal[
     "recovery_succeeded",
     "recovery_failed",
     "recovery_blocked",
+    "llm_review_started",
+    "llm_review_finished",
+    "revision_plan_created",
+    "report_revised",
+    "final_review_finished",
+    "revise_loop_finished",
     "task_finished",
     "task_failed",
 ]

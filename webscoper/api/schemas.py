@@ -8,6 +8,7 @@ from webscoper.schemas.risk import ApprovalRequest, TaskResumeResult
 
 
 PlannerMode = Literal["deterministic", "fake_llm", "real_llm"]
+ReviewerMode = Literal["deterministic", "fake_llm", "real_llm"]
 TaskStatus = Literal[
     "running",
     "succeeded",
@@ -25,9 +26,11 @@ class TaskCreateRequest(BaseModel):
     click: str | None = None
     expect: str | None = None
     planner: PlannerMode = "deterministic"
+    reviewer: ReviewerMode = "deterministic"
     workspace: str | None = None
     reminder: str | None = None
     repair_attempts: int = 0
+    revise_attempts: int = 0
     llm_config: str | None = None
     llm_provider: str | None = None
     model: str | None = None

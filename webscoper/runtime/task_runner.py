@@ -28,6 +28,8 @@ def run_browser_task_sync(
     headed: bool = False,
     model_override: str | None = None,
     repair_attempts: int = 0,
+    reviewer: str = "deterministic",
+    revise_attempts: int = 0,
     llm_config: str | Path | None = None,
     llm_provider: str | None = None,
     task_id: str = "cli_task",
@@ -51,7 +53,9 @@ def run_browser_task_sync(
         planner_mode=planner,
         model_override=model_override,
         repair_attempts=repair_attempts,
-        llm_config_path=llm_config_path(planner, llm_config),
+        reviewer_mode=reviewer,
+        revise_attempts=revise_attempts,
+        llm_config_path=llm_config_path(planner, llm_config, reviewer=reviewer),
         llm_provider=llm_provider,
     )
     observation = handler.run_sync(task)
@@ -107,8 +111,12 @@ def raw_input(url: str, click: str | None, expect: str | None) -> str:
     return "; ".join(parts)
 
 
-def llm_config_path(planner: str, value: str | Path | None) -> Path | None:
-    if planner != "real_llm":
+def llm_config_path(
+    planner: str,
+    value: str | Path | None,
+    reviewer: str = "deterministic",
+) -> Path | None:
+    if planner != "real_llm" and reviewer != "real_llm":
         return None
     if value:
         return Path(value)
