@@ -1,0 +1,57 @@
+[
+  {
+    "case_id": "basic_quickstart",
+    "description": "Click Quickstart and reveal install command.",
+    "url": "tests/fixtures/mock_site/basic.html",
+    "click": "Quickstart",
+    "expect": {
+      "status": "success",
+      "must_contain_text": "pip install playwright"
+    },
+    "tags": ["basic", "click", "content"]
+  },
+  {
+    "case_id": "lazy_content",
+    "description": "Click Load Docs and wait for delayed content.",
+    "url": "tests/fixtures/mock_site/lazy_content.html",
+    "click": "Load Docs",
+    "expect": {
+      "status": "success",
+      "must_contain_text": "Lazy loaded documentation ready"
+    },
+    "tags": ["lazy", "wait", "content"]
+  },
+  {
+    "case_id": "disabled_button",
+    "description": "Disabled Submit button should not be clicked successfully.",
+    "url": "tests/fixtures/mock_site/disabled_button.html",
+    "click": "Submit",
+    "expect": {
+      "status": "failed",
+      "expected_error_type": "TARGET_DISABLED"
+    },
+    "tags": ["disabled", "precondition"]
+  },
+  {
+    "case_id": "login_risk",
+    "description": "Login page should produce password/login risk signal.",
+    "url": "tests/fixtures/mock_site/login_mock.html",
+    "click": null,
+    "expect": {
+      "status": "success",
+      "must_have_risk_type": "login"
+    },
+    "tags": ["risk", "login"]
+  },
+  {
+    "case_id": "captcha_risk",
+    "description": "Captcha page should produce captcha risk signal.",
+    "url": "tests/fixtures/mock_site/captcha_mock.html",
+    "click": null,
+    "expect": {
+      "status": "success",
+      "must_have_risk_type": "captcha"
+    },
+    "tags": ["risk", "captcha"]
+  }
+]

@@ -2,8 +2,10 @@
 __pycache__/
 *.pyc
 .env
+.idea/
 traces/*
 !traces/.gitkeep
+eval_results/*
+!eval_results/.gitkeep
 .pytest_cache/
 .DS_Store
-.idea/
