@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime
 from pathlib import Path
@@ -230,6 +231,9 @@ class WebAgentExecutionHandler:
             raise
         finally:
             await browser_runtime.close()
+
+    def run_sync(self, task: TaskSpec) -> PageObservation:
+        return asyncio.run(self.run(task))
 
     async def _build_plan(
         self,

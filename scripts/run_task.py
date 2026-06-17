@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
 import sys
 from pathlib import Path
@@ -10,10 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from webscoper.runtime.execution import WebAgentExecutionHandler
-from webscoper.runtime.reminders import RuntimeReminderStore
-from webscoper.schemas.action import ActionContract, ExpectedEffect
-from webscoper.schemas.task import TaskSpec
+from webscoper.runtime.task_runner import run_browser_task_sync
 
 
 def main() -> int:
@@ -61,35 +57,28 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    target_url = _as_url(args.url)
-    task = TaskSpec(
-        task_id="cli_task",
-        raw_input=_raw_input(args.url, args.click, args.expect),
-        target_url=target_url,
-        action=_action(args.click, args.expect) if args.click else None,
-        expected_effect=_expected_effect(args.expect) if args.expect else None,
-        tags=["cli"],
-    )
-    reminders = RuntimeReminderStore()
-    for reminder in args.reminder:
-        reminders.add(reminder, source="cli")
-
-    handler = WebAgentExecutionHandler(
-        output_root=Path(args.output_root),
-        headless=not args.headed,
-        workspace=Path(args.workspace) if args.workspace else None,
-        runtime_reminders=reminders,
-        planner_mode=args.planner,
-        model_override=args.model,
-        repair_attempts=args.repair_attempts,
-        llm_config_path=_llm_config_path(args.planner, args.llm_config),
-        llm_provider=args.llm_provider,
-    )
     try:
-        observation = asyncio.run(handler.run(task))
+        result = run_browser_task_sync(
+            url=args.url,
+            click=args.click,
+            expect=args.expect,
+            planner=args.planner,
+            output_root=Path(args.output_root),
+            headed=args.headed,
+            workspace=Path(args.workspace) if args.workspace else None,
+            reminders=args.reminder,
+            model_override=args.model,
+            repair_attempts=args.repair_attempts,
+            llm_config=args.llm_config,
+            llm_provider=args.llm_provider,
+            reminder_source="cli",
+        )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
+    task = result.task
+    observation = result.observation
+    handler = result.handler
     context = handler.last_context
     prompt_result = handler.last_prompt_result
 
@@ -125,48 +114,6 @@ def main() -> int:
         print(f"loaded_agents_md_count: {len(prompt_result.loaded_agents_md_paths)}")
 
     return 0
-
-
-def _action(click: str, expect: str | None) -> ActionContract:
-    return ActionContract(
-        action_type="click",
-        intent=f"Click {click}",
-        target_hint=click,
-        preferred_roles=["button", "link"],
-        preconditions=["target_visible", "target_enabled"],
-        expected_effect=_expected_effect(expect),
-        risk_level="read_only",
-    )
-
-
-def _expected_effect(expect: str | None) -> ExpectedEffect:
-    if expect:
-        return ExpectedEffect(type="content_appears", value=expect)
-    return ExpectedEffect(type="none")
-
-
-def _as_url(value: str) -> str:
-    if value.startswith(("http://", "https://", "file://")):
-        return value
-    return Path(value).resolve().as_uri()
-
-
-def _raw_input(url: str, click: str | None, expect: str | None) -> str:
-    parts = [f"Open {url}"]
-    if click:
-        parts.append(f"click {click}")
-    if expect:
-        parts.append(f"expect {expect}")
-    return "; ".join(parts)
-
-
-def _llm_config_path(planner: str, value: str | None) -> Path | None:
-    if planner != "real_llm":
-        return None
-    if value:
-        return Path(value)
-    default_path = Path("configs/llm.local.toml")
-    return default_path if default_path.exists() else None
 
 
 def _event_count(transcript_path: Path, event_type: str) -> int:
