@@ -15,6 +15,7 @@ from webscoper.runtime.llm_client import (
 )
 from webscoper.runtime.llm_config import load_llm_config_from_env
 from webscoper.runtime.llm_planner import LLMTaskPlanner
+from webscoper.runtime.plan_validator import PlanValidator
 from webscoper.runtime.planner import DeterministicTaskPlanner, normalize_planner_mode
 from webscoper.runtime.prompt_builder import DynamicPromptBuilder
 from webscoper.runtime.reminders import RuntimeReminderStore
@@ -129,12 +130,39 @@ class WebAgentExecutionHandler:
                 },
             )
             plan = await self._build_plan(context, prompt_result)
+            transcript.append("plan_built", plan.model_dump(mode="json"))
+            validation_result = PlanValidator(self.tool_registry).validate(
+                plan,
+                context.snapshot(),
+            )
+            transcript.append(
+                "plan_validation_completed",
+                validation_result.model_dump(mode="json"),
+            )
+            if not validation_result.ok:
+                first_issue = validation_result.issues[0]
+                context.state.status = "failed"
+                context.state.error_type = first_issue.issue_type
+                context.state.error_message = first_issue.message
+                transcript.append(
+                    "plan_validation_failed",
+                    validation_result.model_dump(mode="json"),
+                )
+                transcript.append("execution_failed", _state_payload(context))
+                raise RuntimeError(
+                    f"Plan validation failed: {first_issue.issue_type}: "
+                    f"{first_issue.message}"
+                )
 
             transcript.append("browser_tool_runtime_started", _state_payload(context))
             await browser_runtime.start()
 
             context.state.current_step = 4
-            loop_result = await execution_loop.run(context, plan)
+            loop_result = await execution_loop.run(
+                context,
+                plan,
+                record_plan_built=False,
+            )
             self.last_loop_result = loop_result
             if loop_result.status != "success":
                 context.state.status = "failed"

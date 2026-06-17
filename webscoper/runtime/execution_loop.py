@@ -17,9 +17,11 @@ class AgentExecutionLoop:
         self,
         context: WebAgentContext,
         plan: ExecutionPlan,
+        record_plan_built: bool = True,
     ) -> ExecutionLoopResult:
         transcript = context.transcript_store
-        transcript.append("plan_built", plan.model_dump(mode="json"))
+        if record_plan_built:
+            transcript.append("plan_built", plan.model_dump(mode="json"))
 
         records: list[ToolExecutionRecord] = []
         final_output: dict = {}

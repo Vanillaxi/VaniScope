@@ -1,0 +1,88 @@
+[
+  {
+    "case_id": "valid_open_only_json",
+    "description": "Valid open-only planner JSON.",
+    "raw_input": "Open the mock site.",
+    "target_url": "tests/fixtures/mock_site/basic.html",
+    "llm_output": "{\"tool_calls\":[{\"call_id\":\"call_001\",\"tool_id\":\"browser_open_observe\",\"arguments\":{\"url\":\"tests/fixtures/mock_site/basic.html\"}},{\"call_id\":\"call_002\",\"tool_id\":\"browser_extract\",\"arguments\":{}},{\"call_id\":\"call_003\",\"tool_id\":\"finish_task\",\"arguments\":{\"summary\":\"done\"}}]}",
+    "expected_status": "success",
+    "expected_tool_ids": ["browser_open_observe", "browser_extract", "finish_task"],
+    "tags": ["valid", "open_only"]
+  },
+  {
+    "case_id": "valid_click_fenced_json",
+    "description": "Valid click task inside fenced JSON.",
+    "raw_input": "Open the mock site and click Quickstart.",
+    "target_url": "tests/fixtures/mock_site/basic.html",
+    "click": "Quickstart",
+    "expect_text": "pip install playwright",
+    "llm_output": "```json\n{\"tool_calls\":[{\"call_id\":\"call_001\",\"tool_id\":\"browser_open_observe\",\"arguments\":{\"url\":\"tests/fixtures/mock_site/basic.html\"}},{\"call_id\":\"call_002\",\"tool_id\":\"browser_click_intent\",\"arguments\":{\"action\":{\"action_type\":\"click\",\"intent\":\"Click Quickstart\",\"target_hint\":\"Quickstart\",\"preferred_roles\":[\"button\",\"link\"],\"preconditions\":[\"target_visible\",\"target_enabled\"],\"expected_effect\":{\"type\":\"content_appears\",\"value\":\"pip install playwright\"},\"risk_level\":\"read_only\"}}},{\"call_id\":\"call_003\",\"tool_id\":\"browser_extract\",\"arguments\":{}},{\"call_id\":\"call_004\",\"tool_id\":\"finish_task\",\"arguments\":{\"summary\":\"done\"}}]}\n```",
+    "expected_status": "success",
+    "expected_tool_ids": ["browser_open_observe", "browser_click_intent", "browser_extract", "finish_task"],
+    "tags": ["valid", "click", "fenced_json"]
+  },
+  {
+    "case_id": "missing_call_id_auto_fill",
+    "description": "Parser auto-fills missing call_id fields.",
+    "raw_input": "Open the mock site.",
+    "target_url": "tests/fixtures/mock_site/basic.html",
+    "llm_output": "{\"tool_calls\":[{\"tool_id\":\"browser_open_observe\",\"arguments\":{\"url\":\"tests/fixtures/mock_site/basic.html\"}},{\"tool_id\":\"browser_extract\",\"arguments\":{}},{\"tool_id\":\"finish_task\",\"arguments\":{\"summary\":\"done\"}}]}",
+    "expected_status": "success",
+    "expected_tool_ids": ["browser_open_observe", "browser_extract", "finish_task"],
+    "tags": ["valid", "parser"]
+  },
+  {
+    "case_id": "single_tool_calls_dict",
+    "description": "Parser wraps a single tool_calls object in a list.",
+    "raw_input": "Open the mock site.",
+    "target_url": "tests/fixtures/mock_site/basic.html",
+    "llm_output": "{\"tool_calls\":{\"call_id\":\"call_001\",\"tool_id\":\"browser_open_observe\",\"arguments\":{\"url\":\"tests/fixtures/mock_site/basic.html\"}}}",
+    "expected_status": "success",
+    "expected_tool_ids": ["browser_open_observe"],
+    "tags": ["valid", "parser"]
+  },
+  {
+    "case_id": "invalid_json_repaired",
+    "description": "Invalid first response repaired into valid tool calls.",
+    "raw_input": "Open the mock site.",
+    "target_url": "tests/fixtures/mock_site/basic.html",
+    "llm_output": "I will click the button.",
+    "repair_output": "{\"tool_calls\":[{\"call_id\":\"call_001\",\"tool_id\":\"browser_open_observe\",\"arguments\":{\"url\":\"tests/fixtures/mock_site/basic.html\"}},{\"call_id\":\"call_002\",\"tool_id\":\"finish_task\",\"arguments\":{\"summary\":\"done\"}}]}",
+    "repair_attempts": 1,
+    "expected_status": "success",
+    "expected_tool_ids": ["browser_open_observe", "finish_task"],
+    "tags": ["repair"]
+  },
+  {
+    "case_id": "unknown_tool_failed",
+    "description": "Unknown tools are rejected before execution.",
+    "raw_input": "Open the mock site.",
+    "target_url": "tests/fixtures/mock_site/basic.html",
+    "llm_output": "{\"tool_calls\":[{\"call_id\":\"call_001\",\"tool_id\":\"browser_magic_click\",\"arguments\":{}}]}",
+    "expected_status": "failed",
+    "expected_error_type": "UNKNOWN_TOOL",
+    "tags": ["invalid", "unknown_tool"]
+  },
+  {
+    "case_id": "lazy_tool_failed",
+    "description": "Lazy tools cannot be executed directly by the planner.",
+    "raw_input": "Search the web.",
+    "target_url": "tests/fixtures/mock_site/basic.html",
+    "llm_output": "{\"tool_calls\":[{\"call_id\":\"call_001\",\"tool_id\":\"web_search\",\"arguments\":{\"query\":\"playwright\"}}]}",
+    "expected_status": "failed",
+    "expected_error_type": "LAZY_TOOL_NOT_EXECUTABLE",
+    "tags": ["invalid", "lazy_tool"]
+  },
+  {
+    "case_id": "click_before_open_failed",
+    "description": "Clicking before opening the page is rejected.",
+    "raw_input": "Click Quickstart.",
+    "target_url": "tests/fixtures/mock_site/basic.html",
+    "click": "Quickstart",
+    "expect_text": "pip install playwright",
+    "llm_output": "{\"tool_calls\":[{\"call_id\":\"call_001\",\"tool_id\":\"browser_click_intent\",\"arguments\":{\"action\":{\"action_type\":\"click\",\"intent\":\"Click Quickstart\",\"target_hint\":\"Quickstart\",\"preferred_roles\":[\"button\",\"link\"],\"preconditions\":[\"target_visible\",\"target_enabled\"],\"expected_effect\":{\"type\":\"content_appears\",\"value\":\"pip install playwright\"},\"risk_level\":\"read_only\"}}},{\"call_id\":\"call_002\",\"tool_id\":\"finish_task\",\"arguments\":{\"summary\":\"done\"}}]}",
+    "expected_status": "failed",
+    "expected_error_type": "INVALID_TOOL_ORDER",
+    "tags": ["invalid", "order"]
+  }
+]
