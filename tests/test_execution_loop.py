@@ -51,8 +51,8 @@ async def test_agent_execution_loop_runs_click_plan(tmp_path: Path) -> None:
         state=RuntimeState(status="running"),
     )
     browser_runtime = StatefulBrowserToolRuntime(trace_recorder=recorder)
+    plan = DeterministicTaskPlanner().build_plan(task)
     loop = AgentExecutionLoop(
-        planner=DeterministicTaskPlanner(),
         tool_executor=LocalToolExecutor(
             tool_registry=create_default_tool_registry(),
             browser_runtime=browser_runtime,
@@ -61,7 +61,7 @@ async def test_agent_execution_loop_runs_click_plan(tmp_path: Path) -> None:
 
     await browser_runtime.start()
     try:
-        result = await loop.run(context)
+        result = await loop.run(context, plan)
     finally:
         await browser_runtime.close()
 

@@ -8,14 +8,16 @@ from typing import Any
 from webscoper.runtime.agents_md import AgentsMdLoader
 from webscoper.runtime.context import WebAgentContext
 from webscoper.runtime.execution_loop import AgentExecutionLoop
-from webscoper.runtime.planner import DeterministicTaskPlanner
+from webscoper.runtime.llm_client import BaseLLMClient, FakeLLMClient
+from webscoper.runtime.llm_planner import LLMTaskPlanner
+from webscoper.runtime.planner import DeterministicTaskPlanner, normalize_planner_mode
 from webscoper.runtime.prompt_builder import DynamicPromptBuilder
 from webscoper.runtime.reminders import RuntimeReminderStore
 from webscoper.runtime.tool_executor import LocalToolExecutor
 from webscoper.runtime.trace import TraceRecorder
 from webscoper.runtime.transcript import TranscriptStore
 from webscoper.schemas.context import RuntimeState
-from webscoper.schemas.plan import ExecutionLoopResult
+from webscoper.schemas.plan import ExecutionLoopResult, ExecutionPlan
 from webscoper.schemas.observation import PageObservation
 from webscoper.schemas.prompt import PromptBuildResult
 from webscoper.schemas.task import TaskSpec
@@ -34,6 +36,8 @@ class WebAgentExecutionHandler:
         agents_md_loader: AgentsMdLoader | None = None,
         tool_registry: ToolRegistry | None = None,
         runtime_reminders: RuntimeReminderStore | None = None,
+        planner_mode: str = "deterministic",
+        llm_client: BaseLLMClient | None = None,
     ) -> None:
         self.output_root = output_root
         self.headless = headless
@@ -42,6 +46,8 @@ class WebAgentExecutionHandler:
         self.agents_md_loader = agents_md_loader or AgentsMdLoader()
         self.tool_registry = tool_registry or create_default_tool_registry()
         self.runtime_reminders = runtime_reminders or RuntimeReminderStore()
+        self.planner_mode = normalize_planner_mode(planner_mode)
+        self.llm_client = llm_client
         self.last_context: WebAgentContext | None = None
         self.last_prompt_result: PromptBuildResult | None = None
         self.last_loop_result: ExecutionLoopResult | None = None
@@ -59,7 +65,6 @@ class WebAgentExecutionHandler:
             browser_runtime=browser_runtime,
         )
         execution_loop = AgentExecutionLoop(
-            planner=DeterministicTaskPlanner(),
             tool_executor=tool_executor,
         )
 
@@ -106,11 +111,19 @@ class WebAgentExecutionHandler:
             )
 
             context.state.current_step = 3
+            transcript.append(
+                "planner_selected",
+                {
+                    "planner_mode": self.planner_mode,
+                },
+            )
+            plan = await self._build_plan(context, prompt_result)
+
             transcript.append("browser_tool_runtime_started", _state_payload(context))
             await browser_runtime.start()
 
             context.state.current_step = 4
-            loop_result = await execution_loop.run(context)
+            loop_result = await execution_loop.run(context, plan)
             self.last_loop_result = loop_result
             if loop_result.status != "success":
                 context.state.status = "failed"
@@ -153,6 +166,20 @@ class WebAgentExecutionHandler:
             raise
         finally:
             await browser_runtime.close()
+
+    async def _build_plan(
+        self,
+        context: WebAgentContext,
+        prompt_result: PromptBuildResult,
+    ) -> ExecutionPlan:
+        if self.planner_mode == "deterministic":
+            return DeterministicTaskPlanner().build_plan(context.task)
+
+        planner = LLMTaskPlanner(self.llm_client or FakeLLMClient())
+        try:
+            return await planner.build_plan(context.snapshot(), prompt_result)
+        finally:
+            _append_llm_planner_transcript(context, planner)
 
     def build_context(self, task: TaskSpec) -> WebAgentContext:
         run_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -200,6 +227,31 @@ def _persist_prompt_context(run_dir: Path, prompt_result: PromptBuildResult) -> 
         json.dumps(prompt_result.model_dump(mode="json"), indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
+
+
+def _append_llm_planner_transcript(
+    context: WebAgentContext,
+    planner: LLMTaskPlanner,
+) -> None:
+    transcript = context.transcript_store
+    if planner.last_request is not None:
+        transcript.append(
+            "llm_request",
+            planner.last_request.model_dump(mode="json"),
+        )
+    if planner.last_response is not None:
+        transcript.append(
+            "llm_response",
+            planner.last_response.model_dump(mode="json"),
+        )
+    if (
+        planner.last_parse_result is not None
+        and planner.last_parse_result.status == "failed"
+    ):
+        transcript.append(
+            "tool_call_parse_failed",
+            planner.last_parse_result.model_dump(mode="json"),
+        )
 
 
 def _observation_summary(observation: PageObservation) -> dict[str, Any]:

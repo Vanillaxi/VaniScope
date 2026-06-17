@@ -38,6 +38,12 @@ def main() -> int:
         action="store_true",
         help="Run browser in headed mode.",
     )
+    parser.add_argument(
+        "--planner",
+        choices=["deterministic", "fake_llm"],
+        default="deterministic",
+        help="Planner mode to use.",
+    )
     args = parser.parse_args()
 
     target_url = _as_url(args.url)
@@ -58,6 +64,7 @@ def main() -> int:
         headless=not args.headed,
         workspace=Path(args.workspace) if args.workspace else None,
         runtime_reminders=reminders,
+        planner_mode=args.planner,
     )
     observation = asyncio.run(handler.run(task))
     context = handler.last_context
@@ -66,6 +73,7 @@ def main() -> int:
     print(f"task_id: {task.task_id}")
     print(f"final_url: {observation.url}")
     print(f"title: {observation.title}")
+    print(f"planner_mode: {args.planner}")
     print("execution_mode: tool_loop")
     print(f"risk_signals_count: {len(observation.risk_signals)}")
     print(f"interactive_elements_count: {len(observation.interactive_elements)}")

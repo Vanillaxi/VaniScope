@@ -1,24 +1,24 @@
 from __future__ import annotations
 
 from webscoper.runtime.context import WebAgentContext
-from webscoper.runtime.planner import DeterministicTaskPlanner
 from webscoper.runtime.tool_executor import LocalToolExecutor
-from webscoper.schemas.plan import ExecutionLoopResult
+from webscoper.schemas.plan import ExecutionLoopResult, ExecutionPlan
 from webscoper.schemas.tool_call import ToolExecutionRecord
 
 
 class AgentExecutionLoop:
     def __init__(
         self,
-        planner: DeterministicTaskPlanner,
         tool_executor: LocalToolExecutor,
     ) -> None:
-        self.planner = planner
         self.tool_executor = tool_executor
 
-    async def run(self, context: WebAgentContext) -> ExecutionLoopResult:
+    async def run(
+        self,
+        context: WebAgentContext,
+        plan: ExecutionPlan,
+    ) -> ExecutionLoopResult:
         transcript = context.transcript_store
-        plan = self.planner.build_plan(context.task)
         transcript.append("plan_built", plan.model_dump(mode="json"))
 
         records: list[ToolExecutionRecord] = []
