@@ -6,6 +6,7 @@ from typing import Any
 
 from webscoper.runtime.approvals import ApprovalStore
 from webscoper.runtime.events import TaskEventSink
+from webscoper.runtime.pending import PendingApprovalManager
 from webscoper.runtime.risk_gate import RiskGate
 from webscoper.schemas.action import ActionContract
 from webscoper.schemas.context import WebAgentContextSnapshot
@@ -22,18 +23,21 @@ class LocalToolExecutor:
         browser_runtime: StatefulBrowserToolRuntime,
         risk_gate: RiskGate | None = None,
         approval_store: ApprovalStore | None = None,
+        pending_manager: PendingApprovalManager | None = None,
         event_sink: TaskEventSink | None = None,
     ) -> None:
         self.tool_registry = tool_registry
         self.browser_runtime = browser_runtime
         self.risk_gate = risk_gate or RiskGate()
         self.approval_store = approval_store or ApprovalStore()
+        self.pending_manager = pending_manager or PendingApprovalManager()
         self.event_sink = event_sink
 
     async def execute(
         self,
         call: ToolCall,
         context: WebAgentContextSnapshot,
+        approval_override_id: str | None = None,
     ) -> ToolResult:
         started_at = _utc_now()
         tool = self.tool_registry.get(call.tool_id)
@@ -75,14 +79,15 @@ class LocalToolExecutor:
                 error_message=f"Tool {call.tool_id} is blocked by read_only safety mode.",
             )
 
-        risk_result = self.risk_gate.check_tool_call(
-            task_id=context.trace.run_id,
-            tool_name=call.tool_id,
-            arguments=call.arguments,
-            page_observation=self.browser_runtime.last_observation,
-        )
-        if not risk_result.allowed:
-            return self._risk_result(call, context, started_at, risk_result)
+        if approval_override_id is None:
+            risk_result = self.risk_gate.check_tool_call(
+                task_id=context.trace.run_id,
+                tool_name=call.tool_id,
+                arguments=call.arguments,
+                page_observation=self.browser_runtime.last_observation,
+            )
+            if not risk_result.allowed:
+                return self._risk_result(call, context, started_at, risk_result)
 
         try:
             output = await self._execute_local(call)
@@ -156,6 +161,7 @@ class LocalToolExecutor:
             target_hint = _str_or_none(action_payload.get("target_hint"))
 
         approval = None
+        pending = None
         if risk_result.requires_approval:
             approval = self.approval_store.create_request(
                 task_id=task_id,
@@ -172,6 +178,23 @@ class LocalToolExecutor:
             risk_result = risk_result.model_copy(
                 update={"approval_request_id": approval.approval_id}
             )
+            pending = self.pending_manager.create_pending_tool_call(
+                task_id=task_id,
+                approval_id=approval.approval_id,
+                tool_name=call.tool_id,
+                arguments=call.arguments,
+                tool_call_id=call.call_id,
+                reason=risk_result.reason,
+                metadata={
+                    "context_snapshot": context.model_dump(mode="json"),
+                    "page_observation": self.browser_runtime.last_observation.model_dump(
+                        mode="json"
+                    )
+                    if self.browser_runtime.last_observation is not None
+                    else None,
+                    "call": call.model_dump(mode="json"),
+                },
+            )
 
         self.approval_store.record_check(task_id, risk_result)
         self._write_risk_artifacts(context)
@@ -181,11 +204,17 @@ class LocalToolExecutor:
             "tool_name": call.tool_id,
             "risk_check": risk_result.model_dump(mode="json"),
             "approval_request": approval.model_dump(mode="json") if approval else None,
+            "pending_tool_call": pending.model_dump(mode="json") if pending else None,
         }
         if risk_result.requires_approval:
             self._emit_event(
                 "approval_required",
                 "Approval required before tool execution",
+                event_payload,
+            )
+            self._emit_event(
+                "task_paused",
+                "Task paused awaiting approval",
                 event_payload,
             )
             return _result(
@@ -221,6 +250,10 @@ class LocalToolExecutor:
             self.approval_store.write_risk_report(
                 context.trace.run_id,
                 run_dir / "risk_report.json",
+            )
+            self.pending_manager.write_jsonl(
+                context.trace.run_id,
+                run_dir / "pending.jsonl",
             )
         except Exception:
             return

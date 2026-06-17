@@ -23,7 +23,7 @@ def test_api_lists_and_decides_task_approval(tmp_path: Path) -> None:
         events_response = client.get(f"/tasks/{task_id}/events")
         assert events_response.status_code == 200
         assert "event: approval_required" in events_response.text
-        assert "event: task_failed" in events_response.text
+        assert "event: task_paused" in events_response.text
 
         approvals_response = client.get(f"/tasks/{task_id}/approvals")
         assert approvals_response.status_code == 200
@@ -46,13 +46,19 @@ def test_api_lists_and_decides_task_approval(tmp_path: Path) -> None:
             },
         )
         assert decision_response.status_code == 200
-        decided = decision_response.json()
+        decision_payload = decision_response.json()
+        decided = decision_payload["approval"]
         assert decided["status"] == "rejected"
         assert decided["decision"]["approved"] is False
+        assert decision_payload["resume_result"]["status"] == "rejected"
+
+        rejected_status = client.get(f"/tasks/{task_id}").json()
+        assert rejected_status["status"] == "rejected"
 
         decided_events_response = client.get(f"/tasks/{task_id}/events")
         assert decided_events_response.status_code == 200
         assert "event: approval_decided" in decided_events_response.text
+        assert "event: task_rejected" in decided_events_response.text
 
 
 def test_api_risk_blocked_event_and_artifacts(tmp_path: Path) -> None:

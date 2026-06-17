@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 RiskLevel = Literal["safe", "sensitive", "dangerous", "blocked"]
 RiskAction = Literal["allow", "require_approval", "block"]
 ApprovalStatus = Literal["pending", "approved", "rejected"]
+TaskPauseReason = Literal["approval_required"]
 
 
 RiskSignalKind = Literal[
@@ -116,3 +117,24 @@ class RiskCheckResult(BaseModel):
 
 
 RiskDecision = RiskCheckResult
+
+
+class PendingToolCall(BaseModel):
+    pending_id: str = ""
+    task_id: str
+    approval_id: str
+    tool_call_id: str | None = None
+    tool_name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    reason: str
+    created_at: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class TaskResumeResult(BaseModel):
+    task_id: str
+    approval_id: str
+    resumed: bool
+    status: str
+    message: str
+    error: str | None = None

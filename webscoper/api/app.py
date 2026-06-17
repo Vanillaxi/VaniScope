@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 
 from webscoper.api.schemas import (
     ApprovalDecisionRequest,
+    ApprovalDecisionResponse,
     TaskArtifactContentResponse,
     TaskArtifactListResponse,
     TaskCreateRequest,
@@ -103,11 +104,11 @@ def get_approval(approval_id: str) -> ApprovalRequest:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@app.post("/approvals/{approval_id}/decision", response_model=ApprovalRequest)
+@app.post("/approvals/{approval_id}/decision", response_model=ApprovalDecisionResponse)
 def decide_approval(
     approval_id: str,
     request: ApprovalDecisionRequest,
-) -> ApprovalRequest:
+) -> ApprovalDecisionResponse:
     try:
         return task_service.decide_approval(
             approval_id,

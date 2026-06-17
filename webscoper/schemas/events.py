@@ -19,6 +19,10 @@ TaskEventKind = Literal[
     "approval_required",
     "approval_decided",
     "risk_blocked",
+    "task_paused",
+    "task_resumed",
+    "task_rejected",
+    "resume_failed",
     "task_finished",
     "task_failed",
 ]

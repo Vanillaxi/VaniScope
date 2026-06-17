@@ -8,12 +8,21 @@
   <main>
     <h1>Risk Actions</h1>
     <p>Local-only mock page for risk gate tests.</p>
-    <button>Submit</button>
-    <button>Delete account</button>
-    <button>Pay now</button>
+    <button id="submit-btn">Submit</button>
+    <button id="delete-btn">Delete account</button>
+    <button id="pay-btn">Pay now</button>
     <label for="password">Password</label>
     <input id="password" name="password" type="password" autocomplete="current-password" />
-    <button>Login</button>
+    <button id="login-btn">Login</button>
+    <div id="result"></div>
   </main>
+  <script>
+    document.getElementById("submit-btn").addEventListener("click", () => {
+      document.getElementById("result").textContent = "Submitted successfully";
+    });
+    document.getElementById("login-btn").addEventListener("click", () => {
+      document.getElementById("result").textContent = "Login clicked";
+    });
+  </script>
 </body>
 </html>

@@ -20,6 +20,7 @@ from webscoper.runtime.llm_client import (
 from webscoper.runtime.llm_config import load_llm_config_from_env
 from webscoper.runtime.llm_planner import LLMTaskPlanner
 from webscoper.runtime.llm_router import LLMProviderRouter
+from webscoper.runtime.pending import PendingApprovalManager
 from webscoper.runtime.plan_validator import PlanValidator
 from webscoper.runtime.planner import DeterministicTaskPlanner, normalize_planner_mode
 from webscoper.runtime.prompt_builder import DynamicPromptBuilder
@@ -60,6 +61,7 @@ class WebAgentExecutionHandler:
         event_sink: TaskEventSink | None = None,
         risk_gate: RiskGate | None = None,
         approval_store: ApprovalStore | None = None,
+        pending_manager: PendingApprovalManager | None = None,
     ) -> None:
         self.output_root = output_root
         self.headless = headless
@@ -78,6 +80,7 @@ class WebAgentExecutionHandler:
         self.event_sink = event_sink
         self.risk_gate = risk_gate or RiskGate()
         self.approval_store = approval_store or ApprovalStore()
+        self.pending_manager = pending_manager or PendingApprovalManager()
         if self.model_override:
             self.version.model = self.model_override
         self.last_context: WebAgentContext | None = None
@@ -97,6 +100,7 @@ class WebAgentExecutionHandler:
             browser_runtime=browser_runtime,
             risk_gate=self.risk_gate,
             approval_store=self.approval_store,
+            pending_manager=self.pending_manager,
             event_sink=self.event_sink,
         )
         execution_loop = AgentExecutionLoop(
@@ -244,7 +248,7 @@ class WebAgentExecutionHandler:
                 context.state.error_type = loop_result.error_type
                 context.state.error_message = loop_result.error_message
                 transcript.append("execution_failed", _state_payload(context))
-                if runtime_status is not None:
+                if runtime_status == "blocked":
                     self._emit_event(
                         "task_failed",
                         "Task stopped by risk gate",
@@ -256,6 +260,7 @@ class WebAgentExecutionHandler:
                             "run_dir": str(context.run_dir),
                         },
                     )
+                if runtime_status is not None:
                     observation = browser_runtime.last_observation
                     if observation is not None:
                         transcript.append(

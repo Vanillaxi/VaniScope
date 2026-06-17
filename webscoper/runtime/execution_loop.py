@@ -13,9 +13,11 @@ class AgentExecutionLoop:
         self,
         tool_executor: LocalToolExecutor,
         event_sink: TaskEventSink | None = None,
+        approval_override_id: str | None = None,
     ) -> None:
         self.tool_executor = tool_executor
         self.event_sink = event_sink
+        self.approval_override_id = approval_override_id
 
     async def run(
         self,
@@ -66,6 +68,7 @@ class AgentExecutionLoop:
             tool_result = await self.tool_executor.execute(
                 step.tool_call,
                 context.snapshot(),
+                approval_override_id=self.approval_override_id,
             )
             record = ToolExecutionRecord(call=step.tool_call, result=tool_result)
             records.append(record)
@@ -76,6 +79,13 @@ class AgentExecutionLoop:
             if tool_result.error_type == "RISK_APPROVAL_REQUIRED":
                 transcript.append(
                     "approval_required",
+                    {
+                        "call": step.tool_call.model_dump(mode="json"),
+                        "result": tool_result.model_dump(mode="json"),
+                    },
+                )
+                transcript.append(
+                    "task_paused",
                     {
                         "call": step.tool_call.model_dump(mode="json"),
                         "result": tool_result.model_dump(mode="json"),

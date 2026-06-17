@@ -12,7 +12,7 @@ from typing import Any, Protocol
 from webscoper.schemas.events import TaskEvent, TaskEventKind
 
 
-TERMINAL_EVENT_KINDS = {"task_finished", "task_failed"}
+TERMINAL_EVENT_KINDS = {"task_finished", "task_failed", "task_rejected", "resume_failed"}
 
 
 class TaskEventSink(Protocol):

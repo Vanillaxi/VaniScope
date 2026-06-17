@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from webscoper.schemas.risk import ApprovalRequest, TaskResumeResult
+
 
 PlannerMode = Literal["deterministic", "fake_llm", "real_llm"]
 TaskStatus = Literal[
@@ -11,7 +13,9 @@ TaskStatus = Literal[
     "succeeded",
     "failed",
     "requires_approval",
+    "resuming",
     "blocked",
+    "rejected",
     "not_found",
 ]
 
@@ -31,7 +35,15 @@ class TaskCreateRequest(BaseModel):
 
 class TaskCreateResponse(BaseModel):
     task_id: str
-    status: Literal["running", "succeeded", "failed", "requires_approval", "blocked"]
+    status: Literal[
+        "running",
+        "succeeded",
+        "failed",
+        "requires_approval",
+        "resuming",
+        "blocked",
+        "rejected",
+    ]
     run_dir: str
     artifacts: list[str] = Field(default_factory=list)
     error: str | None = None
@@ -60,3 +72,8 @@ class ApprovalDecisionRequest(BaseModel):
     approved: bool
     decided_by: str = "local_user"
     reason: str | None = None
+
+
+class ApprovalDecisionResponse(BaseModel):
+    approval: ApprovalRequest
+    resume_result: TaskResumeResult | None = None
