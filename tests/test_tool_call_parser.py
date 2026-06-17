@@ -62,6 +62,24 @@ def test_parse_json_array() -> None:
     assert result.tool_calls[0].tool_id == "finish_task"
 
 
+def test_parse_tool_calls_single_object() -> None:
+    result = ToolCallParser().parse(
+        json.dumps(
+            {
+                "tool_calls": {
+                    "call_id": "call_001",
+                    "tool_id": "browser_open_observe",
+                    "arguments": {"url": "file:///tmp/basic.html"},
+                }
+            }
+        )
+    )
+
+    assert result.status == "success"
+    assert len(result.tool_calls) == 1
+    assert result.tool_calls[0].tool_id == "browser_open_observe"
+
+
 def test_parse_missing_call_id_autofills() -> None:
     result = ToolCallParser().parse(
         json.dumps(

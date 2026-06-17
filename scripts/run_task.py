@@ -40,9 +40,16 @@ def main() -> int:
     )
     parser.add_argument(
         "--planner",
-        choices=["deterministic", "fake_llm"],
+        choices=["deterministic", "fake_llm", "real_llm"],
         default="deterministic",
         help="Planner mode to use.",
+    )
+    parser.add_argument("--model", help="LLM model override for real_llm mode.")
+    parser.add_argument(
+        "--repair-attempts",
+        type=int,
+        default=0,
+        help="Number of tool-call repair attempts for LLM planner modes.",
     )
     args = parser.parse_args()
 
@@ -65,8 +72,14 @@ def main() -> int:
         workspace=Path(args.workspace) if args.workspace else None,
         runtime_reminders=reminders,
         planner_mode=args.planner,
+        model_override=args.model,
+        repair_attempts=args.repair_attempts,
     )
-    observation = asyncio.run(handler.run(task))
+    try:
+        observation = asyncio.run(handler.run(task))
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     context = handler.last_context
     prompt_result = handler.last_prompt_result
 
@@ -74,6 +87,9 @@ def main() -> int:
     print(f"final_url: {observation.url}")
     print(f"title: {observation.title}")
     print(f"planner_mode: {args.planner}")
+    if handler.version.model != "none":
+        print(f"model: {handler.version.model}")
+    print(f"repair_attempts: {args.repair_attempts}")
     print("execution_mode: tool_loop")
     print(f"risk_signals_count: {len(observation.risk_signals)}")
     print(f"interactive_elements_count: {len(observation.interactive_elements)}")

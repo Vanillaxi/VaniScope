@@ -33,3 +33,13 @@ class ParsedToolCalls(BaseModel):
     error_type: str | None = None
     error_message: str | None = None
     raw_text: str | None = None
+
+
+class LLMClientConfig(BaseModel):
+    provider: str = "openai_compatible"
+    base_url: str
+    api_key: str
+    model: str
+    timeout_ms: int = 30000
+    temperature: float = 0.0
+    max_tokens: int = 2048

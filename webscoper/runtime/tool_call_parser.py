@@ -12,12 +12,12 @@ class ToolCallParser:
     def parse(self, text: str) -> ParsedToolCalls:
         raw_text = _truncate_raw_text(text)
         try:
-            parsed = self._parse_json(text)
-            if parsed is None:
+            parsed, parse_error = self._parse_json(text)
+            if parse_error is not None:
                 return ParsedToolCalls(
                     status="failed",
                     error_type="TOOL_CALL_PARSE_ERROR",
-                    error_message="Could not parse tool call JSON from model response.",
+                    error_message=parse_error,
                     raw_text=raw_text,
                 )
 
@@ -26,7 +26,7 @@ class ToolCallParser:
                 return ParsedToolCalls(
                     status="failed",
                     error_type="INVALID_TOOL_CALL",
-                    error_message="Parsed JSON must be a list or contain a tool_calls list.",
+                    error_message=_tool_call_items_error(parsed),
                     raw_text=raw_text,
                 )
 
@@ -64,7 +64,7 @@ class ToolCallParser:
                 raw_text=raw_text,
             )
 
-    def _parse_json(self, text: str) -> Any | None:
+    def _parse_json(self, text: str) -> tuple[Any | None, str | None]:
         candidates = [
             text,
             *_fenced_json_blocks(text),
@@ -73,21 +73,35 @@ class ToolCallParser:
         if extracted is not None:
             candidates.append(extracted)
 
+        last_error: str | None = None
         for candidate in candidates:
             try:
-                return json.loads(candidate)
-            except json.JSONDecodeError:
+                return json.loads(candidate), None
+            except json.JSONDecodeError as exc:
+                last_error = f"JSON parse failed: {exc.msg} at line {exc.lineno} column {exc.colno}."
                 continue
-        return None
+        return None, last_error or "JSON parse failed: no JSON object or array found."
 
 
 def _tool_call_items(parsed: Any) -> list[Any] | None:
     if isinstance(parsed, dict):
         tool_calls = parsed.get("tool_calls")
-        return tool_calls if isinstance(tool_calls, list) else None
+        if isinstance(tool_calls, list):
+            return tool_calls
+        if isinstance(tool_calls, dict):
+            return [tool_calls]
+        return None
     if isinstance(parsed, list):
         return parsed
     return None
+
+
+def _tool_call_items_error(parsed: Any) -> str:
+    if isinstance(parsed, dict):
+        if "tool_calls" not in parsed:
+            return "Parsed JSON object is missing tool_calls."
+        return "Parsed JSON field tool_calls must be a list or object."
+    return "Parsed JSON root must be a list or an object containing tool_calls."
 
 
 def _fenced_json_blocks(text: str) -> list[str]:

@@ -8,7 +8,12 @@ from typing import Any
 from webscoper.runtime.agents_md import AgentsMdLoader
 from webscoper.runtime.context import WebAgentContext
 from webscoper.runtime.execution_loop import AgentExecutionLoop
-from webscoper.runtime.llm_client import BaseLLMClient, FakeLLMClient
+from webscoper.runtime.llm_client import (
+    BaseLLMClient,
+    FakeLLMClient,
+    OpenAICompatibleLLMClient,
+)
+from webscoper.runtime.llm_config import load_llm_config_from_env
 from webscoper.runtime.llm_planner import LLMTaskPlanner
 from webscoper.runtime.planner import DeterministicTaskPlanner, normalize_planner_mode
 from webscoper.runtime.prompt_builder import DynamicPromptBuilder
@@ -38,6 +43,8 @@ class WebAgentExecutionHandler:
         runtime_reminders: RuntimeReminderStore | None = None,
         planner_mode: str = "deterministic",
         llm_client: BaseLLMClient | None = None,
+        model_override: str | None = None,
+        repair_attempts: int = 0,
     ) -> None:
         self.output_root = output_root
         self.headless = headless
@@ -48,6 +55,10 @@ class WebAgentExecutionHandler:
         self.runtime_reminders = runtime_reminders or RuntimeReminderStore()
         self.planner_mode = normalize_planner_mode(planner_mode)
         self.llm_client = llm_client
+        self.model_override = model_override
+        self.repair_attempts = max(0, repair_attempts)
+        if self.model_override:
+            self.version.model = self.model_override
         self.last_context: WebAgentContext | None = None
         self.last_prompt_result: PromptBuildResult | None = None
         self.last_loop_result: ExecutionLoopResult | None = None
@@ -175,11 +186,25 @@ class WebAgentExecutionHandler:
         if self.planner_mode == "deterministic":
             return DeterministicTaskPlanner().build_plan(context.task)
 
-        planner = LLMTaskPlanner(self.llm_client or FakeLLMClient())
+        planner = LLMTaskPlanner(
+            self._create_llm_client(),
+            repair_attempts=self.repair_attempts,
+        )
         try:
             return await planner.build_plan(context.snapshot(), prompt_result)
         finally:
             _append_llm_planner_transcript(context, planner)
+
+    def _create_llm_client(self) -> BaseLLMClient:
+        if self.llm_client is not None:
+            return self.llm_client
+        if self.planner_mode == "fake_llm":
+            return FakeLLMClient()
+        if self.planner_mode == "real_llm":
+            config = load_llm_config_from_env(self.model_override)
+            self.version.model = config.model
+            return OpenAICompatibleLLMClient(config)
+        raise ValueError(f"Unsupported planner mode: {self.planner_mode}")
 
     def build_context(self, task: TaskSpec) -> WebAgentContext:
         run_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -251,6 +276,16 @@ def _append_llm_planner_transcript(
         transcript.append(
             "tool_call_parse_failed",
             planner.last_parse_result.model_dump(mode="json"),
+        )
+    for request in planner.repair_requests:
+        transcript.append(
+            "llm_repair_request",
+            request.model_dump(mode="json"),
+        )
+    for response in planner.repair_responses:
+        transcript.append(
+            "llm_repair_response",
+            response.model_dump(mode="json"),
         )
 
 
