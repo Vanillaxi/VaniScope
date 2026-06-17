@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from webscoper.runtime.agents_md import AgentsMdLoader
+from webscoper.runtime.approvals import ApprovalStore
 from webscoper.runtime.context import WebAgentContext
 from webscoper.runtime.evidence import EvidenceStore
 from webscoper.runtime.events import TaskEventSink
@@ -25,6 +26,7 @@ from webscoper.runtime.prompt_builder import DynamicPromptBuilder
 from webscoper.runtime.report import FinalReportBuilder
 from webscoper.runtime.reviewer import ReportReviewer, build_review_summary_markdown
 from webscoper.runtime.reminders import RuntimeReminderStore
+from webscoper.runtime.risk_gate import RiskGate
 from webscoper.runtime.tool_executor import LocalToolExecutor
 from webscoper.runtime.trace import TraceRecorder
 from webscoper.runtime.transcript import TranscriptStore
@@ -56,6 +58,8 @@ class WebAgentExecutionHandler:
         llm_provider: str | None = None,
         run_id_override: str | None = None,
         event_sink: TaskEventSink | None = None,
+        risk_gate: RiskGate | None = None,
+        approval_store: ApprovalStore | None = None,
     ) -> None:
         self.output_root = output_root
         self.headless = headless
@@ -72,6 +76,8 @@ class WebAgentExecutionHandler:
         self.llm_provider = llm_provider
         self.run_id_override = run_id_override
         self.event_sink = event_sink
+        self.risk_gate = risk_gate or RiskGate()
+        self.approval_store = approval_store or ApprovalStore()
         if self.model_override:
             self.version.model = self.model_override
         self.last_context: WebAgentContext | None = None
@@ -89,6 +95,9 @@ class WebAgentExecutionHandler:
         tool_executor = LocalToolExecutor(
             tool_registry=self.tool_registry,
             browser_runtime=browser_runtime,
+            risk_gate=self.risk_gate,
+            approval_store=self.approval_store,
+            event_sink=self.event_sink,
         )
         execution_loop = AgentExecutionLoop(
             tool_executor=tool_executor,
@@ -230,10 +239,30 @@ class WebAgentExecutionHandler:
             )
             self.last_loop_result = loop_result
             if loop_result.status != "success":
-                context.state.status = "failed"
+                runtime_status = _status_from_loop_error(loop_result.error_type)
+                context.state.status = runtime_status or "failed"
                 context.state.error_type = loop_result.error_type
                 context.state.error_message = loop_result.error_message
                 transcript.append("execution_failed", _state_payload(context))
+                if runtime_status is not None:
+                    self._emit_event(
+                        "task_failed",
+                        "Task stopped by risk gate",
+                        {
+                            "run_id": context.run_id,
+                            "status": runtime_status,
+                            "error_type": loop_result.error_type,
+                            "error": loop_result.error_message,
+                            "run_dir": str(context.run_dir),
+                        },
+                    )
+                    observation = browser_runtime.last_observation
+                    if observation is not None:
+                        transcript.append(
+                            "context_snapshot",
+                            context.snapshot().model_dump(mode="json"),
+                        )
+                        return observation
                 raise RuntimeError(
                     f"{loop_result.error_type or 'EXECUTION_LOOP_FAILED'}: "
                     f"{loop_result.error_message or 'Execution loop failed.'}"
@@ -278,7 +307,7 @@ class WebAgentExecutionHandler:
                 "Task failed",
                 {
                     "run_id": context.run_id,
-                    "status": "failed",
+                    "status": context.state.status,
                     "error": str(exc),
                     "error_type": type(exc).__name__,
                     "run_dir": str(context.run_dir),
@@ -380,6 +409,14 @@ def _state_payload(context: WebAgentContext) -> dict[str, Any]:
         "run_dir": str(context.run_dir),
         "state": context.state.model_dump(mode="json"),
     }
+
+
+def _status_from_loop_error(error_type: str | None) -> str | None:
+    if error_type == "RISK_APPROVAL_REQUIRED":
+        return "requires_approval"
+    if error_type == "RISK_BLOCKED":
+        return "blocked"
+    return None
 
 
 def _persist_prompt_context(run_dir: Path, prompt_result: PromptBuildResult) -> None:

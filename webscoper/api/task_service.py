@@ -14,6 +14,7 @@ from webscoper.api.schemas import (
     TaskCreateResponse,
     TaskStatusResponse,
 )
+from webscoper.runtime.approvals import ApprovalStore, ApprovalStoreError
 from webscoper.runtime.events import (
     InMemoryTaskEventBus,
     TaskEventStore,
@@ -23,10 +24,13 @@ from webscoper.runtime.execution import WebAgentExecutionHandler
 from webscoper.runtime.reminders import RuntimeReminderStore
 from webscoper.runtime.task_runner import build_task_spec, llm_config_path
 from webscoper.schemas.events import TaskEvent, TaskEventKind
+from webscoper.schemas.risk import ApprovalRequest
 
 
 ARTIFACT_ALLOWLIST = {
     "events.jsonl",
+    "approvals.jsonl",
+    "risk_report.json",
     "trace.jsonl",
     "transcript.jsonl",
     "evidence.jsonl",
@@ -54,6 +58,7 @@ class TaskService:
         self.runs_dir = runs_dir
         self.event_store = TaskEventStore()
         self.event_bus = InMemoryTaskEventBus()
+        self.approval_store = ApprovalStore()
         self._task_states: dict[str, _TaskState] = {}
 
     def create_and_run_task(
@@ -73,6 +78,7 @@ class TaskService:
             repair_attempts=request.repair_attempts,
             llm_config_path=llm_config_path(request.planner, request.llm_config),
             llm_provider=request.llm_provider,
+            approval_store=self.approval_store,
         )
         task = build_task_spec(
             url=request.url,
@@ -86,19 +92,26 @@ class TaskService:
             context = handler.last_context
             if context is None:
                 raise RuntimeError("Task completed without run context.")
+            status = _status_from_context_state(context.state.status)
             return TaskCreateResponse(
                 task_id=context.run_id,
-                status="succeeded",
+                status=status,
                 run_dir=str(context.run_dir),
                 artifacts=self._list_existing_artifacts(context.run_dir),
+                error=context.state.error_message if status != "succeeded" else None,
             )
         except Exception as exc:
             context = handler.last_context
             run_dir = context.run_dir if context is not None else self.runs_dir
             task_id = context.run_id if context is not None else "unknown"
+            status = (
+                _status_from_context_state(context.state.status)
+                if context is not None
+                else "failed"
+            )
             return TaskCreateResponse(
                 task_id=task_id,
-                status="failed",
+                status=status if status != "succeeded" else "failed",
                 run_dir=str(run_dir),
                 artifacts=self._list_existing_artifacts(run_dir),
                 error=str(exc),
@@ -212,6 +225,7 @@ class TaskService:
             llm_provider=request.llm_provider,
             run_id_override=task_id,
             event_sink=self._make_event_sink(task_id),
+            approval_store=self.approval_store,
         )
         task = build_task_spec(
             url=request.url,
@@ -223,15 +237,39 @@ class TaskService:
         state = self._task_states[task_id]
         try:
             await handler.run(task)
-            state.status = "succeeded"
-            state.error = None
+            context = handler.last_context
+            state.status = (
+                _status_from_context_state(context.state.status)
+                if context is not None
+                else "succeeded"
+            )
+            state.error = (
+                context.state.error_message
+                if context is not None and state.status != "succeeded"
+                else None
+            )
         except Exception as exc:
-            state.status = "failed"
+            context = handler.last_context
+            state.status = (
+                _status_from_context_state(context.state.status)
+                if context is not None
+                else "failed"
+            )
+            if state.status == "succeeded":
+                state.status = "failed"
             state.error = str(exc)
         finally:
             state.artifacts = self._list_existing_artifacts(state.run_dir)
             try:
                 self.event_store.write_jsonl(task_id, state.run_dir / "events.jsonl")
+                self.approval_store.write_jsonl_for_task(
+                    task_id,
+                    state.run_dir / "approvals.jsonl",
+                )
+                self.approval_store.write_risk_report(
+                    task_id,
+                    state.run_dir / "risk_report.json",
+                )
             except Exception:
                 pass
 
@@ -269,6 +307,54 @@ class TaskService:
     def _new_task_id(self) -> str:
         timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S_%f")
         return f"task_{timestamp}"
+
+    def list_approvals(self, task_id: str) -> list[ApprovalRequest]:
+        if self.get_task_status(task_id).status == "not_found":
+            raise FileNotFoundError(f"Task not found: {task_id}")
+        return self.approval_store.list_for_task(task_id)
+
+    def get_approval(self, approval_id: str) -> ApprovalRequest:
+        approval = self.approval_store.get(approval_id)
+        if approval is None:
+            raise FileNotFoundError(f"Approval request not found: {approval_id}")
+        return approval
+
+    def decide_approval(
+        self,
+        approval_id: str,
+        approved: bool,
+        decided_by: str,
+        reason: str | None = None,
+    ) -> ApprovalRequest:
+        try:
+            approval = self.approval_store.decide(
+                approval_id,
+                approved=approved,
+                decided_by=decided_by,
+                reason=reason,
+            )
+        except ApprovalStoreError as exc:
+            raise ValueError(str(exc)) from exc
+
+        run_dir = self._run_dir(approval.task_id)
+        try:
+            self.approval_store.write_jsonl_for_task(
+                approval.task_id,
+                run_dir / "approvals.jsonl",
+            )
+            self.approval_store.write_risk_report(
+                approval.task_id,
+                run_dir / "risk_report.json",
+            )
+            self._publish_task_event(
+                approval.task_id,
+                "approval_decided",
+                "Approval decision recorded",
+                {"approval_request": approval.model_dump(mode="json")},
+            )
+        except Exception:
+            pass
+        return approval
 
     def _run_dir(self, task_id: str) -> Path:
         return self.runs_dir / task_id
@@ -309,4 +395,15 @@ class TaskService:
                     state = payload.get("state")
                     if isinstance(state, dict):
                         error = state.get("error_message")
+                        state_status = state.get("status")
+                        if state_status in {"requires_approval", "blocked"}:
+                            status = state_status
         return status, error
+
+
+def _status_from_context_state(state: str) -> str:
+    if state == "completed":
+        return "succeeded"
+    if state in {"requires_approval", "blocked", "failed"}:
+        return state
+    return "succeeded"

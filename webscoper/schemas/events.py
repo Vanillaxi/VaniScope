@@ -16,6 +16,9 @@ TaskEventKind = Literal[
     "evidence_added",
     "report_written",
     "review_finished",
+    "approval_required",
+    "approval_decided",
+    "risk_blocked",
     "task_finished",
     "task_failed",
 ]

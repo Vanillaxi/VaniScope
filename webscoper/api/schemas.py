@@ -6,7 +6,14 @@ from pydantic import BaseModel, Field
 
 
 PlannerMode = Literal["deterministic", "fake_llm", "real_llm"]
-TaskStatus = Literal["running", "succeeded", "failed", "not_found"]
+TaskStatus = Literal[
+    "running",
+    "succeeded",
+    "failed",
+    "requires_approval",
+    "blocked",
+    "not_found",
+]
 
 
 class TaskCreateRequest(BaseModel):
@@ -24,7 +31,7 @@ class TaskCreateRequest(BaseModel):
 
 class TaskCreateResponse(BaseModel):
     task_id: str
-    status: Literal["running", "succeeded", "failed"]
+    status: Literal["running", "succeeded", "failed", "requires_approval", "blocked"]
     run_dir: str
     artifacts: list[str] = Field(default_factory=list)
     error: str | None = None
@@ -47,3 +54,9 @@ class TaskArtifactContentResponse(BaseModel):
     task_id: str
     artifact_name: str
     content: str
+
+
+class ApprovalDecisionRequest(BaseModel):
+    approved: bool
+    decided_by: str = "local_user"
+    reason: str | None = None

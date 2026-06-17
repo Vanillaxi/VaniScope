@@ -73,6 +73,22 @@ class AgentExecutionLoop:
                 "tool_call_completed",
                 record.model_dump(mode="json"),
             )
+            if tool_result.error_type == "RISK_APPROVAL_REQUIRED":
+                transcript.append(
+                    "approval_required",
+                    {
+                        "call": step.tool_call.model_dump(mode="json"),
+                        "result": tool_result.model_dump(mode="json"),
+                    },
+                )
+            elif tool_result.error_type == "RISK_BLOCKED":
+                transcript.append(
+                    "risk_blocked",
+                    {
+                        "call": step.tool_call.model_dump(mode="json"),
+                        "result": tool_result.model_dump(mode="json"),
+                    },
+                )
             self._emit(
                 context,
                 "tool_call_finished",

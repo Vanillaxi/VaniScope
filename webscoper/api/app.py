@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 
 from webscoper.api.schemas import (
+    ApprovalDecisionRequest,
     TaskArtifactContentResponse,
     TaskArtifactListResponse,
     TaskCreateRequest,
@@ -15,6 +16,7 @@ from webscoper.api.schemas import (
 from webscoper.api.task_service import TaskService
 from webscoper.runtime.events import TERMINAL_EVENT_KINDS
 from webscoper.schemas.events import TaskEvent
+from webscoper.schemas.risk import ApprovalRequest
 
 
 app = FastAPI(title="VaniScope API", version="0.1.0")
@@ -57,8 +59,9 @@ async def stream_task_events(task_id: str) -> StreamingResponse:
             for event in history:
                 seen_event_ids.add(event.event_id)
                 yield format_sse(event)
-                if event.kind in TERMINAL_EVENT_KINDS:
-                    return
+
+            if task_service.get_task_status(task_id).status != "running":
+                return
 
             async for event in subscription:
                 if event.event_id in seen_event_ids:
@@ -82,6 +85,40 @@ def list_artifacts(task_id: str) -> TaskArtifactListResponse:
         return task_service.list_artifacts(task_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/tasks/{task_id}/approvals", response_model=list[ApprovalRequest])
+def list_task_approvals(task_id: str) -> list[ApprovalRequest]:
+    try:
+        return task_service.list_approvals(task_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/approvals/{approval_id}", response_model=ApprovalRequest)
+def get_approval(approval_id: str) -> ApprovalRequest:
+    try:
+        return task_service.get_approval(approval_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/approvals/{approval_id}/decision", response_model=ApprovalRequest)
+def decide_approval(
+    approval_id: str,
+    request: ApprovalDecisionRequest,
+) -> ApprovalRequest:
+    try:
+        return task_service.decide_approval(
+            approval_id,
+            approved=request.approved,
+            decided_by=request.decided_by,
+            reason=request.reason,
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = 404 if "not found" in detail.lower() else 400
+        raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
 def format_sse(event: TaskEvent) -> str:
