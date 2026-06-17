@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from webscoper.runtime.evidence import EvidenceStore
 from webscoper.runtime.trace import TraceRecorder
 from webscoper.runtime.transcript import TranscriptStore
 from webscoper.schemas.context import (
@@ -23,6 +24,7 @@ class WebAgentContext:
     transcript_store: TranscriptStore
     version: VersionContext
     state: RuntimeState
+    evidence_store: EvidenceStore | None = None
 
     def snapshot(self) -> WebAgentContextSnapshot:
         return WebAgentContextSnapshot(

@@ -111,6 +111,8 @@ def main() -> int:
         print(f"run_dir: {context.run_dir}")
         print(f"trace_path: {context.trace_recorder.trace_path}")
         print(f"transcript_path: {context.transcript_store.transcript_path}")
+        print(f"evidence_path: {context.run_dir / 'evidence.jsonl'}")
+        print(f"final_report_path: {context.run_dir / 'final_report.md'}")
         print(
             "tool_call_completed_count: "
             f"{_event_count(context.transcript_store.transcript_path, 'tool_call_completed')}"

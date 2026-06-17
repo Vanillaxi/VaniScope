@@ -7,6 +7,7 @@ from typing import Any
 
 from webscoper.runtime.agents_md import AgentsMdLoader
 from webscoper.runtime.context import WebAgentContext
+from webscoper.runtime.evidence import EvidenceStore
 from webscoper.runtime.execution_loop import AgentExecutionLoop
 from webscoper.runtime.llm_client import (
     BaseLLMClient,
@@ -19,6 +20,7 @@ from webscoper.runtime.llm_router import LLMProviderRouter
 from webscoper.runtime.plan_validator import PlanValidator
 from webscoper.runtime.planner import DeterministicTaskPlanner, normalize_planner_mode
 from webscoper.runtime.prompt_builder import DynamicPromptBuilder
+from webscoper.runtime.report import FinalReportBuilder
 from webscoper.runtime.reminders import RuntimeReminderStore
 from webscoper.runtime.tool_executor import LocalToolExecutor
 from webscoper.runtime.trace import TraceRecorder
@@ -207,6 +209,7 @@ class WebAgentExecutionHandler:
 
             context.state.status = "completed"
             context.state.current_step = 5
+            _persist_evidence_and_report(context, observation)
             transcript.append(
                 "context_snapshot",
                 context.snapshot().model_dump(mode="json"),
@@ -274,6 +277,7 @@ class WebAgentExecutionHandler:
             run_dir=run_dir,
             trace_recorder=trace_recorder,
             transcript_store=transcript_store,
+            evidence_store=EvidenceStore(run_dir / "evidence.jsonl"),
             version=self.version,
             state=RuntimeState(status="context_built"),
         )
@@ -344,6 +348,38 @@ def _append_llm_planner_transcript(
             "llm_repair_response",
             response.model_dump(mode="json"),
         )
+
+
+def _persist_evidence_and_report(
+    context: WebAgentContext,
+    observation: PageObservation,
+) -> None:
+    evidence_items = []
+    if context.evidence_store is not None:
+        context.evidence_store.write_jsonl()
+        evidence_items = context.evidence_store.list_items()
+        context.transcript_store.append(
+            "evidence_written",
+            {
+                "evidence_path": str(context.run_dir / "evidence.jsonl"),
+                "evidence_count": len(evidence_items),
+            },
+        )
+
+    report_path = context.run_dir / "final_report.md"
+    report_text = FinalReportBuilder().build_markdown(
+        context.task,
+        evidence_items,
+        final_observation=observation,
+    )
+    report_path.write_text(report_text, encoding="utf-8")
+    context.transcript_store.append(
+        "final_report_built",
+        {
+            "final_report_path": str(report_path),
+            "evidence_count": len(evidence_items),
+        },
+    )
 
 
 def _observation_summary(observation: PageObservation) -> dict[str, Any]:
