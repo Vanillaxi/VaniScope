@@ -6,4 +6,5 @@ dependencies = [
     "playwright>=1.44.0",
     "pydantic>=2.7.0",
     "pytest>=8.0.0",
+    "pytest-asyncio>=1.0.0",
 ]
