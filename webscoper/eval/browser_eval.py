@@ -7,7 +7,7 @@ from typing import Any
 
 from webscoper.eval.scorer import summarize_results
 from webscoper.runtime.browser_runtime import BrowserRuntime
-from webscoper.runtime.trace import TraceRecorder
+from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.schemas.action import ActionContract, ExpectedEffect
 from webscoper.schemas.eval import (
     BrowserEvalCase,

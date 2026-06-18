@@ -6,7 +6,7 @@ import urllib.request
 
 import pytest
 
-from webscoper.runtime.llm_client import OpenAICompatibleLLMClient
+from webscoper.runtime.llm.client import OpenAICompatibleLLMClient
 from webscoper.schemas.llm import LLMClientConfig, LLMMessage, LLMRequest
 
 

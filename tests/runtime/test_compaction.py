@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from webscoper.runtime.compaction import ContextCompactor
+from webscoper.runtime.artifacts.compaction import ContextCompactor
 from webscoper.schemas.compaction import CompactionPolicy
 from webscoper.schemas.evidence import EvidenceItem
 from webscoper.schemas.risk import ApprovalRequest
@@ -121,7 +121,7 @@ def test_context_compactor_writes_artifacts(tmp_path: Path) -> None:
 import json
 from pathlib import Path
 
-from webscoper.runtime.execution import WebAgentExecutionHandler
+from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.runtime.task_runner import build_task_spec
 
 

@@ -4,9 +4,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from webscoper.runtime.llm_reviewer import BaseLLMReportReviewer
-from webscoper.runtime.reviewer import ReportReviewer
-from webscoper.runtime.revision import ReportReviser, ReviewRevisionPlanner
+from webscoper.runtime.llm.reviewer import BaseLLMReportReviewer
+from webscoper.runtime.review.reviewer import ReportReviewer
+from webscoper.runtime.review.revision import ReportReviser, ReviewRevisionPlanner
 from webscoper.schemas.evidence import EvidenceItem
 from webscoper.schemas.revise import (
     LLMReviewRequest,

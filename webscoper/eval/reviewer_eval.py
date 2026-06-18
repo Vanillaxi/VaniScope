@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from webscoper.runtime.reviewer import ReportReviewer
+from webscoper.runtime.review.reviewer import ReportReviewer
 from webscoper.schemas.action import ExpectedEffect
 from webscoper.schemas.evidence import EvidenceItem
 from webscoper.schemas.eval import (

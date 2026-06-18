@@ -4,6 +4,8 @@
 
 VaniScope / Web-Scoper is a Python browser-agent runtime for local and fixture-based web task execution. It includes browser observation and click intent, deterministic and LLM-backed planning modes, evidence/report artifacts, reviewer and revise-loop support, FastAPI task APIs, risk-gated approval pause/resume, context compaction, and native/LangGraph workflow backends.
 
+The runtime package is split by responsibility into `runtime/execution`, `runtime/artifacts`, `runtime/llm`, `runtime/prompt`, `runtime/review`, and `runtime/safety`. Old flat runtime import paths are temporarily kept as a compatibility layer.
+
 ## Scope
 
 VaniScope does not bypass login, CAPTCHA, or paywalls. It does not enter real accounts, passwords, payment details, or identity documents. Risky actions are blocked or require local approval before execution.
@@ -30,7 +32,7 @@ uv run pytest
 ```text
 webscoper/
   browser/       # Browser Runtime: Playwright session, observation, targeting, effects, recovery, risk signals
-  runtime/       # Agent Runtime: execution handler, tool loop, LLM routing, evidence, review, approvals, compaction
+  runtime/       # Agent Runtime: execution, artifacts, LLM, prompt, review, safety compatibility layer
   api/           # FastAPI Task API, async tasks, approvals, SSE event stream, artifact access
   eval/          # Browser, planner, and reviewer eval harnesses
   workflows/     # Native and LangGraph workflow backend adapters
@@ -50,6 +52,7 @@ configs/
   llm.local.toml  # local only, ignored
 
 docs/
+  compatibility_imports.md
   runtime_modules.md
 
 runs/

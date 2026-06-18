@@ -6,7 +6,7 @@ import re
 from abc import ABC, abstractmethod
 from typing import Any
 
-from webscoper.runtime.llm_client import BaseLLMClient, OpenAICompatibleLLMClient
+from webscoper.runtime.llm.client import BaseLLMClient, OpenAICompatibleLLMClient
 from webscoper.schemas.llm import LLMMessage, LLMRequest
 from webscoper.schemas.revise import (
     LLMReviewFinding,

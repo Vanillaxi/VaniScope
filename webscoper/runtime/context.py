@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from webscoper.runtime.evidence import EvidenceStore
-from webscoper.runtime.trace import TraceRecorder
-from webscoper.runtime.transcript import TranscriptStore
+from webscoper.runtime.artifacts.evidence import EvidenceStore
+from webscoper.runtime.artifacts.trace import TraceRecorder
+from webscoper.runtime.artifacts.transcript import TranscriptStore
 from webscoper.schemas.context import (
     RuntimeState,
     TraceContext,

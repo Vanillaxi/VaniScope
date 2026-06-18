@@ -3,7 +3,7 @@ from __future__ import annotations
 # From test_agents_md_loader.py
 from pathlib import Path
 
-from webscoper.runtime.agents_md import AgentsMdLoader
+from webscoper.runtime.prompt.agents_md import AgentsMdLoader
 
 
 def test_agents_md_loader_loads_workspace_instructions() -> None:
@@ -16,7 +16,7 @@ def test_agents_md_loader_loads_workspace_instructions() -> None:
     assert instructions[0].source_path.endswith("AGENTS.md")
 
 # From test_prompt_builder.py
-from webscoper.runtime.prompt_builder import DynamicPromptBuilder
+from webscoper.runtime.prompt.builder import DynamicPromptBuilder
 from webscoper.schemas.context import (
     RuntimeState,
     TraceContext,
@@ -77,7 +77,7 @@ def test_dynamic_prompt_builder_includes_task_tools_agents_and_reminders() -> No
     assert result.lazy_tool_ids
 
 # From test_prompt_builder_compacted_context.py
-from webscoper.runtime.prompt_builder import DynamicPromptBuilder
+from webscoper.runtime.prompt.builder import DynamicPromptBuilder
 from webscoper.schemas.compaction import (
     CompactedBrowserState,
     CompactedEvidenceRef,
@@ -172,8 +172,8 @@ from pathlib import Path
 
 import pytest
 
-from webscoper.runtime.execution import WebAgentExecutionHandler
-from webscoper.runtime.reminders import RuntimeReminderStore
+from webscoper.runtime.execution.handler import WebAgentExecutionHandler
+from webscoper.runtime.prompt.reminders import RuntimeReminderStore
 from webscoper.schemas.task import TaskSpec
 
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 # From test_deterministic_planner.py
-from webscoper.runtime.planner import DeterministicTaskPlanner
+from webscoper.runtime.execution.planner import DeterministicTaskPlanner
 from webscoper.schemas.action import ActionContract, ExpectedEffect
 from webscoper.schemas.task import TaskSpec
 
@@ -55,7 +55,7 @@ from pathlib import Path
 
 import pytest
 
-from webscoper.runtime.execution import WebAgentExecutionHandler
+from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.schemas.action import ActionContract, ExpectedEffect
 from webscoper.schemas.observation import PageObservation
 from webscoper.schemas.task import TaskSpec
@@ -144,7 +144,7 @@ from pathlib import Path
 
 import pytest
 
-from webscoper.runtime.execution import WebAgentExecutionHandler
+from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.schemas.action import ActionContract, ExpectedEffect
 from webscoper.schemas.task import TaskSpec
 
@@ -213,7 +213,7 @@ from pathlib import Path
 
 import pytest
 
-from webscoper.runtime.execution import WebAgentExecutionHandler
+from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.schemas.action import ActionContract, ExpectedEffect
 from webscoper.schemas.task import TaskSpec
 
@@ -269,11 +269,11 @@ from pathlib import Path
 import pytest
 
 from webscoper.runtime.context import WebAgentContext
-from webscoper.runtime.execution_loop import AgentExecutionLoop
-from webscoper.runtime.planner import DeterministicTaskPlanner
-from webscoper.runtime.tool_executor import LocalToolExecutor
-from webscoper.runtime.trace import TraceRecorder
-from webscoper.runtime.transcript import TranscriptStore
+from webscoper.runtime.execution.loop import AgentExecutionLoop
+from webscoper.runtime.execution.planner import DeterministicTaskPlanner
+from webscoper.runtime.execution.tool_executor import LocalToolExecutor
+from webscoper.runtime.artifacts.trace import TraceRecorder
+from webscoper.runtime.artifacts.transcript import TranscriptStore
 from webscoper.schemas.action import ActionContract, ExpectedEffect
 from webscoper.schemas.context import RuntimeState
 from webscoper.schemas.task import TaskSpec

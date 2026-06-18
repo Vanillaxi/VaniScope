@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 # From test_report_reviewer.py
-from webscoper.runtime.evidence import EvidenceStore
-from webscoper.runtime.reviewer import ReportReviewer, build_review_summary_markdown
+from webscoper.runtime.artifacts.evidence import EvidenceStore
+from webscoper.runtime.review.reviewer import ReportReviewer, build_review_summary_markdown
 from webscoper.schemas.action import ExpectedEffect
 from webscoper.schemas.task import TaskSpec
 
@@ -165,8 +165,8 @@ def _issue_types(result) -> list[str]:
     return [issue.issue_type for issue in result.issues]
 
 # From test_report_reviser.py
-from webscoper.runtime.reviewer import ReportReviewer
-from webscoper.runtime.revision import ReportReviser, ReviewRevisionPlanner
+from webscoper.runtime.review.reviewer import ReportReviewer
+from webscoper.runtime.review.revision import ReportReviser, ReviewRevisionPlanner
 from webscoper.schemas.evidence import EvidenceItem
 
 
@@ -225,8 +225,8 @@ def test_report_reviser_replaces_unknown_evidence_id() -> None:
     assert "ev_000001" in result.revised_report_markdown
 
 # From test_revision_planner.py
-from webscoper.runtime.reviewer import ReportReviewer
-from webscoper.runtime.revision import ReviewRevisionPlanner
+from webscoper.runtime.review.reviewer import ReportReviewer
+from webscoper.runtime.review.revision import ReviewRevisionPlanner
 from webscoper.schemas.evidence import EvidenceItem
 
 
@@ -281,10 +281,10 @@ def _evidence(evidence_id: str) -> EvidenceItem:
 import json
 from pathlib import Path
 
-from webscoper.runtime.llm_reviewer import FakeLLMReportReviewer
-from webscoper.runtime.reviewer import ReportReviewer
-from webscoper.runtime.revise_loop import ReviewReviseLoop
-from webscoper.runtime.revision import ReportReviser, ReviewRevisionPlanner
+from webscoper.runtime.llm.reviewer import FakeLLMReportReviewer
+from webscoper.runtime.review.reviewer import ReportReviewer
+from webscoper.runtime.review.revise_loop import ReviewReviseLoop
+from webscoper.runtime.review.revision import ReportReviser, ReviewRevisionPlanner
 from webscoper.schemas.evidence import EvidenceItem
 
 

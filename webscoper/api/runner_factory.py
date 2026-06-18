@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from webscoper.api.schemas import TaskCreateRequest
-from webscoper.runtime.execution import WebAgentExecutionHandler
-from webscoper.runtime.reminders import RuntimeReminderStore
+from webscoper.runtime.execution.handler import WebAgentExecutionHandler
+from webscoper.runtime.prompt.reminders import RuntimeReminderStore
 from webscoper.runtime.task_runner import build_task_spec, llm_config_path
 from webscoper.schemas.task import TaskSpec
 

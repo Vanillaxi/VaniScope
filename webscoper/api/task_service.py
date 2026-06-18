@@ -33,13 +33,13 @@ from webscoper.api.task_state import (
     status_from_context_state,
     status_from_transcript,
 )
-from webscoper.runtime.approvals import ApprovalStore
+from webscoper.runtime.safety.approvals import ApprovalStore
 from webscoper.runtime.events import (
     InMemoryTaskEventBus,
     TaskEventStore,
     TaskEventSubscription,
 )
-from webscoper.runtime.pending import PendingApprovalManager
+from webscoper.runtime.safety.pending import PendingApprovalManager
 from webscoper.schemas.events import TaskEvent, TaskEventKind
 from webscoper.schemas.risk import ApprovalRequest, TaskResumeResult
 from webscoper.schemas.task import TaskSpec

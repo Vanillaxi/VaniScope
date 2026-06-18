@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from webscoper.runtime.llm_config import (
+from webscoper.runtime.llm.config import (
     load_llm_router_config_from_file,
     provider_config_to_client_config,
     resolve_llm_provider_config,

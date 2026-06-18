@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from webscoper.runtime.execution import WebAgentExecutionHandler
-from webscoper.runtime.reminders import RuntimeReminderStore
+from webscoper.runtime.execution.handler import WebAgentExecutionHandler
+from webscoper.runtime.prompt.reminders import RuntimeReminderStore
 from webscoper.schemas.action import ActionContract, ExpectedEffect
 from webscoper.schemas.observation import PageObservation
 from webscoper.schemas.task import TaskSpec

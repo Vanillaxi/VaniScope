@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from webscoper.runtime.llm_client import BaseLLMClient, OpenAICompatibleLLMClient
-from webscoper.runtime.llm_config import (
+from webscoper.runtime.llm.client import BaseLLMClient, OpenAICompatibleLLMClient
+from webscoper.runtime.llm.config import (
     load_llm_router_config_from_file,
     provider_config_to_client_config,
     resolve_llm_provider_config,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from webscoper.runtime.context import WebAgentContext
 from webscoper.runtime.events import TaskEventSink
 from webscoper.runtime.execution_results import merge_final_output, record_evidence
-from webscoper.runtime.tool_executor import LocalToolExecutor
+from webscoper.runtime.execution.tool_executor import LocalToolExecutor
 from webscoper.schemas.plan import ExecutionLoopResult, ExecutionPlan
 from webscoper.schemas.tool_call import ToolCall, ToolResult
 from webscoper.schemas.tool_call import ToolExecutionRecord

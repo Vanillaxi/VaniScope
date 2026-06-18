@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from webscoper.runtime.execution import WebAgentExecutionHandler
-from webscoper.runtime.llm_client import BaseLLMClient
-from webscoper.runtime.llm_router import LLMProviderRouter
+from webscoper.runtime.execution.handler import WebAgentExecutionHandler
+from webscoper.runtime.llm.client import BaseLLMClient
+from webscoper.runtime.llm.router import LLMProviderRouter
 from webscoper.schemas.action import ActionContract, ExpectedEffect
 from webscoper.schemas.llm import LLMRequest, LLMResponse
 from webscoper.schemas.task import TaskSpec

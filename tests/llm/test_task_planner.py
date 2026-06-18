@@ -5,11 +5,11 @@ from pathlib import Path
 import pytest
 
 from webscoper.runtime.context import WebAgentContext
-from webscoper.runtime.llm_client import FakeLLMClient
-from webscoper.runtime.llm_planner import LLMTaskPlanner
-from webscoper.runtime.tool_call_parser import ToolCallParser
-from webscoper.runtime.trace import TraceRecorder
-from webscoper.runtime.transcript import TranscriptStore
+from webscoper.runtime.llm.client import FakeLLMClient
+from webscoper.runtime.llm.planner import LLMTaskPlanner
+from webscoper.runtime.execution.tool_call_parser import ToolCallParser
+from webscoper.runtime.artifacts.trace import TraceRecorder
+from webscoper.runtime.artifacts.transcript import TranscriptStore
 from webscoper.schemas.action import ActionContract, ExpectedEffect
 from webscoper.schemas.context import RuntimeState
 from webscoper.schemas.prompt import PromptBuildResult

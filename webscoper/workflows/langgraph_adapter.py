@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from webscoper.runtime.context import WebAgentContext
-from webscoper.runtime.execution import (
+from webscoper.runtime.execution.handler import (
     WebAgentExecutionHandler,
     WebAgentRuntimeComponents,
 )

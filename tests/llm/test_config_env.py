@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from webscoper.runtime.llm_config import load_llm_config_from_env
+from webscoper.runtime.llm.config import load_llm_config_from_env
 
 
 def test_load_llm_config_from_env(monkeypatch: pytest.MonkeyPatch) -> None:

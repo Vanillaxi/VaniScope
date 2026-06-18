@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from webscoper.runtime.risk_gate import RiskGate
+from webscoper.runtime.safety.risk_gate import RiskGate
 from webscoper.schemas.action import ActionContract
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from webscoper.runtime.llm_client import FakeLLMClient
+from webscoper.runtime.llm.client import FakeLLMClient
 from webscoper.schemas.llm import LLMRequest
 
 

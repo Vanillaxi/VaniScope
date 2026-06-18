@@ -7,11 +7,11 @@ from typing import Any
 from webscoper.runtime.artifacts.compaction import ContextCompactor, load_jsonl
 from webscoper.runtime.context import WebAgentContext
 from webscoper.runtime.events import TaskEventSink
-from webscoper.runtime.llm_reviewer import BaseLLMReportReviewer
-from webscoper.runtime.report import FinalReportBuilder
-from webscoper.runtime.reviewer import ReportReviewer, build_review_summary_markdown
-from webscoper.runtime.revise_loop import ReviewReviseLoop
-from webscoper.runtime.revision import ReportReviser, ReviewRevisionPlanner
+from webscoper.runtime.llm.reviewer import BaseLLMReportReviewer
+from webscoper.runtime.artifacts.report import FinalReportBuilder
+from webscoper.runtime.review.reviewer import ReportReviewer, build_review_summary_markdown
+from webscoper.runtime.review.revise_loop import ReviewReviseLoop
+from webscoper.runtime.review.revision import ReportReviser, ReviewRevisionPlanner
 from webscoper.schemas.evidence import EvidenceItem
 from webscoper.schemas.observation import PageObservation
 from webscoper.schemas.prompt import PromptBuildResult

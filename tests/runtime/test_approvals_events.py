@@ -3,7 +3,7 @@ from __future__ import annotations
 # From test_approval_store.py
 import pytest
 
-from webscoper.runtime.approvals import ApprovalStore, ApprovalStoreError
+from webscoper.runtime.safety.approvals import ApprovalStore, ApprovalStoreError
 
 
 def test_approval_store_create_list_get_and_decide() -> None:
@@ -57,7 +57,7 @@ def test_approval_store_missing_approval_is_clear() -> None:
         store.decide("appr_missing", approved=True)
 
 # From test_pending_approvals.py
-from webscoper.runtime.pending import PendingApprovalManager
+from webscoper.runtime.safety.pending import PendingApprovalManager
 
 
 def test_pending_approval_manager_create_get_pop_and_list() -> None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from webscoper.runtime.evidence import EvidenceStore
+from webscoper.runtime.artifacts.evidence import EvidenceStore
 
 
 def test_evidence_store_add_list_and_context_pack() -> None:
@@ -49,8 +49,8 @@ def test_evidence_store_writes_jsonl(tmp_path: Path) -> None:
     assert payload["text"] == "pip install playwright"
 
 # From test_report_builder.py
-from webscoper.runtime.evidence import EvidenceStore
-from webscoper.runtime.report import FinalReportBuilder
+from webscoper.runtime.artifacts.evidence import EvidenceStore
+from webscoper.runtime.artifacts.report import FinalReportBuilder
 from webscoper.schemas.task import TaskSpec
 
 
@@ -79,7 +79,7 @@ def test_final_report_builder_includes_evidence_ids() -> None:
 import json
 from pathlib import Path
 
-from webscoper.runtime.trace import TraceRecorder
+from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.schemas.trace import TraceStep
 
 
@@ -106,7 +106,7 @@ def test_trace_recorder_appends_jsonl(tmp_path: Path) -> None:
 import json
 from pathlib import Path
 
-from webscoper.runtime.transcript import TranscriptStore
+from webscoper.runtime.artifacts.transcript import TranscriptStore
 
 
 def test_transcript_store_appends_jsonl_event(tmp_path: Path) -> None:
@@ -130,7 +130,7 @@ from pathlib import Path
 
 import pytest
 
-from webscoper.runtime.execution import WebAgentExecutionHandler
+from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.schemas.action import ActionContract, ExpectedEffect
 from webscoper.schemas.task import TaskSpec
 

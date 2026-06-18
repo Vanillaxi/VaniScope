@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 
 from webscoper.api.task_service import ARTIFACT_ALLOWLIST
-from webscoper.runtime.execution import WebAgentExecutionHandler
-from webscoper.runtime.reminders import RuntimeReminderStore
+from webscoper.runtime.execution.handler import WebAgentExecutionHandler
+from webscoper.runtime.prompt.reminders import RuntimeReminderStore
 from webscoper.runtime.task_runner import build_task_spec
 
 

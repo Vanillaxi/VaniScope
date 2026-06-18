@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from webscoper.runtime.tool_executor import LocalToolExecutor
-from webscoper.runtime.trace import TraceRecorder
+from webscoper.runtime.execution.tool_executor import LocalToolExecutor
+from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.schemas.context import RuntimeState, TraceContext, WebAgentContextSnapshot
 from webscoper.schemas.task import TaskSpec
 from webscoper.schemas.tool_call import ToolCall
@@ -73,7 +73,7 @@ def _context(tmp_path: Path) -> WebAgentContextSnapshot:
 # From test_tool_call_parser.py
 import json
 
-from webscoper.runtime.tool_call_parser import ToolCallParser
+from webscoper.runtime.execution.tool_call_parser import ToolCallParser
 
 
 def test_parse_plain_json_dict() -> None:

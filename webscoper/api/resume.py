@@ -4,12 +4,12 @@ from pathlib import Path
 
 from webscoper.runtime.artifacts.pipeline import persist_evidence_and_report
 from webscoper.runtime.context import WebAgentContext
-from webscoper.runtime.evidence import EvidenceStore
-from webscoper.runtime.execution import WebAgentExecutionHandler
-from webscoper.runtime.execution_loop import AgentExecutionLoop
-from webscoper.runtime.tool_executor import LocalToolExecutor
-from webscoper.runtime.trace import TraceRecorder
-from webscoper.runtime.transcript import TranscriptStore
+from webscoper.runtime.artifacts.evidence import EvidenceStore
+from webscoper.runtime.execution.handler import WebAgentExecutionHandler
+from webscoper.runtime.execution.loop import AgentExecutionLoop
+from webscoper.runtime.execution.tool_executor import LocalToolExecutor
+from webscoper.runtime.artifacts.trace import TraceRecorder
+from webscoper.runtime.artifacts.transcript import TranscriptStore
 from webscoper.schemas.context import RuntimeState, WebAgentContextSnapshot
 from webscoper.schemas.plan import ExecutionPlan, PlannedStep
 from webscoper.schemas.risk import TaskResumeResult

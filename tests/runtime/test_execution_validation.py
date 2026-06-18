@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from webscoper.runtime.execution import WebAgentExecutionHandler
-from webscoper.runtime.llm_client import BaseLLMClient
+from webscoper.runtime.execution.handler import WebAgentExecutionHandler
+from webscoper.runtime.llm.client import BaseLLMClient
 from webscoper.schemas.llm import LLMRequest, LLMResponse
 from webscoper.schemas.task import TaskSpec
 
@@ -69,10 +69,10 @@ def _jsonl_values(path: Path, key: str) -> list[str]:
 from pathlib import Path
 
 from webscoper.runtime.context import WebAgentContext
-from webscoper.runtime.plan_validator import PlanValidator
-from webscoper.runtime.planner import DeterministicTaskPlanner
-from webscoper.runtime.trace import TraceRecorder
-from webscoper.runtime.transcript import TranscriptStore
+from webscoper.runtime.execution.plan_validator import PlanValidator
+from webscoper.runtime.execution.planner import DeterministicTaskPlanner
+from webscoper.runtime.artifacts.trace import TraceRecorder
+from webscoper.runtime.artifacts.transcript import TranscriptStore
 from webscoper.schemas.action import ActionContract, ExpectedEffect
 from webscoper.schemas.context import RuntimeState
 from webscoper.schemas.plan import ExecutionPlan, PlannedStep

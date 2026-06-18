@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 
 from webscoper.runtime.browser_runtime import BrowserRuntime
-from webscoper.runtime.trace import TraceRecorder
-from webscoper.runtime.transcript import TranscriptStore
+from webscoper.runtime.artifacts.trace import TraceRecorder
+from webscoper.runtime.artifacts.transcript import TranscriptStore
 from webscoper.schemas.action import ActionContract, ExpectedEffect
 
 

@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from webscoper.runtime.llm_client import OpenAICompatibleLLMClient
-from webscoper.runtime.llm_router import LLMProviderRouter
+from webscoper.runtime.llm.client import OpenAICompatibleLLMClient
+from webscoper.runtime.llm.router import LLMProviderRouter
 
 
 def test_llm_provider_router_creates_openai_compatible_client(tmp_path: Path) -> None:

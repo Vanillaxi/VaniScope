@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from webscoper.runtime.llm_reviewer import FakeLLMReportReviewer
-from webscoper.runtime.reviewer import ReportReviewer
+from webscoper.runtime.llm.reviewer import FakeLLMReportReviewer
+from webscoper.runtime.review.reviewer import ReportReviewer
 from webscoper.schemas.evidence import EvidenceItem
 from webscoper.schemas.revise import LLMReviewRequest
 

@@ -16,9 +16,9 @@ from webscoper.browser.recovery.classifier import (
     risk_error_type,
 )
 from webscoper.runtime.events import TaskEventSink
-from webscoper.runtime.evidence import EvidenceStore
-from webscoper.runtime.trace import TraceRecorder
-from webscoper.runtime.transcript import TranscriptStore
+from webscoper.runtime.artifacts.evidence import EvidenceStore
+from webscoper.runtime.artifacts.trace import TraceRecorder
+from webscoper.runtime.artifacts.transcript import TranscriptStore
 from webscoper.schemas.action import ActionResult, EffectVerificationResult
 from webscoper.schemas.observation import PageObservation
 from webscoper.schemas.recovery import (

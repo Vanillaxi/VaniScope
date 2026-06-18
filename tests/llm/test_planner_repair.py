@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 
 from webscoper.runtime.context import WebAgentContext
-from webscoper.runtime.llm_client import BaseLLMClient
-from webscoper.runtime.llm_planner import LLMTaskPlanner
-from webscoper.runtime.trace import TraceRecorder
-from webscoper.runtime.transcript import TranscriptStore
+from webscoper.runtime.llm.client import BaseLLMClient
+from webscoper.runtime.llm.planner import LLMTaskPlanner
+from webscoper.runtime.artifacts.trace import TraceRecorder
+from webscoper.runtime.artifacts.transcript import TranscriptStore
 from webscoper.schemas.context import RuntimeState
 from webscoper.schemas.llm import LLMRequest, LLMResponse
 from webscoper.schemas.prompt import PromptBuildResult

@@ -7,8 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from webscoper.runtime.agents_md import AgentsMdLoader
-from webscoper.runtime.approvals import ApprovalStore
+from webscoper.runtime.prompt.agents_md import AgentsMdLoader
+from webscoper.runtime.safety.approvals import ApprovalStore
 from webscoper.runtime.artifacts.pipeline import (
     emit_report_event,
     persist_compaction_artifacts,
@@ -20,7 +20,7 @@ from webscoper.runtime.artifacts.pipeline import (
     read_json_object,
 )
 from webscoper.runtime.context import WebAgentContext
-from webscoper.runtime.evidence import EvidenceStore
+from webscoper.runtime.artifacts.evidence import EvidenceStore
 from webscoper.runtime.events import TaskEventSink
 from webscoper.runtime.execution_state import (
     observation_summary,
@@ -28,29 +28,29 @@ from webscoper.runtime.execution_state import (
     status_from_loop_error,
     task_payload,
 )
-from webscoper.runtime.execution_loop import AgentExecutionLoop
-from webscoper.runtime.llm_client import (
+from webscoper.runtime.execution.loop import AgentExecutionLoop
+from webscoper.runtime.llm.client import (
     BaseLLMClient,
     FakeLLMClient,
     OpenAICompatibleLLMClient,
 )
-from webscoper.runtime.llm_config import load_llm_config_from_env
-from webscoper.runtime.llm_planner import LLMTaskPlanner
-from webscoper.runtime.llm_reviewer import (
+from webscoper.runtime.llm.config import load_llm_config_from_env
+from webscoper.runtime.llm.planner import LLMTaskPlanner
+from webscoper.runtime.llm.reviewer import (
     BaseLLMReportReviewer,
     FakeLLMReportReviewer,
     OpenAICompatibleLLMReportReviewer,
 )
-from webscoper.runtime.llm_router import LLMProviderRouter
-from webscoper.runtime.pending import PendingApprovalManager
-from webscoper.runtime.plan_validator import PlanValidator
-from webscoper.runtime.planner import DeterministicTaskPlanner, normalize_planner_mode
-from webscoper.runtime.prompt_builder import DynamicPromptBuilder
-from webscoper.runtime.reminders import RuntimeReminderStore
-from webscoper.runtime.risk_gate import RiskGate
-from webscoper.runtime.tool_executor import LocalToolExecutor
-from webscoper.runtime.trace import TraceRecorder
-from webscoper.runtime.transcript import TranscriptStore
+from webscoper.runtime.llm.router import LLMProviderRouter
+from webscoper.runtime.safety.pending import PendingApprovalManager
+from webscoper.runtime.execution.plan_validator import PlanValidator
+from webscoper.runtime.execution.planner import DeterministicTaskPlanner, normalize_planner_mode
+from webscoper.runtime.prompt.builder import DynamicPromptBuilder
+from webscoper.runtime.prompt.reminders import RuntimeReminderStore
+from webscoper.runtime.safety.risk_gate import RiskGate
+from webscoper.runtime.execution.tool_executor import LocalToolExecutor
+from webscoper.runtime.artifacts.trace import TraceRecorder
+from webscoper.runtime.artifacts.transcript import TranscriptStore
 from webscoper.schemas.context import RuntimeState
 from webscoper.schemas.evidence import EvidenceItem
 from webscoper.schemas.plan import ExecutionLoopResult, ExecutionPlan
