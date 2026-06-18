@@ -57,6 +57,8 @@ Flat modules such as `webscoper.runtime.evidence`, `webscoper.runtime.llm_client
 
 Workflow regression eval lives in `webscoper/eval/workflow_eval.py` and compares native and LangGraph workflow backends across the same local fixture tasks. It records status, artifacts, review, evidence, recovery, approval, risk, and event behavior without changing runtime semantics.
 
+The workflow eval schema supports `case_type` values of `workflow`, `recovery`, and `approval`. Recovery cases assert expected recovery strategies and error types from `recovery.jsonl`. Approval cases assert RiskGate decisions, approval-required/task-paused events, approve/reject resume outcomes, and persisted `approvals.jsonl`, `pending.jsonl`, `events.jsonl`, and `risk_report.json` artifacts. Eval cases are guarded to use local fixture URLs and non-real planner/reviewer modes, so pytest and eval runs do not access real network targets or real LLM providers.
+
 ## Browser Recovery Boundary
 
 `webscoper/browser/recovery/` is split by recovery responsibility:

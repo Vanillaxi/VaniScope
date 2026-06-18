@@ -88,10 +88,16 @@ tests/
 
 ## Workflow Eval
 
-Workflow regression eval 会在同一组本地任务 case 上对比 native 与 LangGraph workflow backend，不访问真实网络，也不调用真实 LLM。
+Workflow regression eval 会在同一组本地任务 case 上对比 native 与 LangGraph workflow backend，不访问真实网络，也不调用真实 LLM。组合 fixture 覆盖：
+
+- workflow case：status、artifacts、review、evidence 和 compaction
+- recovery case：lazy control、modal overlay、no-effect retry、ambiguous target、disabled control、login/password block 和 captcha block
+- approval case：RiskGate approval-required、task pause、approved resume、rejected stop、delete blocked，以及 approvals/pending/events/risk report 审计 artifact
 
 ```bash
 uv run python scripts/run_workflow_eval.py \
   --cases tests/fixtures/workflow_eval_cases.json \
   --output-dir eval_results/workflow_eval_local
 ```
+
+Runner 会在输出目录写入 `score.json` 和 `report.md`。`score.json` 包含总量、通过/失败数量、recovery/approval 通过数量、native/LangGraph expectation failure 和 comparison failure。

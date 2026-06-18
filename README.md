@@ -85,10 +85,16 @@ Use `configs/llm.example.toml` as the committed template. Put local provider set
 
 ## Workflow Eval
 
-Workflow regression eval compares native and LangGraph workflow backends across the same local task cases without real network or real LLM calls.
+Workflow regression eval compares native and LangGraph workflow backends across the same local task cases without real network or real LLM calls. The combined fixture covers:
+
+- workflow cases for status, artifacts, review, evidence, and compaction
+- recovery cases for lazy controls, modal overlays, no-effect retries, ambiguous targets, disabled controls, login/password blocking, and captcha blocking
+- approval cases for RiskGate approval-required decisions, task pause, approved resume, rejected stop, blocked delete actions, and persisted audit artifacts
 
 ```bash
 uv run python scripts/run_workflow_eval.py \
   --cases tests/fixtures/workflow_eval_cases.json \
   --output-dir eval_results/workflow_eval_local
 ```
+
+The runner writes `score.json` and `report.md` under the selected output directory. `score.json` includes total/pass/fail counts, recovery and approval pass counts, native/LangGraph expectation failures, and comparison failures.

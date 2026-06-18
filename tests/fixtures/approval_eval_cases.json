@@ -1,0 +1,97 @@
+[
+  {
+    "case_id": "submit_requires_approval",
+    "description": "Submit action should pause for approval.",
+    "case_type": "approval",
+    "request": {
+      "url": "tests/fixtures/mock_site/risk_actions.html",
+      "click": "Submit",
+      "expect": "Submitted successfully"
+    },
+    "expected": {
+      "status": "requires_approval",
+      "expected_approval_events": ["approval_required", "task_paused"],
+      "expected_risk_decision": "requires_approval"
+    }
+  },
+  {
+    "case_id": "submit_approved_resume",
+    "description": "Approved submit action should resume and finish.",
+    "case_type": "approval",
+    "request": {
+      "url": "tests/fixtures/mock_site/risk_actions.html",
+      "click": "Submit",
+      "expect": "Submitted successfully"
+    },
+    "expected": {
+      "status": "succeeded",
+      "expected_approval_events": [
+        "approval_required",
+        "task_paused",
+        "approval_decided",
+        "task_resumed",
+        "task_finished"
+      ],
+      "expected_risk_decision": "requires_approval",
+      "simulate_approval_decision": "approved",
+      "allow_backend_differences": ["evidence_count"]
+    }
+  },
+  {
+    "case_id": "submit_rejected_stops",
+    "description": "Rejected submit action should stop without executing the pending action.",
+    "case_type": "approval",
+    "request": {
+      "url": "tests/fixtures/mock_site/risk_actions.html",
+      "click": "Submit",
+      "expect": "Submitted successfully"
+    },
+    "expected": {
+      "status": "rejected",
+      "expected_approval_events": [
+        "approval_required",
+        "task_paused",
+        "approval_decided",
+        "task_rejected"
+      ],
+      "expected_risk_decision": "requires_approval",
+      "simulate_approval_decision": "rejected"
+    }
+  },
+  {
+    "case_id": "delete_blocked",
+    "description": "Delete action should block without approval resume.",
+    "case_type": "approval",
+    "request": {
+      "url": "tests/fixtures/mock_site/risk_actions.html",
+      "click": "Delete account",
+      "expect": "Deleted"
+    },
+    "expected": {
+      "status": "blocked",
+      "expected_event_kinds": ["risk_blocked"],
+      "expected_risk_decision": "blocked"
+    }
+  },
+  {
+    "case_id": "approval_state_persisted",
+    "description": "Approval pause artifacts should be persisted and auditable.",
+    "case_type": "approval",
+    "request": {
+      "url": "tests/fixtures/mock_site/risk_actions.html",
+      "click": "Submit",
+      "expect": "Submitted successfully"
+    },
+    "expected": {
+      "status": "requires_approval",
+      "expected_artifacts": [
+        "events.jsonl",
+        "approvals.jsonl",
+        "pending.jsonl",
+        "risk_report.json"
+      ],
+      "expected_approval_events": ["approval_required", "task_paused"],
+      "expected_risk_decision": "requires_approval"
+    }
+  }
+]

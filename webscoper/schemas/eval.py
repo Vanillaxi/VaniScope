@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -98,17 +98,25 @@ class WorkflowEvalRequest(BaseModel):
 
 class WorkflowEvalExpected(BaseModel):
     status: str | None = None
+    expected_status: str | None = None
     required_artifacts: list[str] = Field(default_factory=list)
+    expected_artifacts: list[str] = Field(default_factory=list)
     review_passed: bool | None = None
     min_review_score: float | None = None
     expected_event_kinds: list[str] = Field(default_factory=list)
+    expected_recovery_kinds: list[str] = Field(default_factory=list)
+    expected_recovery_error_type: str | None = None
+    expected_approval_events: list[str] = Field(default_factory=list)
     expected_risk_status: str | None = None
+    expected_risk_decision: str | None = None
+    simulate_approval_decision: Literal["approved", "rejected"] | None = None
     allow_backend_differences: list[str] = Field(default_factory=list)
 
 
 class WorkflowEvalCase(BaseModel):
     case_id: str
     description: str
+    case_type: Literal["workflow", "recovery", "approval"] = "workflow"
     request: WorkflowEvalRequest
     expected: WorkflowEvalExpected = Field(default_factory=WorkflowEvalExpected)
 
@@ -122,12 +130,16 @@ class WorkflowBackendRunResult(BaseModel):
     review_passed: bool | None = None
     review_score: float | None = None
     event_kinds: list[str] = Field(default_factory=list)
+    recovery_kinds: list[str] = Field(default_factory=list)
+    recovery_error_types: list[str] = Field(default_factory=list)
+    approval_statuses: list[str] = Field(default_factory=list)
     error: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class WorkflowComparisonResult(BaseModel):
     case_id: str
+    case_type: Literal["workflow", "recovery", "approval"] = "workflow"
     passed: bool
     native: WorkflowBackendRunResult
     langgraph: WorkflowBackendRunResult
@@ -141,5 +153,13 @@ class WorkflowEvalSummary(BaseModel):
     passed: int
     failed: int
     pass_rate: float
+    total_cases: int
+    passed_cases: int
+    failed_cases: int
+    recovery_cases_passed: int = 0
+    approval_cases_passed: int = 0
+    native_failures: int = 0
+    langgraph_failures: int = 0
+    comparison_failures: int = 0
     case_results: list[WorkflowComparisonResult] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
