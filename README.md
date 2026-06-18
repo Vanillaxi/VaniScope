@@ -6,6 +6,8 @@ VaniScope / Web-Scoper is a Python browser-agent runtime for local and fixture-b
 
 The runtime package is split by responsibility into `runtime/execution`, `runtime/artifacts`, `runtime/llm`, `runtime/prompt`, `runtime/review`, and `runtime/safety`. Old flat runtime import paths are temporarily kept as a compatibility layer.
 
+`webscoper/workflows/langgraph_adapter.py` remains the public LangGraph workflow entry point. Its orchestration internals live under `webscoper/workflows/langgraph_backend/`.
+
 ## Scope
 
 VaniScope does not bypass login, CAPTCHA, or paywalls. It does not enter real accounts, passwords, payment details, or identity documents. Risky actions are blocked or require local approval before execution.
@@ -35,7 +37,7 @@ webscoper/
   runtime/       # Agent Runtime: execution, artifacts, LLM, prompt, review, safety compatibility layer
   api/           # FastAPI Task API, async tasks, approvals, SSE event stream, artifact access
   eval/          # Browser, planner, and reviewer eval harnesses
-  workflows/     # Native and LangGraph workflow backend adapters
+  workflows/     # Native workflows and LangGraph backend orchestration modules
   tools/         # Tool registry and browser tool definitions
   schemas/       # Shared Pydantic schemas
 

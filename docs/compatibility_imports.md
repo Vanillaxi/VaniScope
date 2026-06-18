@@ -34,3 +34,9 @@ Do not remove compatibility wrappers until a later dedicated cleanup phase.
 | `webscoper.runtime.plan_validator` | `webscoper.runtime.execution.plan_validator` |
 | `webscoper.runtime.tool_executor` | `webscoper.runtime.execution.tool_executor` |
 | `webscoper.runtime.tool_call_parser` | `webscoper.runtime.execution.tool_call_parser` |
+
+## Workflow Compatibility Imports
+
+| Legacy Path | New Path |
+|---|---|
+| `webscoper.workflows.langgraph_adapter` | `webscoper.workflows.langgraph_backend.adapter` |

@@ -52,3 +52,5 @@ Flat modules such as `webscoper.runtime.evidence`, `webscoper.runtime.llm_client
 ## Workflow Integration Boundary
 
 `webscoper/runtime/` stays workflow-backend neutral where possible. Native execution is driven directly by `WebAgentExecutionHandler`; LangGraph integration lives in `webscoper/workflows/` and calls runtime APIs rather than replacing the browser runtime, tool registry, risk gate, approval store, or execution artifacts.
+
+`webscoper/workflows/langgraph_adapter.py` is kept as the public compatibility entry. LangGraph orchestration internals live under `webscoper/workflows/langgraph_backend/`, split into graph construction, node implementations, resume handling, artifact/state writing, and workflow event helpers.
