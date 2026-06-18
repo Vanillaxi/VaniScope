@@ -2,20 +2,11 @@
 
 [中文说明](README_CN.md)
 
-VaniScope / Web-Scoper phase one is a Python single-machine Browser Runtime MVP. It provides the browser execution foundation for public web tasks without LLMs, LangGraph, Go backend services, MCP, reviewers, or web research skills.
-
-Current capabilities:
-
-- Open public URLs.
-- Observe page state and extract structured observations.
-- Save screenshots.
-- Write each action / observation to `trace.jsonl`.
-- Detect basic high-risk page signals such as password, captcha, payment, and login.
-- Provide a command-line smoke script that opens a page and generates a trace.
+VaniScope / Web-Scoper is a Python browser-agent runtime for local and fixture-based web task execution. It includes browser observation and click intent, deterministic and LLM-backed planning modes, evidence/report artifacts, reviewer and revise-loop support, FastAPI task APIs, risk-gated approval pause/resume, context compaction, and native/LangGraph workflow backends.
 
 ## Scope
 
-This MVP does not bypass login, CAPTCHA, or paywalls. It does not enter real accounts, passwords, payment details, or identity documents. It is intended for public pages and test pages by default.
+VaniScope does not bypass login, CAPTCHA, or paywalls. It does not enter real accounts, passwords, payment details, or identity documents. Risky actions are blocked or require local approval before execution.
 
 ## Smoke Test
 
@@ -38,20 +29,48 @@ uv run pytest
 
 ```text
 webscoper/
-  schemas/       # Pydantic schemas such as TraceStep and PageObservation
-  runtime/       # TraceRecorder and BrowserRuntime orchestration
-  browser/       # Playwright session, observer, and risk detection
+  browser/       # Browser Runtime: Playwright session, observation, targeting, effects, recovery, risk signals
+  runtime/       # Agent Runtime: execution handler, tool loop, LLM routing, evidence, review, approvals, compaction
+  api/           # FastAPI Task API, async tasks, approvals, SSE event stream, artifact access
+  eval/          # Browser, planner, and reviewer eval harnesses
+  workflows/     # Native and LangGraph workflow backend adapters
+  tools/         # Tool registry and browser tool definitions
+  schemas/       # Shared Pydantic schemas
 
 scripts/
+  run_task.py
+  run_api.py
+  run_browser_eval.py
+  run_planner_eval.py
+  run_reviewer_eval.py
   smoke_open_page.py
+
+configs/
+  llm.example.toml
+  llm.local.toml  # local only, ignored
+
+docs/
+  runtime_modules.md
+
+runs/
+  .gitkeep
 
 traces/
   .gitkeep
 
+eval_results/
+  .gitkeep
+
 tests/
-  test_trace_recorder.py
+  api/
+  browser/
+  eval/
+  llm/
+  runtime/
+  workflows/
+  fixtures/
 ```
 
-## Future Extensions
+## Configuration
 
-The current module boundaries leave room for TargetResolver, ActionContract, EffectVerifier, and RecoveryManager. Phase one is limited to browser sessions, page observation, risk signals, and trace recording.
+Use `configs/llm.example.toml` as the committed template. Put local provider settings in `configs/llm.local.toml`; local config files and generated run/eval artifacts are ignored by git.

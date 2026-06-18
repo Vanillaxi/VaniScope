@@ -1,27 +1,13 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-from fastapi.testclient import TestClient
-
-import webscoper.api.app as api_module
-from webscoper.api.task_service import TaskService
+from tests.helpers import basic_task_request
 
 
-def test_api_task_lifecycle(tmp_path: Path) -> None:
-    api_module.task_service = TaskService(runs_dir=tmp_path / "runs")
-    client = TestClient(api_module.app)
-
+def test_api_task_lifecycle(api_client) -> None:
+    client = api_client
     create_response = client.post(
         "/tasks",
-        json={
-            "url": "tests/fixtures/mock_site/basic.html",
-            "click": "Quickstart",
-            "expect": "pip install playwright",
-            "planner": "deterministic",
-            "workspace": "tests/fixtures/workspace",
-            "reminder": "This is a test runtime reminder.",
-        },
+        json=basic_task_request(),
     )
 
     assert create_response.status_code == 200
@@ -46,10 +32,8 @@ def test_api_task_lifecycle(tmp_path: Path) -> None:
     assert "# VaniScope Task Report" in report_response.json()["content"]
 
 
-def test_api_artifact_traversal_rejected(tmp_path: Path) -> None:
-    api_module.task_service = TaskService(runs_dir=tmp_path / "runs")
-    client = TestClient(api_module.app)
-
+def test_api_artifact_traversal_rejected(api_client) -> None:
+    client = api_client
     response = client.get("/tasks/missing/artifacts/..%2F..%2F.env")
 
     assert response.status_code in {400, 404}

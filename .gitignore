@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 .env
+configs/llm.toml
 configs/llm.local.toml
 configs/*.local.toml
 .idea/
