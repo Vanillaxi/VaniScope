@@ -54,3 +54,14 @@ Flat modules such as `webscoper.runtime.evidence`, `webscoper.runtime.llm_client
 `webscoper/runtime/` stays workflow-backend neutral where possible. Native execution is driven directly by `WebAgentExecutionHandler`; LangGraph integration lives in `webscoper/workflows/` and calls runtime APIs rather than replacing the browser runtime, tool registry, risk gate, approval store, or execution artifacts.
 
 `webscoper/workflows/langgraph_adapter.py` is kept as the public compatibility entry. LangGraph orchestration internals live under `webscoper/workflows/langgraph_backend/`, split into graph construction, node implementations, resume handling, artifact/state writing, and workflow event helpers.
+
+## Browser Recovery Boundary
+
+`webscoper/browser/recovery/` is split by recovery responsibility:
+
+- `classifier.py` classifies browser, action, and effect failures.
+- `planner.py` maps failure types to recovery plans.
+- `strategies.py` implements concrete recovery actions.
+- `executor.py` executes recovery plans and attempts.
+- `telemetry.py` records recovery trace, transcript events, evidence, and `recovery.jsonl`.
+- `manager.py` remains the public facade.

@@ -8,6 +8,8 @@ Runtime 现在按职责拆成 `runtime/execution`、`runtime/artifacts`、`runti
 
 `webscoper/workflows/langgraph_adapter.py` 仍然是 LangGraph workflow 的公开入口；内部编排模块位于 `webscoper/workflows/langgraph_backend/`。
 
+Browser recovery 现在拆成 `browser/recovery/classifier`、`planner`、`strategies`、`executor` 和 `telemetry`；`browser/recovery/manager.py` 保持为公开 facade。
+
 ## 阶段边界
 
 VaniScope 不会绕过登录、验证码或付费墙，也不会输入真实账号、密码、支付信息或身份证件。高风险动作会被阻止，或要求本地审批后才继续执行。

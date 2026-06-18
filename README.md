@@ -8,6 +8,8 @@ The runtime package is split by responsibility into `runtime/execution`, `runtim
 
 `webscoper/workflows/langgraph_adapter.py` remains the public LangGraph workflow entry point. Its orchestration internals live under `webscoper/workflows/langgraph_backend/`.
 
+Browser recovery is split into `browser/recovery/classifier`, `planner`, `strategies`, `executor`, and `telemetry`, with `browser/recovery/manager.py` kept as the public facade.
+
 ## Scope
 
 VaniScope does not bypass login, CAPTCHA, or paywalls. It does not enter real accounts, passwords, payment details, or identity documents. Risky actions are blocked or require local approval before execution.
