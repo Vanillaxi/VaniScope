@@ -8,6 +8,13 @@ from typing import Any, Awaitable, Callable
 from playwright.async_api import Page
 
 from webscoper.browser.observer import observe_page
+from webscoper.browser.recovery.classifier import (
+    looks_covered,
+    normalized_error_text,
+    observation_has_expected,
+    observation_summary,
+    risk_error_type,
+)
 from webscoper.runtime.events import TaskEventSink
 from webscoper.runtime.evidence import EvidenceStore
 from webscoper.runtime.trace import TraceRecorder
@@ -43,15 +50,15 @@ class RecoveryManager:
         observation: Any | None = None,
         target_hint: str | None = None,
     ) -> RecoveryErrorType:
-        risk_type = _risk_error_type(observation)
+        risk_type = risk_error_type(observation)
         if risk_type is not None:
             return risk_type
 
         if action_result is not None:
-            action_error = _normalized_error_text(
+            action_error = normalized_error_text(
                 getattr(action_result, "error_type", None)
             )
-            action_message = _normalized_error_text(
+            action_message = normalized_error_text(
                 getattr(action_result, "error_message", None)
             )
             combined = f"{action_error} {action_message}".strip()
@@ -61,7 +68,7 @@ class RecoveryManager:
                 return RecoveryErrorType.TARGET_AMBIGUOUS
             if "target_disabled" in action_error or "disabled" in combined:
                 return RecoveryErrorType.TARGET_DISABLED
-            if _looks_covered(combined):
+            if looks_covered(combined):
                 return RecoveryErrorType.TARGET_COVERED
             if "timeout" in combined:
                 return RecoveryErrorType.NAVIGATION_TIMEOUT
@@ -69,10 +76,10 @@ class RecoveryManager:
         if verification_result is not None:
             satisfied = bool(getattr(verification_result, "satisfied", False))
             if not satisfied:
-                error_type = _normalized_error_text(
+                error_type = normalized_error_text(
                     getattr(verification_result, "error_type", None)
                 )
-                message = _normalized_error_text(
+                message = normalized_error_text(
                     getattr(verification_result, "message", None)
                 )
                 if "timeout" in error_type or "timeout" in message:
@@ -82,14 +89,14 @@ class RecoveryManager:
                 return RecoveryErrorType.POSTCONDITION_FAILED
 
         if error is not None:
-            message = _normalized_error_text(str(error))
-            if _looks_covered(message):
+            message = normalized_error_text(str(error))
+            if looks_covered(message):
                 return RecoveryErrorType.TARGET_COVERED
             if "timeout" in type(error).__name__.lower() or "timeout" in message:
                 return RecoveryErrorType.NAVIGATION_TIMEOUT
 
         if target_hint and observation is not None:
-            summary = _normalized_error_text(_observation_summary(observation))
+            summary = normalized_error_text(observation_summary(observation))
             if target_hint.lower() not in summary:
                 return RecoveryErrorType.TARGET_NOT_FOUND
 
@@ -207,7 +214,7 @@ class RecoveryManager:
                 status="running",
                 reason=plan.reason,
                 before_url=before_url,
-                before_observation_summary=_observation_summary(before_observation),
+                before_observation_summary=observation_summary(before_observation),
             )
             _record_trace(trace_recorder, attempt, "recovery_attempt", "running")
             _emit(
@@ -309,7 +316,7 @@ class RecoveryManager:
             if strategy == RecoveryStrategy.WAIT_AND_REOBSERVE:
                 await page.wait_for_timeout(800)
                 observation = await _call(observe_fn)
-                risk_type = _risk_error_type(observation)
+                risk_type = risk_error_type(observation)
                 if risk_type is not None:
                     return _finish_attempt(
                         attempt,
@@ -319,7 +326,7 @@ class RecoveryManager:
                         observation,
                         {"risk_type": risk_type.value},
                     )
-                if _observation_has_expected(observation, expected_content):
+                if observation_has_expected(observation, expected_content):
                     return _finish_attempt(
                         attempt,
                         page,
@@ -505,58 +512,6 @@ async def _close_safe_modal_control(page: Page) -> bool:
     return False
 
 
-def _risk_error_type(observation: Any | None) -> RecoveryErrorType | None:
-    signals = getattr(observation, "risk_signals", []) or []
-    risk_types = {str(getattr(signal, "risk_type", "")).lower() for signal in signals}
-    if "captcha" in risk_types:
-        return RecoveryErrorType.CAPTCHA_DETECTED
-    if "login" in risk_types or "password" in risk_types:
-        return RecoveryErrorType.LOGIN_REQUIRED
-    return None
-
-
-def _looks_covered(value: str) -> bool:
-    return any(
-        needle in value
-        for needle in [
-            "intercepts pointer events",
-            "covered",
-            "overlay",
-            "modal",
-            "not visible",
-            "receives pointer events",
-        ]
-    )
-
-
-def _normalized_error_text(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value).replace("_", " ").lower()
-
-
-def _observation_summary(observation: Any | None) -> str | None:
-    if observation is None:
-        return None
-    summary = getattr(observation, "visible_text_summary", None)
-    if summary is None and isinstance(observation, dict):
-        summary = observation.get("visible_text_summary")
-    if summary is None:
-        return None
-    text = str(summary)
-    return text if len(text) <= 500 else text[:500].rstrip()
-
-
-def _observation_has_expected(
-    observation: PageObservation | None,
-    expected_content: str | None,
-) -> bool:
-    if not expected_content or observation is None:
-        return False
-    summary = observation.visible_text_summary.lower()
-    return expected_content.lower() in summary
-
-
 async def _safe_observe(observe_fn: ObserveFn) -> PageObservation | None:
     try:
         return await _call(observe_fn)
@@ -577,7 +532,7 @@ def _finish_attempt(
             "status": status,
             "reason": reason,
             "after_url": _safe_page_url(page),
-            "after_observation_summary": _observation_summary(observation),
+            "after_observation_summary": observation_summary(observation),
             "metadata": metadata or {},
         }
     )

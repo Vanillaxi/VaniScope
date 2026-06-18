@@ -1,12 +1,25 @@
 from __future__ import annotations
 
 import asyncio
-import json
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from webscoper.api.approvals import decide_approval as decide_approval_for_service
+from webscoper.api.artifacts import (
+    ARTIFACT_ALLOWLIST,
+    list_existing_artifacts,
+    list_task_artifacts,
+    read_task_artifact,
+    write_task_artifacts,
+)
+from webscoper.api.resume import (
+    context_from_pending,
+    resume_after_approval as resume_after_approval_for_service,
+    resume_langgraph_after_approval as resume_langgraph_after_approval_for_service,
+    run_langgraph_workflow,
+)
+from webscoper.api.runner_factory import build_api_task, build_handler
 from webscoper.api.schemas import (
     ApprovalDecisionResponse,
     TaskArtifactContentResponse,
@@ -15,76 +28,22 @@ from webscoper.api.schemas import (
     TaskCreateResponse,
     TaskStatusResponse,
 )
-from webscoper.runtime.approvals import ApprovalStore, ApprovalStoreError
-from webscoper.runtime.context import WebAgentContext
-from webscoper.runtime.evidence import EvidenceStore
+from webscoper.api.task_state import (
+    TaskState as _TaskState,
+    status_from_context_state,
+    status_from_transcript,
+)
+from webscoper.runtime.approvals import ApprovalStore
 from webscoper.runtime.events import (
     InMemoryTaskEventBus,
     TaskEventStore,
     TaskEventSubscription,
 )
-from webscoper.runtime.execution import (
-    WebAgentExecutionHandler,
-    _persist_evidence_and_report,
-)
-from webscoper.runtime.execution_loop import AgentExecutionLoop
 from webscoper.runtime.pending import PendingApprovalManager
-from webscoper.runtime.reminders import RuntimeReminderStore
-from webscoper.runtime.task_runner import (
-    build_task_spec,
-    llm_config_path,
-)
-from webscoper.runtime.tool_executor import LocalToolExecutor
-from webscoper.runtime.trace import TraceRecorder
-from webscoper.runtime.transcript import TranscriptStore
-from webscoper.schemas.context import RuntimeState, WebAgentContextSnapshot
 from webscoper.schemas.events import TaskEvent, TaskEventKind
-from webscoper.schemas.plan import ExecutionPlan, PlannedStep
 from webscoper.schemas.risk import ApprovalRequest, TaskResumeResult
 from webscoper.schemas.task import TaskSpec
-from webscoper.schemas.tool_call import ToolCall
 from webscoper.schemas.workflow import LangGraphResumeResult
-from webscoper.tools.browser_tools import StatefulBrowserToolRuntime
-from webscoper.tools.registry import create_default_tool_registry
-
-
-ARTIFACT_ALLOWLIST = {
-    "events.jsonl",
-    "recovery.jsonl",
-    "approvals.jsonl",
-    "pending.jsonl",
-    "risk_report.json",
-    "trace.jsonl",
-    "transcript.jsonl",
-    "evidence.jsonl",
-    "compact_context.json",
-    "compact_summary.md",
-    "final_report.md",
-    "review.json",
-    "review_summary.md",
-    "llm_review.json",
-    "revision_plan.json",
-    "revised_report.md",
-    "final_review.json",
-    "revise_loop.json",
-    "prompt_preview.md",
-    "prompt_context.json",
-    "workflow_state.json",
-    "langgraph_interrupts.jsonl",
-    "score.json",
-    "report.md",
-}
-
-
-@dataclass
-class _TaskState:
-    task_id: str
-    status: str
-    run_dir: Path
-    workflow: str = "native"
-    thread_id: str | None = None
-    artifacts: list[str] = field(default_factory=list)
-    error: str | None = None
 
 
 class TaskService:
@@ -104,36 +63,8 @@ class TaskService:
         task_id = self._new_task_id()
         run_dir = self._run_dir(task_id)
         run_dir.mkdir(parents=True, exist_ok=True)
-        reminders = RuntimeReminderStore()
-        if request.reminder:
-            reminders.add(request.reminder, source="api")
-
-        handler = WebAgentExecutionHandler(
-            output_root=self.runs_dir,
-            workspace=Path(request.workspace) if request.workspace else None,
-            runtime_reminders=reminders,
-            planner_mode=request.planner,
-            model_override=request.model,
-            repair_attempts=request.repair_attempts,
-            reviewer_mode=request.reviewer,
-            revise_attempts=request.revise_attempts,
-            llm_config_path=llm_config_path(
-                request.planner,
-                request.llm_config,
-                reviewer=request.reviewer,
-            ),
-            llm_provider=request.llm_provider,
-            run_id_override=task_id,
-            event_sink=self._make_event_sink(task_id),
-            approval_store=self.approval_store,
-            pending_manager=self.pending_manager,
-        )
-        task = build_task_spec(
-            url=request.url,
-            click=request.click,
-            expect=request.expect,
-            task_id=task_id,
-        )
+        handler = build_handler(self, task_id, request)
+        task = build_api_task(task_id, request)
 
         try:
             if request.workflow == "native":
@@ -145,13 +76,13 @@ class TaskService:
             context = handler.last_context
             if context is None:
                 raise RuntimeError("Task completed without run context.")
-            status = _status_from_context_state(context.state.status)
+            status = status_from_context_state(context.state.status)
             self._write_task_artifacts(context.run_id)
             return TaskCreateResponse(
                 task_id=context.run_id,
                 status=status,
                 run_dir=str(context.run_dir),
-                artifacts=self._list_existing_artifacts(context.run_dir),
+                artifacts=list_existing_artifacts(context.run_dir),
                 error=context.state.error_message if status != "succeeded" else None,
             )
         except Exception as exc:
@@ -159,7 +90,7 @@ class TaskService:
             failed_run_dir = context.run_dir if context is not None else run_dir
             failed_task_id = context.run_id if context is not None else task_id
             status = (
-                _status_from_context_state(context.state.status)
+                status_from_context_state(context.state.status)
                 if context is not None
                 else "failed"
             )
@@ -168,7 +99,7 @@ class TaskService:
                 task_id=failed_task_id,
                 status=status if status != "succeeded" else "failed",
                 run_dir=str(failed_run_dir),
-                artifacts=self._list_existing_artifacts(failed_run_dir),
+                artifacts=list_existing_artifacts(failed_run_dir),
                 error=str(exc),
             )
 
@@ -204,7 +135,7 @@ class TaskService:
     def get_task_status(self, task_id: str) -> TaskStatusResponse:
         if task_id in self._task_states:
             state = self._task_states[task_id]
-            state.artifacts = self._list_existing_artifacts(state.run_dir)
+            state.artifacts = list_existing_artifacts(state.run_dir)
             return TaskStatusResponse(
                 task_id=task_id,
                 status=state.status,
@@ -217,40 +148,25 @@ class TaskService:
         if not run_dir.exists() or not run_dir.is_dir():
             return TaskStatusResponse(task_id=task_id, status="not_found")
 
-        status, error = self._status_from_transcript(run_dir)
+        status, error = status_from_transcript(run_dir)
         return TaskStatusResponse(
             task_id=task_id,
             status=status,
             run_dir=str(run_dir),
-            artifacts=self._list_existing_artifacts(run_dir),
+            artifacts=list_existing_artifacts(run_dir),
             error=error,
         )
 
     def list_artifacts(self, task_id: str) -> TaskArtifactListResponse:
         run_dir = self._existing_run_dir(task_id)
-        return TaskArtifactListResponse(
-            task_id=task_id,
-            artifacts=self._list_existing_artifacts(run_dir),
-        )
+        return list_task_artifacts(self, task_id)
 
     def read_artifact(
         self,
         task_id: str,
         artifact_name: str,
     ) -> TaskArtifactContentResponse:
-        if artifact_name not in ARTIFACT_ALLOWLIST:
-            raise ValueError(f"Artifact is not allowed: {artifact_name}")
-        run_dir = self._existing_run_dir(task_id)
-        artifact_path = (run_dir / artifact_name).resolve()
-        if artifact_path.parent != run_dir.resolve():
-            raise ValueError("Artifact path escapes task run directory.")
-        if not artifact_path.exists() or not artifact_path.is_file():
-            raise FileNotFoundError(f"Artifact not found: {artifact_name}")
-        return TaskArtifactContentResponse(
-            task_id=task_id,
-            artifact_name=artifact_name,
-            content=artifact_path.read_text(encoding="utf-8"),
-        )
+        return read_task_artifact(self, task_id, artifact_name)
 
     def get_events(self, task_id: str) -> list[TaskEvent]:
         return self.event_store.list_events(task_id)
@@ -267,36 +183,8 @@ class TaskService:
         task_id: str,
         request: TaskCreateRequest,
     ) -> None:
-        reminders = RuntimeReminderStore()
-        if request.reminder:
-            reminders.add(request.reminder, source="api")
-
-        handler = WebAgentExecutionHandler(
-            output_root=self.runs_dir,
-            workspace=Path(request.workspace) if request.workspace else None,
-            runtime_reminders=reminders,
-            planner_mode=request.planner,
-            model_override=request.model,
-            repair_attempts=request.repair_attempts,
-            reviewer_mode=request.reviewer,
-            revise_attempts=request.revise_attempts,
-            llm_config_path=llm_config_path(
-                request.planner,
-                request.llm_config,
-                reviewer=request.reviewer,
-            ),
-            llm_provider=request.llm_provider,
-            run_id_override=task_id,
-            event_sink=self._make_event_sink(task_id),
-            approval_store=self.approval_store,
-            pending_manager=self.pending_manager,
-        )
-        task = build_task_spec(
-            url=request.url,
-            click=request.click,
-            expect=request.expect,
-            task_id=task_id,
-        )
+        handler = build_handler(self, task_id, request)
+        task = build_api_task(task_id, request)
 
         state = self._task_states[task_id]
         try:
@@ -313,7 +201,7 @@ class TaskService:
                 raise ValueError(f"Unsupported workflow backend: {request.workflow}")
             context = handler.last_context
             state.status = (
-                _status_from_context_state(context.state.status)
+                status_from_context_state(context.state.status)
                 if context is not None
                 else "succeeded"
             )
@@ -325,7 +213,7 @@ class TaskService:
         except Exception as exc:
             context = handler.last_context
             state.status = (
-                _status_from_context_state(context.state.status)
+                status_from_context_state(context.state.status)
                 if context is not None
                 else "failed"
             )
@@ -333,20 +221,8 @@ class TaskService:
                 state.status = "failed"
             state.error = str(exc)
         finally:
-            state.artifacts = self._list_existing_artifacts(state.run_dir)
-            try:
-                self.event_store.write_jsonl(task_id, state.run_dir / "events.jsonl")
-                self.approval_store.write_jsonl_for_task(
-                    task_id,
-                    state.run_dir / "approvals.jsonl",
-                )
-                self.approval_store.write_risk_report(
-                    task_id,
-                    state.run_dir / "risk_report.json",
-                )
-                self.pending_manager.write_jsonl(task_id, state.run_dir / "pending.jsonl")
-            except Exception:
-                pass
+            state.artifacts = list_existing_artifacts(state.run_dir)
+            write_task_artifacts(self, task_id)
 
     def _make_event_sink(self, task_id: str):
         def sink(
@@ -401,347 +277,26 @@ class TaskService:
         decided_by: str,
         reason: str | None = None,
     ) -> ApprovalDecisionResponse:
-        try:
-            approval = self.approval_store.decide(
-                approval_id,
-                approved=approved,
-                decided_by=decided_by,
-                reason=reason,
-            )
-        except ApprovalStoreError as exc:
-            raise ValueError(str(exc)) from exc
-
-        run_dir = self._run_dir(approval.task_id)
-        resume_result: TaskResumeResult | LangGraphResumeResult | None = None
-        try:
-            self.approval_store.write_jsonl_for_task(
-                approval.task_id,
-                run_dir / "approvals.jsonl",
-            )
-            self.approval_store.write_risk_report(
-                approval.task_id,
-                run_dir / "risk_report.json",
-            )
-            self._publish_task_event(
-                approval.task_id,
-                "approval_decided",
-                "Approval decision recorded",
-                {"approval_request": approval.model_dump(mode="json")},
-            )
-        except Exception:
-            pass
-
-        if approved:
-            workflow = self._workflow_for_task(approval.task_id)
-            if workflow == "langgraph":
-                resume_result = self.resume_langgraph_after_approval(
-                    approval_id,
-                    approval.decision,
-                )
-            else:
-                resume_result = asyncio.run(self.resume_after_approval(approval_id))
-        else:
-            pending = self.pending_manager.pop_by_approval_id(approval_id)
-            if pending is not None:
-                self.pending_manager.write_jsonl(
-                    approval.task_id,
-                    run_dir / "pending.jsonl",
-                )
-            self._set_task_state(
-                approval.task_id,
-                "rejected",
-                "Approval rejected; task will not resume.",
-            )
-            self._publish_task_event(
-                approval.task_id,
-                "task_rejected",
-                "Approval rejected; task will not resume",
-                {"approval_request": approval.model_dump(mode="json")},
-            )
-            resume_result = TaskResumeResult(
-                task_id=approval.task_id,
-                approval_id=approval_id,
-                resumed=False,
-                status="rejected",
-                message="Approval rejected; task will not resume.",
-                error=None,
-            )
-        return ApprovalDecisionResponse(approval=approval, resume_result=resume_result)
+        return decide_approval_for_service(
+            self,
+            approval_id=approval_id,
+            approved=approved,
+            decided_by=decided_by,
+            reason=reason,
+        )
 
     def resume_langgraph_after_approval(
         self,
         approval_id: str,
         decision,
     ) -> LangGraphResumeResult:
-        approval = self.approval_store.get(approval_id)
-        if approval is None:
-            return LangGraphResumeResult(
-                task_id="unknown",
-                approval_id=approval_id,
-                resumed=False,
-                status="failed",
-                message="Approval request not found.",
-                error=f"Approval request not found: {approval_id}",
-            )
-        if decision is None:
-            return LangGraphResumeResult(
-                task_id=approval.task_id,
-                approval_id=approval_id,
-                resumed=False,
-                status="failed",
-                message="Approval decision missing.",
-                error="Approval decision missing.",
-            )
-
-        task_id = approval.task_id
-        state = self._task_states.get(task_id)
-        thread_id = state.thread_id if state is not None else task_id
-        adapter = self._langgraph_adapters.get(task_id)
-        if adapter is None:
-            result = LangGraphResumeResult(
-                task_id=task_id,
-                approval_id=approval_id,
-                resumed=False,
-                status="failed",
-                message="No LangGraph adapter found for approval.",
-                error="LangGraph interrupted tasks can only resume in the current process.",
-                metadata={"thread_id": thread_id},
-            )
-            self._set_task_state(task_id, "failed", result.error)
-            self._publish_task_event(
-                task_id,
-                "langgraph_resume_failed",
-                "LangGraph resume failed",
-                result.model_dump(mode="json"),
-            )
-            self._publish_task_event(
-                task_id,
-                "task_failed",
-                "Task failed while resuming LangGraph workflow",
-                result.model_dump(mode="json"),
-            )
-            return result
-
-        resume_payload = adapter.approval_bridge.build_resume_payload(
-            approval_id=approval_id,
-            approved=decision.approved,
-            decided_by=decision.decided_by,
-            reason=decision.reason,
-        )
-        self._set_task_state(task_id, "resuming", None)
-        self._publish_task_event(
-            task_id,
-            "langgraph_resumed",
-            "LangGraph resume command submitted",
-            {
-                "approval_id": approval_id,
-                "thread_id": thread_id,
-                "resume_payload": resume_payload.model_dump(mode="json"),
-            },
-        )
-        pending = self.pending_manager.get_by_approval_id(approval_id)
-        self._publish_task_event(
-            task_id,
-            "task_resumed",
-            "Task resumed after approval",
-            {
-                "approval_id": approval_id,
-                "thread_id": thread_id,
-                "pending_tool_call": pending.model_dump(mode="json")
-                if pending is not None
-                else None,
-            },
-        )
-
-        result = adapter.resume(
-            task_id=task_id,
-            thread_id=thread_id or task_id,
-            resume_payload=resume_payload,
-        )
-        status = result.status
-        self._set_task_state(task_id, status, result.error)
-        self._write_task_artifacts(task_id)
-        if result.resumed:
-            self._langgraph_adapters.pop(task_id, None)
-        else:
-            self._publish_task_event(
-                task_id,
-                "langgraph_resume_failed",
-                "LangGraph resume failed",
-                result.model_dump(mode="json"),
-            )
-            self._publish_task_event(
-                task_id,
-                "task_failed",
-                "Task failed while resuming LangGraph workflow",
-                result.model_dump(mode="json"),
-            )
-        return result
+        return resume_langgraph_after_approval_for_service(self, approval_id, decision)
 
     async def resume_after_approval(self, approval_id: str) -> TaskResumeResult:
-        pending = self.pending_manager.pop_by_approval_id(approval_id)
-        approval = self.approval_store.get(approval_id)
-        if approval is None:
-            return TaskResumeResult(
-                task_id="unknown",
-                approval_id=approval_id,
-                resumed=False,
-                status="failed",
-                message="Approval request not found.",
-                error=f"Approval request not found: {approval_id}",
-            )
-        task_id = approval.task_id
-        run_dir = self._run_dir(task_id)
-        if pending is None:
-            return TaskResumeResult(
-                task_id=task_id,
-                approval_id=approval_id,
-                resumed=False,
-                status=self.get_task_status(task_id).status,
-                message="No pending tool call found for approval.",
-                error=None,
-            )
-
-        self._set_task_state(task_id, "resuming", None)
-        self._publish_task_event(
-            task_id,
-            "task_resumed",
-            "Task resumed after approval",
-            {"approval_id": approval_id, "pending_tool_call": pending.model_dump(mode="json")},
-        )
-
-        try:
-            context = self._context_from_pending(pending)
-            browser_runtime = StatefulBrowserToolRuntime(
-                trace_recorder=context.trace_recorder,
-            )
-            tool_executor = LocalToolExecutor(
-                tool_registry=create_default_tool_registry(),
-                browser_runtime=browser_runtime,
-                approval_store=self.approval_store,
-                pending_manager=self.pending_manager,
-                event_sink=self._make_event_sink(task_id),
-            )
-            execution_loop = AgentExecutionLoop(
-                tool_executor=tool_executor,
-                event_sink=self._make_event_sink(task_id),
-                approval_override_id=approval_id,
-            )
-            await browser_runtime.start()
-            try:
-                resume_url = _resume_url_from_pending(pending)
-                if resume_url is not None:
-                    await browser_runtime.open_observe(resume_url)
-                context.transcript_store.append(
-                    "task_resumed",
-                    {
-                        "approval_id": approval_id,
-                        "pending_tool_call": pending.model_dump(mode="json"),
-                    },
-                )
-                plan = ExecutionPlan(
-                    plan_id=f"resume_{pending.pending_id}",
-                    task_id=context.task.task_id,
-                    steps=[
-                        PlannedStep(
-                            step_id="resume_step_001",
-                            tool_call=ToolCall(
-                                call_id=pending.tool_call_id or "resume_call_001",
-                                tool_id=pending.tool_name,
-                                arguments=pending.arguments,
-                                reason=pending.reason,
-                            ),
-                            reason=pending.reason,
-                            expected_outcome="Approved pending tool call completes.",
-                        )
-                    ],
-                )
-                loop_result = await execution_loop.run(
-                    context,
-                    plan,
-                    record_plan_built=False,
-                )
-                if loop_result.status != "success":
-                    raise RuntimeError(
-                        f"{loop_result.error_type or 'RESUME_FAILED'}: "
-                        f"{loop_result.error_message or 'Resume failed.'}"
-                    )
-                observation = browser_runtime.last_observation
-                if observation is None:
-                    raise RuntimeError("Resume completed without a final observation.")
-                context.state.status = "completed"
-                _persist_evidence_and_report(
-                    context,
-                    observation,
-                    self._make_event_sink(task_id),
-                )
-                context.transcript_store.append(
-                    "execution_completed",
-                    {
-                        "task_id": context.task.task_id,
-                        "run_id": context.run_id,
-                        "run_dir": str(context.run_dir),
-                        "state": context.state.model_dump(mode="json"),
-                    },
-                )
-                self._set_task_state(task_id, "succeeded", None)
-                self._write_task_artifacts(task_id)
-                self._publish_task_event(
-                    task_id,
-                    "task_finished",
-                    "Task resumed and finished",
-                    {"approval_id": approval_id, "status": "succeeded"},
-                )
-                return TaskResumeResult(
-                    task_id=task_id,
-                    approval_id=approval_id,
-                    resumed=True,
-                    status="succeeded",
-                    message="Task resumed and finished.",
-                    error=None,
-                )
-            finally:
-                await browser_runtime.close()
-        except Exception as exc:
-            self._set_task_state(task_id, "failed", str(exc))
-            self._write_task_artifacts(task_id)
-            self._publish_task_event(
-                task_id,
-                "resume_failed",
-                "Task resume failed",
-                {"approval_id": approval_id, "error": str(exc)},
-            )
-            self._publish_task_event(
-                task_id,
-                "task_failed",
-                "Task failed while resuming",
-                {"approval_id": approval_id, "error": str(exc)},
-            )
-            return TaskResumeResult(
-                task_id=task_id,
-                approval_id=approval_id,
-                resumed=False,
-                status="failed",
-                message="Task resume failed.",
-                error=str(exc),
-            )
+        return await resume_after_approval_for_service(self, approval_id)
 
     def _context_from_pending(self, pending) -> WebAgentContext:
-        snapshot_payload = pending.metadata.get("context_snapshot")
-        snapshot = WebAgentContextSnapshot.model_validate(snapshot_payload)
-        task = TaskSpec.model_validate(snapshot.task.model_dump(mode="json"))
-        run_dir = Path(snapshot.trace.run_dir)
-        run_id = snapshot.trace.run_id
-        return WebAgentContext(
-            task=task,
-            run_id=run_id,
-            run_dir=run_dir,
-            trace_recorder=TraceRecorder(run_dir=run_dir, run_id=run_id),
-            transcript_store=TranscriptStore(run_dir=run_dir, run_id=run_id),
-            evidence_store=EvidenceStore(run_dir / "evidence.jsonl"),
-            version=snapshot.version,
-            state=RuntimeState(status="resuming"),
-        )
+        return context_from_pending(pending)
 
     def _set_task_state(
         self,
@@ -758,23 +313,10 @@ class TaskService:
             self._task_states[task_id] = state
         state.status = status
         state.error = error
-        state.artifacts = self._list_existing_artifacts(state.run_dir)
+        state.artifacts = list_existing_artifacts(state.run_dir)
 
     def _write_task_artifacts(self, task_id: str) -> None:
-        run_dir = self._run_dir(task_id)
-        try:
-            self.event_store.write_jsonl(task_id, run_dir / "events.jsonl")
-            self.approval_store.write_jsonl_for_task(task_id, run_dir / "approvals.jsonl")
-            self.approval_store.write_risk_report(task_id, run_dir / "risk_report.json")
-            self.pending_manager.write_jsonl(task_id, run_dir / "pending.jsonl")
-            adapter = self._langgraph_adapters.get(task_id)
-            if adapter is not None:
-                adapter.approval_bridge.write_jsonl_for_task(
-                    task_id,
-                    run_dir / "langgraph_interrupts.jsonl",
-                )
-        except Exception:
-            pass
+        write_task_artifacts(self, task_id)
 
     def _run_langgraph_workflow(
         self,
@@ -782,15 +324,7 @@ class TaskService:
         task: TaskSpec,
         task_id: str,
     ):
-        try:
-            from webscoper.workflows.langgraph_adapter import LangGraphWorkflowAdapter
-        except ImportError as exc:
-            raise RuntimeError(
-                "LangGraph workflow requested but langgraph is not installed"
-            ) from exc
-        adapter = LangGraphWorkflowAdapter(handler)
-        self._langgraph_adapters[task_id] = adapter
-        return adapter.run(task)
+        return run_langgraph_workflow(self, handler, task, task_id)
 
     def _workflow_for_task(self, task_id: str) -> str:
         state = self._task_states.get(task_id)
@@ -812,60 +346,7 @@ class TaskService:
         return run_dir
 
     def _list_existing_artifacts(self, run_dir: Path) -> list[str]:
-        return [
-            artifact
-            for artifact in sorted(ARTIFACT_ALLOWLIST)
-            if (run_dir / artifact).is_file()
-        ]
+        return list_existing_artifacts(run_dir)
 
     def _status_from_transcript(self, run_dir: Path) -> tuple[str, str | None]:
-        transcript_path = run_dir / "transcript.jsonl"
-        if not transcript_path.exists():
-            return "failed", "Missing transcript.jsonl"
-
-        status = "failed"
-        error: str | None = None
-        for line in transcript_path.read_text(encoding="utf-8").splitlines():
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            event_type = event.get("event_type")
-            if event_type == "execution_completed":
-                status = "succeeded"
-                error = None
-            elif event_type == "execution_failed":
-                status = "failed"
-                payload = event.get("payload")
-                if isinstance(payload, dict):
-                    state = payload.get("state")
-                    if isinstance(state, dict):
-                        error = state.get("error_message")
-                        state_status = state.get("status")
-                        if state_status in {
-                            "requires_approval",
-                            "blocked",
-                            "rejected",
-                        }:
-                            status = state_status
-        return status, error
-
-
-def _status_from_context_state(state: str) -> str:
-    if state == "completed":
-        return "succeeded"
-    if state in {"requires_approval", "resuming", "blocked", "rejected", "failed"}:
-        return state
-    return "succeeded"
-
-
-def _resume_url_from_pending(pending) -> str | None:
-    page_observation = pending.metadata.get("page_observation")
-    if isinstance(page_observation, dict) and page_observation.get("url"):
-        return str(page_observation["url"])
-    snapshot = pending.metadata.get("context_snapshot")
-    if isinstance(snapshot, dict):
-        task = snapshot.get("task")
-        if isinstance(task, dict) and task.get("target_url"):
-            return str(task["target_url"])
-    return None
+        return status_from_transcript(run_dir)

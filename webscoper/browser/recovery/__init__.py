@@ -1,0 +1,1 @@
+from webscoper.browser.recovery.manager import RecoveryManager, default_observe_with_screenshot
