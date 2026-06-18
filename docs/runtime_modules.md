@@ -55,6 +55,8 @@ Flat modules such as `webscoper.runtime.evidence`, `webscoper.runtime.llm_client
 
 `webscoper/workflows/langgraph_adapter.py` is kept as the public compatibility entry. LangGraph orchestration internals live under `webscoper/workflows/langgraph_backend/`, split into graph construction, node implementations, resume handling, artifact/state writing, and workflow event helpers.
 
+Workflow regression eval lives in `webscoper/eval/workflow_eval.py` and compares native and LangGraph workflow backends across the same local fixture tasks. It records status, artifacts, review, evidence, recovery, approval, risk, and event behavior without changing runtime semantics.
+
 ## Browser Recovery Boundary
 
 `webscoper/browser/recovery/` is split by recovery responsibility:

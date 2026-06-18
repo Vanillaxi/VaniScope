@@ -82,3 +82,64 @@ class ReviewerEvalSummary(BaseModel):
     pass_rate: float
     average_review_score: float
     case_results: list[ReviewerEvalCaseResult] = Field(default_factory=list)
+
+
+class WorkflowEvalRequest(BaseModel):
+    url: str
+    click: str | None = None
+    expect: str | None = None
+    planner: str = "deterministic"
+    reviewer: str = "deterministic"
+    revise_attempts: int = 0
+    workspace: str | None = None
+    reminder: str | None = None
+    repair_attempts: int = 0
+
+
+class WorkflowEvalExpected(BaseModel):
+    status: str | None = None
+    required_artifacts: list[str] = Field(default_factory=list)
+    review_passed: bool | None = None
+    min_review_score: float | None = None
+    expected_event_kinds: list[str] = Field(default_factory=list)
+    expected_risk_status: str | None = None
+    allow_backend_differences: list[str] = Field(default_factory=list)
+
+
+class WorkflowEvalCase(BaseModel):
+    case_id: str
+    description: str
+    request: WorkflowEvalRequest
+    expected: WorkflowEvalExpected = Field(default_factory=WorkflowEvalExpected)
+
+
+class WorkflowBackendRunResult(BaseModel):
+    backend: str
+    task_id: str | None = None
+    status: str
+    run_dir: str | None = None
+    artifacts: list[str] = Field(default_factory=list)
+    review_passed: bool | None = None
+    review_score: float | None = None
+    event_kinds: list[str] = Field(default_factory=list)
+    error: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkflowComparisonResult(BaseModel):
+    case_id: str
+    passed: bool
+    native: WorkflowBackendRunResult
+    langgraph: WorkflowBackendRunResult
+    differences: list[str] = Field(default_factory=list)
+    missing_artifacts: dict[str, list[str]] = Field(default_factory=dict)
+    summary: str
+
+
+class WorkflowEvalSummary(BaseModel):
+    total: int
+    passed: int
+    failed: int
+    pass_rate: float
+    case_results: list[WorkflowComparisonResult] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)

@@ -2,7 +2,7 @@
 
 [中文说明](README_CN.md)
 
-VaniScope / Web-Scoper is a Python browser-agent runtime for local and fixture-based web task execution. It includes browser observation and click intent, deterministic and LLM-backed planning modes, evidence/report artifacts, reviewer and revise-loop support, FastAPI task APIs, risk-gated approval pause/resume, context compaction, and native/LangGraph workflow backends.
+VaniScope / Web-Scoper is a Python browser-agent runtime for local and fixture-based web task execution. It includes browser observation and click intent, deterministic and LLM-backed planning modes, evidence/report artifacts, reviewer and revise-loop support, FastAPI task APIs, risk-gated approval pause/resume, context compaction, native/LangGraph workflow backends, and regression evals for backend behavior.
 
 The runtime package is split by responsibility into `runtime/execution`, `runtime/artifacts`, `runtime/llm`, `runtime/prompt`, `runtime/review`, and `runtime/safety`. Old flat runtime import paths are temporarily kept as a compatibility layer.
 
@@ -38,7 +38,7 @@ webscoper/
   browser/       # Browser Runtime: Playwright session, observation, targeting, effects, recovery, risk signals
   runtime/       # Agent Runtime: execution, artifacts, LLM, prompt, review, safety compatibility layer
   api/           # FastAPI Task API, async tasks, approvals, SSE event stream, artifact access
-  eval/          # Browser, planner, and reviewer eval harnesses
+  eval/          # Browser, planner, reviewer, and workflow regression eval harnesses
   workflows/     # Native workflows and LangGraph backend orchestration modules
   tools/         # Tool registry and browser tool definitions
   schemas/       # Shared Pydantic schemas
@@ -49,6 +49,7 @@ scripts/
   run_browser_eval.py
   run_planner_eval.py
   run_reviewer_eval.py
+  run_workflow_eval.py
   smoke_open_page.py
 
 configs/
@@ -81,3 +82,13 @@ tests/
 ## Configuration
 
 Use `configs/llm.example.toml` as the committed template. Put local provider settings in `configs/llm.local.toml`; local config files and generated run/eval artifacts are ignored by git.
+
+## Workflow Eval
+
+Workflow regression eval compares native and LangGraph workflow backends across the same local task cases without real network or real LLM calls.
+
+```bash
+uv run python scripts/run_workflow_eval.py \
+  --cases tests/fixtures/workflow_eval_cases.json \
+  --output-dir eval_results/workflow_eval_local
+```

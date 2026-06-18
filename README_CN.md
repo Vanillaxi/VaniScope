@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-VaniScope / Web-Scoper 是一个 Python 浏览器 Agent Runtime，用于本地和 fixture 驱动的网页任务执行。当前包含浏览器观察与 click intent、确定性和 LLM planner 模式、证据与报告 artifact、Reviewer 与 revise loop、FastAPI Task API、Risk Gate 审批暂停/恢复、Context Compaction，以及 native / LangGraph workflow backend。
+VaniScope / Web-Scoper 是一个 Python 浏览器 Agent Runtime，用于本地和 fixture 驱动的网页任务执行。当前包含浏览器观察与 click intent、确定性和 LLM planner 模式、证据与报告 artifact、Reviewer 与 revise loop、FastAPI Task API、Risk Gate 审批暂停/恢复、Context Compaction、native / LangGraph workflow backend，以及 backend 行为回归评测。
 
 Runtime 现在按职责拆成 `runtime/execution`、`runtime/artifacts`、`runtime/llm`、`runtime/prompt`、`runtime/review` 和 `runtime/safety`。旧 flat import 路径暂时保留为 compatibility layer。
 
@@ -41,7 +41,7 @@ webscoper/
   browser/       # Browser Runtime：Playwright session、观察、定位、效果验证、恢复、风险信号
   runtime/       # Agent Runtime：execution、artifacts、LLM、prompt、review、safety 兼容层
   api/           # FastAPI Task API、异步任务、审批、SSE 事件流、artifact 访问
-  eval/          # Browser / Planner / Reviewer eval harness
+  eval/          # Browser / Planner / Reviewer / Workflow regression eval harness
   workflows/     # Native workflow 与 LangGraph backend 编排模块
   tools/         # Tool registry 与 browser tools
   schemas/       # 共享 Pydantic schema
@@ -52,6 +52,7 @@ scripts/
   run_browser_eval.py
   run_planner_eval.py
   run_reviewer_eval.py
+  run_workflow_eval.py
   smoke_open_page.py
 
 configs/
@@ -84,3 +85,13 @@ tests/
 ## 配置
 
 `configs/llm.example.toml` 是可提交的配置模板。本地 provider 配置放在 `configs/llm.local.toml`；本地配置文件和生成的 run/eval artifact 会被 git 忽略。
+
+## Workflow Eval
+
+Workflow regression eval 会在同一组本地任务 case 上对比 native 与 LangGraph workflow backend，不访问真实网络，也不调用真实 LLM。
+
+```bash
+uv run python scripts/run_workflow_eval.py \
+  --cases tests/fixtures/workflow_eval_cases.json \
+  --output-dir eval_results/workflow_eval_local
+```

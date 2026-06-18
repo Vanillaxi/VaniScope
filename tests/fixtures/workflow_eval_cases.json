@@ -1,0 +1,288 @@
+[
+  {
+    "case_id": "basic_click",
+    "description": "Basic click intent should succeed in both native and langgraph workflows.",
+    "request": {
+      "url": "tests/fixtures/mock_site/basic.html",
+      "click": "Quickstart",
+      "expect": "pip install playwright",
+      "planner": "deterministic",
+      "reviewer": "deterministic",
+      "revise_attempts": 0,
+      "workspace": "tests/fixtures/workspace",
+      "reminder": "This is a workflow regression eval case."
+    },
+    "expected": {
+      "status": "succeeded",
+      "required_artifacts": [
+        "trace.jsonl",
+        "transcript.jsonl",
+        "evidence.jsonl",
+        "final_report.md",
+        "review.json",
+        "compact_context.json"
+      ],
+      "review_passed": true,
+      "min_review_score": 0.8,
+      "expected_event_kinds": [
+        "task_loaded",
+        "plan_built",
+        "execution_completed",
+        "review_completed",
+        "compaction_written"
+      ],
+      "allow_backend_differences": [
+        "workflow_started",
+        "workflow_state.json"
+      ]
+    }
+  },
+  {
+    "case_id": "fake_llm_click",
+    "description": "Fake LLM planner should produce the same successful workflow outcome.",
+    "request": {
+      "url": "tests/fixtures/mock_site/basic.html",
+      "click": "Quickstart",
+      "expect": "pip install playwright",
+      "planner": "fake_llm",
+      "reviewer": "deterministic",
+      "revise_attempts": 0,
+      "workspace": "tests/fixtures/workspace",
+      "reminder": "Use only local fixture content."
+    },
+    "expected": {
+      "status": "succeeded",
+      "required_artifacts": [
+        "trace.jsonl",
+        "transcript.jsonl",
+        "evidence.jsonl",
+        "final_report.md",
+        "review.json",
+        "compact_context.json"
+      ],
+      "review_passed": true,
+      "min_review_score": 0.8,
+      "expected_event_kinds": [
+        "llm_request",
+        "llm_response",
+        "execution_completed",
+        "review_completed"
+      ],
+      "allow_backend_differences": [
+        "workflow_started",
+        "workflow_state.json"
+      ]
+    }
+  },
+  {
+    "case_id": "lazy_button_recovery",
+    "description": "Lazy button recovery should converge in both workflow backends.",
+    "request": {
+      "url": "tests/fixtures/mock_site/lazy_button.html",
+      "click": "Quickstart",
+      "expect": "pip install playwright",
+      "planner": "deterministic",
+      "reviewer": "deterministic",
+      "revise_attempts": 0,
+      "workspace": "tests/fixtures/workspace",
+      "reminder": "Exercise local recovery only."
+    },
+    "expected": {
+      "status": "succeeded",
+      "required_artifacts": [
+        "trace.jsonl",
+        "transcript.jsonl",
+        "evidence.jsonl",
+        "final_report.md",
+        "review.json",
+        "compact_context.json"
+      ],
+      "review_passed": true,
+      "expected_event_kinds": [
+        "execution_completed",
+        "review_completed"
+      ],
+      "allow_backend_differences": [
+        "workflow_started",
+        "workflow_state.json"
+      ]
+    }
+  },
+  {
+    "case_id": "modal_overlay_recovery",
+    "description": "Modal overlay recovery should dismiss the local overlay and complete.",
+    "request": {
+      "url": "tests/fixtures/mock_site/modal_overlay.html",
+      "click": "Quickstart",
+      "expect": "pip install playwright",
+      "planner": "deterministic",
+      "reviewer": "deterministic",
+      "revise_attempts": 0,
+      "workspace": "tests/fixtures/workspace",
+      "reminder": "Exercise modal overlay recovery."
+    },
+    "expected": {
+      "status": "succeeded",
+      "required_artifacts": [
+        "trace.jsonl",
+        "transcript.jsonl",
+        "evidence.jsonl",
+        "final_report.md",
+        "review.json",
+        "compact_context.json"
+      ],
+      "review_passed": true,
+      "expected_event_kinds": [
+        "execution_completed",
+        "review_completed"
+      ],
+      "allow_backend_differences": [
+        "workflow_started",
+        "workflow_state.json"
+      ]
+    }
+  },
+  {
+    "case_id": "no_effect_retry_recovery",
+    "description": "No-effect click recovery should retry and verify the expected content.",
+    "request": {
+      "url": "tests/fixtures/mock_site/no_effect_click.html",
+      "click": "Quickstart",
+      "expect": "pip install playwright",
+      "planner": "deterministic",
+      "reviewer": "deterministic",
+      "revise_attempts": 0,
+      "workspace": "tests/fixtures/workspace",
+      "reminder": "Exercise no-effect retry recovery."
+    },
+    "expected": {
+      "status": "succeeded",
+      "required_artifacts": [
+        "trace.jsonl",
+        "transcript.jsonl",
+        "evidence.jsonl",
+        "final_report.md",
+        "review.json",
+        "compact_context.json"
+      ],
+      "review_passed": true,
+      "expected_event_kinds": [
+        "execution_completed",
+        "review_completed"
+      ],
+      "allow_backend_differences": [
+        "workflow_started",
+        "workflow_state.json"
+      ]
+    }
+  },
+  {
+    "case_id": "risk_submit_requires_approval",
+    "description": "Submit action should pause for approval in both workflow backends.",
+    "request": {
+      "url": "tests/fixtures/mock_site/risk_actions.html",
+      "click": "Submit",
+      "expect": "Submitted successfully",
+      "planner": "deterministic",
+      "reviewer": "deterministic",
+      "revise_attempts": 0,
+      "workspace": "tests/fixtures/workspace",
+      "reminder": "Do not auto-approve this eval case."
+    },
+    "expected": {
+      "status": "requires_approval",
+      "required_artifacts": [
+        "trace.jsonl",
+        "transcript.jsonl",
+        "approvals.jsonl",
+        "pending.jsonl",
+        "risk_report.json"
+      ],
+      "expected_event_kinds": [
+        "approval_required",
+        "task_paused"
+      ],
+      "expected_risk_status": "requires_approval",
+      "allow_backend_differences": [
+        "langgraph_interrupts.jsonl",
+        "workflow_state.json",
+        "workflow_started"
+      ]
+    }
+  },
+  {
+    "case_id": "risk_delete_blocked",
+    "description": "Delete action should be blocked in both workflow backends.",
+    "request": {
+      "url": "tests/fixtures/mock_site/risk_actions.html",
+      "click": "Delete account",
+      "expect": "Deleted",
+      "planner": "deterministic",
+      "reviewer": "deterministic",
+      "revise_attempts": 0,
+      "workspace": "tests/fixtures/workspace",
+      "reminder": "Do not bypass blocked local risk."
+    },
+    "expected": {
+      "status": "blocked",
+      "required_artifacts": [
+        "trace.jsonl",
+        "transcript.jsonl",
+        "approvals.jsonl",
+        "pending.jsonl",
+        "risk_report.json"
+      ],
+      "expected_event_kinds": [
+        "risk_blocked",
+        "execution_failed"
+      ],
+      "expected_risk_status": "blocked",
+      "allow_backend_differences": [
+        "workflow_state.json",
+        "workflow_started"
+      ]
+    }
+  },
+  {
+    "case_id": "review_revise_loop",
+    "description": "Reviewer revise loop artifacts should be generated by both workflow backends.",
+    "request": {
+      "url": "tests/fixtures/mock_site/basic.html",
+      "click": "Quickstart",
+      "expect": "pip install playwright",
+      "planner": "deterministic",
+      "reviewer": "fake_llm",
+      "revise_attempts": 1,
+      "workspace": "tests/fixtures/workspace",
+      "reminder": "Exercise the local revise loop."
+    },
+    "expected": {
+      "status": "succeeded",
+      "required_artifacts": [
+        "trace.jsonl",
+        "transcript.jsonl",
+        "evidence.jsonl",
+        "final_report.md",
+        "review.json",
+        "compact_context.json",
+        "revision_plan.json",
+        "revised_report.md",
+        "final_review.json",
+        "revise_loop.json"
+      ],
+      "review_passed": true,
+      "min_review_score": 0.8,
+      "expected_event_kinds": [
+        "review_completed",
+        "revision_plan_created",
+        "report_revised",
+        "final_review_finished",
+        "revise_loop_finished"
+      ],
+      "allow_backend_differences": [
+        "workflow_started",
+        "workflow_state.json"
+      ]
+    }
+  }
+]
