@@ -2,11 +2,13 @@
 
 [中文说明](README_CN.md)
 
-VaniScope / Web-Scoper is a Python browser-agent runtime for local and fixture-based web task execution. It includes browser observation and click intent, deterministic and LLM-backed planning modes, evidence/report artifacts, reviewer and revise-loop support, FastAPI task APIs, risk-gated approval pause/resume, context compaction, native/LangGraph workflow backends, and regression evals for backend behavior.
+VaniScope / Web-Scoper is a LangGraph-based browser-agent runtime for local and fixture-based web task execution. It includes browser observation and click intent, deterministic and LLM-backed planning modes, evidence/report artifacts, reviewer and revise-loop support, FastAPI task APIs, risk-gated approval pause/resume, context compaction, a LangGraph workflow backend, and regression evals for workflow behavior.
 
 The runtime package is split by responsibility into `runtime/execution`, `runtime/artifacts`, `runtime/llm`, `runtime/prompt`, `runtime/review`, and `runtime/safety`. Old flat runtime import paths are temporarily kept as a compatibility layer.
 
-`webscoper/workflows/langgraph_adapter.py` remains the public LangGraph workflow entry point. Its orchestration internals live under `webscoper/workflows/langgraph_backend/`.
+`webscoper/workflows/langgraph_adapter.py` remains the public LangGraph workflow entry point. Its orchestration internals live under `webscoper/workflows/langgraph_backend/`. LangGraph is the formal workflow orchestration layer; the native runner is retained only for direct execution, smoke tests, and compatibility imports.
+
+`webscoper/tools/gateway/` contains the formal tool invocation entry point. LangGraph tool nodes call `ToolGateway.invoke()`, which applies policy, risk/approval decisions, provider dispatch, and `tool_audit.jsonl` audit records. Browser Runtime is exposed as a ToolGateway provider, and `FakeMCPToolProvider` gives deterministic local MCP-shaped tools for tests. Future real MCP servers and a Go control plane can attach behind this gateway abstraction.
 
 Browser recovery is split into `browser/recovery/classifier`, `planner`, `strategies`, `executor`, and `telemetry`, with `browser/recovery/manager.py` kept as the public facade.
 
@@ -31,6 +33,8 @@ The terminal prints the run ID, final URL, page title, screenshot path, interact
 uv run pytest
 ```
 
+Default pytest keeps workflow coverage to focused smoke cases and pure comparison tests. Run the explicit workflow eval command below when you want the full recovery/approval regression matrix.
+
 ## Project Layout
 
 ```text
@@ -39,8 +43,8 @@ webscoper/
   runtime/       # Agent Runtime: execution, artifacts, LLM, prompt, review, safety compatibility layer
   api/           # FastAPI Task API, async tasks, approvals, SSE event stream, artifact access
   eval/          # Browser, planner, reviewer, and workflow regression eval harnesses
-  workflows/     # Native workflows and LangGraph backend orchestration modules
-  tools/         # Tool registry and browser tool definitions
+  workflows/     # LangGraph backend orchestration modules plus native compatibility path
+  tools/         # Tool registry, browser tool definitions, and ToolGateway providers
   schemas/       # Shared Pydantic schemas
 
 scripts/
@@ -98,3 +102,11 @@ uv run python scripts/run_workflow_eval.py \
 ```
 
 The runner writes `score.json` and `report.md` under the selected output directory. `score.json` includes total/pass/fail counts, recovery and approval pass counts, native/LangGraph expectation failures, and comparison failures.
+
+Tool Gateway eval is LangGraph-first and verifies browser, local deterministic MCP-shaped tools, approval, blocking, and audit behavior:
+
+```bash
+uv run python scripts/run_workflow_eval.py \
+  --cases tests/fixtures/tool_gateway_eval_cases.json \
+  --output-dir eval_results/tool_gateway_eval_local
+```

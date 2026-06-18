@@ -2,11 +2,13 @@
 
 [English](README.md)
 
-VaniScope / Web-Scoper 是一个 Python 浏览器 Agent Runtime，用于本地和 fixture 驱动的网页任务执行。当前包含浏览器观察与 click intent、确定性和 LLM planner 模式、证据与报告 artifact、Reviewer 与 revise loop、FastAPI Task API、Risk Gate 审批暂停/恢复、Context Compaction、native / LangGraph workflow backend，以及 backend 行为回归评测。
+VaniScope / Web-Scoper 是一个基于 LangGraph 的浏览器 Agent Runtime，用于本地和 fixture 驱动的网页任务执行。当前包含浏览器观察与 click intent、确定性和 LLM planner 模式、证据与报告 artifact、Reviewer 与 revise loop、FastAPI Task API、Risk Gate 审批暂停/恢复、Context Compaction、LangGraph workflow backend，以及 workflow 行为回归评测。
 
 Runtime 现在按职责拆成 `runtime/execution`、`runtime/artifacts`、`runtime/llm`、`runtime/prompt`、`runtime/review` 和 `runtime/safety`。旧 flat import 路径暂时保留为 compatibility layer。
 
-`webscoper/workflows/langgraph_adapter.py` 仍然是 LangGraph workflow 的公开入口；内部编排模块位于 `webscoper/workflows/langgraph_backend/`。
+`webscoper/workflows/langgraph_adapter.py` 仍然是 LangGraph workflow 的公开入口；内部编排模块位于 `webscoper/workflows/langgraph_backend/`。LangGraph 是正式 workflow 编排层；native runner 只保留为 direct execution、smoke test 和 compatibility import 路径。
+
+`webscoper/tools/gateway/` 是正式工具调用入口。LangGraph tool node 调用 `ToolGateway.invoke()`，由它统一执行 policy、risk/approval 决策、provider dispatch，并写入 `tool_audit.jsonl`。Browser Runtime 作为 ToolGateway provider 接入，`FakeMCPToolProvider` 提供 deterministic 的本地 MCP 形态模拟工具，后续真实 MCP Server 和 Go Control Plane 可以接在这个 gateway 抽象后面。
 
 Browser recovery 现在拆成 `browser/recovery/classifier`、`planner`、`strategies`、`executor` 和 `telemetry`；`browser/recovery/manager.py` 保持为公开 facade。
 
@@ -34,6 +36,8 @@ uv run python scripts/smoke_open_page.py https://example.com --headed
 uv run pytest
 ```
 
+默认 pytest 只保留 workflow 的少量 smoke case 和纯比较逻辑测试。需要完整 recovery / approval 回归矩阵时，运行下面的显式 workflow eval 命令。
+
 ## 目录结构
 
 ```text
@@ -42,8 +46,8 @@ webscoper/
   runtime/       # Agent Runtime：execution、artifacts、LLM、prompt、review、safety 兼容层
   api/           # FastAPI Task API、异步任务、审批、SSE 事件流、artifact 访问
   eval/          # Browser / Planner / Reviewer / Workflow regression eval harness
-  workflows/     # Native workflow 与 LangGraph backend 编排模块
-  tools/         # Tool registry 与 browser tools
+  workflows/     # LangGraph backend 编排模块，以及 native 兼容路径
+  tools/         # Tool registry、browser tools 与 ToolGateway providers
   schemas/       # 共享 Pydantic schema
 
 scripts/
@@ -101,3 +105,11 @@ uv run python scripts/run_workflow_eval.py \
 ```
 
 Runner 会在输出目录写入 `score.json` 和 `report.md`。`score.json` 包含总量、通过/失败数量、recovery/approval 通过数量、native/LangGraph expectation failure 和 comparison failure。
+
+Tool Gateway eval 以 LangGraph 为主，覆盖 browser provider、本地 deterministic MCP 形态工具、approval、blocked 和 audit 行为：
+
+```bash
+uv run python scripts/run_workflow_eval.py \
+  --cases tests/fixtures/tool_gateway_eval_cases.json \
+  --output-dir eval_results/tool_gateway_eval_local
+```

@@ -7,11 +7,17 @@ from webscoper.schemas.plan_validation import (
     PlanValidationResult,
 )
 from webscoper.tools.registry import ToolRegistry
+from webscoper.tools.gateway import ToolGateway
 
 
 class PlanValidator:
-    def __init__(self, tool_registry: ToolRegistry) -> None:
+    def __init__(
+        self,
+        tool_registry: ToolRegistry,
+        tool_gateway: ToolGateway | None = None,
+    ) -> None:
         self.tool_registry = tool_registry
+        self.tool_gateway = tool_gateway
 
     def validate(
         self,
@@ -43,7 +49,13 @@ class PlanValidator:
         browser_action_seen = False
         for index, step in enumerate(plan.steps):
             tool_id = step.tool_call.tool_id
-            _validate_tool_metadata(step, context, self.tool_registry, issues)
+            _validate_tool_metadata(
+                step,
+                context,
+                self.tool_registry,
+                self.tool_gateway,
+                issues,
+            )
             _validate_required_arguments(step, issues)
 
             if tool_id in _BROWSER_TOOL_IDS:
@@ -90,11 +102,14 @@ def _validate_tool_metadata(
     step: PlannedStep,
     context: WebAgentContextSnapshot,
     tool_registry: ToolRegistry,
+    tool_gateway: ToolGateway | None,
     issues: list[PlanValidationIssue],
 ) -> None:
     tool_id = step.tool_call.tool_id
     tool = tool_registry.get(tool_id)
     if tool is None:
+        if tool_gateway is not None:
+            return
         issues.append(
             PlanValidationIssue(
                 issue_type="UNKNOWN_TOOL",
@@ -104,6 +119,13 @@ def _validate_tool_metadata(
             )
         )
         return
+
+    if tool_gateway is not None:
+        try:
+            tool_gateway.get_tool(tool_id)
+            return
+        except KeyError:
+            pass
 
     if tool.loading_mode == "lazy":
         issues.append(

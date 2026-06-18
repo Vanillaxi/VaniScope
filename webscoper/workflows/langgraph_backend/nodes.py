@@ -9,7 +9,8 @@ from webscoper.runtime.execution_state import state_payload, status_from_loop_er
 from webscoper.schemas.observation import PageObservation
 from webscoper.schemas.plan import ExecutionLoopResult, ExecutionPlan
 from webscoper.schemas.task import TaskSpec
-from webscoper.schemas.tool_call import ToolExecutionRecord
+from webscoper.schemas.tool_call import ToolExecutionRecord, ToolResult
+from webscoper.tools.gateway import ToolInvocationRequest, ToolInvocationResult
 from webscoper.schemas.workflow import LangGraphResumePayload
 from webscoper.workflows.langgraph_backend.state_io import (
     TERMINAL_GRAPH_STATUSES,
@@ -78,7 +79,11 @@ class LangGraphWorkflowNodes:
         if self.workflow.plan is None:
             raise RuntimeError("Plan missing before validate_plan.")
         try:
-            result = self.workflow.handler.validate_plan(context, self.workflow.plan)
+            result = self.workflow.handler.validate_plan(
+                context,
+                self.workflow.plan,
+                self.workflow.require_runtime().tool_gateway,
+            )
         except RuntimeError as exc:
             state["validation_result"] = read_json_safe_from_transcript_tail(
                 context,
@@ -172,19 +177,22 @@ class LangGraphWorkflowNodes:
             )
 
             approval_override_id: str | None = None
-            risk_result = runtime.tool_executor.risk_gate.check_tool_call(
-                task_id=context.run_id,
+            gateway_request = _gateway_request(
+                context=context,
+                runtime=runtime,
                 tool_name=step.tool_call.tool_id,
                 arguments=step.tool_call.arguments,
-                page_observation=runtime.browser_runtime.last_observation,
+                call_id=step.tool_call.call_id,
+                workflow_backend="langgraph",
             )
-            if risk_result.requires_approval:
+            gateway_result = await runtime.tool_gateway.invoke(gateway_request)
+            if gateway_result.status == "approval_required":
                 payload = self.workflow.approval_bridge.create_interrupt_payload(
                     task_id=context.run_id,
                     thread_id=state_thread_id(context, self.workflow.thread_id),
                     tool_name=step.tool_call.tool_id,
                     arguments=step.tool_call.arguments,
-                    risk_result=risk_result,
+                    risk_result=gateway_result.output.get("risk_check"),
                     node_name="execute_plan",
                     tool_call_id=step.tool_call.call_id,
                     metadata={
@@ -203,7 +211,9 @@ class LangGraphWorkflowNodes:
                 )
                 context.state.status = "requires_approval"
                 context.state.error_type = "RISK_APPROVAL_REQUIRED"
-                context.state.error_message = risk_result.reason
+                context.state.error_message = (
+                    gateway_result.error_message or "Approval required before tool execution."
+                )
                 context.transcript_store.append(
                     "approval_required",
                     {"call": step.tool_call.model_dump(mode="json"), "payload": payload},
@@ -257,11 +267,12 @@ class LangGraphWorkflowNodes:
                     resume.model_dump(mode="json"),
                 )
 
-            tool_result = await runtime.tool_executor.execute(
-                step.tool_call,
-                context.snapshot(),
-                approval_override_id=approval_override_id,
-            )
+                resumed_request = gateway_request.model_copy(
+                    update={"approval_override_id": approval_override_id}
+                )
+                gateway_result = await runtime.tool_gateway.invoke(resumed_request)
+
+            tool_result = _tool_result_from_gateway(gateway_result)
             if approval_override_id is not None:
                 self.workflow.handler.pending_manager.pop_by_approval_id(
                     approval_override_id
@@ -526,3 +537,40 @@ def _require_last_observation(
     if observation is None:
         raise RuntimeError("Execution stopped without a page observation.")
     return observation
+
+
+def _gateway_request(
+    *,
+    context: WebAgentContext,
+    runtime: WebAgentRuntimeComponents,
+    tool_name: str,
+    arguments: dict[str, Any],
+    call_id: str,
+    workflow_backend: str,
+) -> ToolInvocationRequest:
+    return ToolInvocationRequest(
+        task_id=context.run_id,
+        tool_name=tool_name,
+        arguments=arguments,
+        call_id=call_id,
+        workflow_backend=workflow_backend,
+        run_dir=str(context.run_dir),
+        context_snapshot=context.snapshot().model_dump(mode="json"),
+        page_observation=runtime.browser_runtime.last_observation.model_dump(mode="json")
+        if runtime.browser_runtime.last_observation is not None
+        else None,
+    )
+
+
+def _tool_result_from_gateway(result: ToolInvocationResult) -> ToolResult:
+    status = "blocked" if result.status == "approval_required" else result.status
+    return ToolResult(
+        call_id=result.call_id or "gateway_call",
+        tool_id=result.tool_name,
+        status=status,
+        output=result.output,
+        error_type=result.error_type,
+        error_message=result.error_message,
+        started_at=result.started_at,
+        ended_at=result.ended_at,
+    )

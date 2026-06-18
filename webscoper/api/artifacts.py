@@ -14,6 +14,7 @@ ARTIFACT_ALLOWLIST = {
     "approvals.jsonl",
     "pending.jsonl",
     "risk_report.json",
+    "tool_audit.jsonl",
     "trace.jsonl",
     "transcript.jsonl",
     "evidence.jsonl",

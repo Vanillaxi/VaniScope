@@ -1,0 +1,275 @@
+[
+  {
+    "case_id": "langgraph_gateway_browser_click",
+    "description": "LangGraph browser tool calls go through ToolGateway and write audit.",
+    "case_type": "tool_gateway",
+    "backends": ["langgraph"],
+    "request": {
+      "url": "tests/fixtures/mock_site/basic.html",
+      "tool_calls": [
+        {
+          "call_id": "call_001",
+          "tool_id": "browser_open_observe",
+          "arguments": {"url": "tests/fixtures/mock_site/basic.html"},
+          "reason": "Open the local page."
+        },
+        {
+          "call_id": "call_002",
+          "tool_id": "browser_click_intent",
+          "arguments": {
+            "action": {
+              "action_type": "click",
+              "intent": "Click Quickstart",
+              "target_hint": "Quickstart",
+              "preferred_roles": ["button", "link"],
+              "preconditions": ["target_visible", "target_enabled"],
+              "expected_effect": {
+                "type": "content_appears",
+                "value": "pip install playwright"
+              },
+              "risk_level": "read_only"
+            }
+          },
+          "reason": "Click through the gateway."
+        },
+        {
+          "call_id": "call_003",
+          "tool_id": "finish_task",
+          "arguments": {"summary": "Gateway browser click completed."},
+          "reason": "Finish."
+        }
+      ]
+    },
+    "expected": {
+      "status": "succeeded",
+      "required_artifacts": ["tool_audit.jsonl", "trace.jsonl", "final_report.md"]
+    }
+  },
+  {
+    "case_id": "langgraph_gateway_fake_mcp_echo",
+    "description": "LangGraph can invoke deterministic fake MCP tools through ToolGateway.",
+    "case_type": "tool_gateway",
+    "backends": ["langgraph"],
+    "request": {
+      "url": "tests/fixtures/mock_site/basic.html",
+      "tool_calls": [
+        {
+          "call_id": "call_001",
+          "tool_id": "browser_open_observe",
+          "arguments": {"url": "tests/fixtures/mock_site/basic.html"},
+          "reason": "Open the local page."
+        },
+        {
+          "call_id": "call_002",
+          "tool_id": "fake_mcp_echo",
+          "arguments": {"text": "hello gateway"},
+          "reason": "Invoke fake MCP echo."
+        },
+        {
+          "call_id": "call_003",
+          "tool_id": "finish_task",
+          "arguments": {"summary": "Fake MCP echo completed."},
+          "reason": "Finish."
+        }
+      ]
+    },
+    "expected": {
+      "status": "succeeded",
+      "required_artifacts": ["tool_audit.jsonl", "trace.jsonl", "final_report.md"]
+    }
+  },
+  {
+    "case_id": "langgraph_gateway_tool_search_lazy",
+    "description": "Lazy fake MCP doc tool is discoverable and invokable deterministically through ToolGateway.",
+    "case_type": "tool_gateway",
+    "backends": ["langgraph"],
+    "request": {
+      "url": "tests/fixtures/mock_site/basic.html",
+      "tool_calls": [
+        {
+          "call_id": "call_001",
+          "tool_id": "browser_open_observe",
+          "arguments": {"url": "tests/fixtures/mock_site/basic.html"},
+          "reason": "Open the local page."
+        },
+        {
+          "call_id": "call_002",
+          "tool_id": "fake_mcp_fetch_doc",
+          "arguments": {"topic": "tool_gateway"},
+          "reason": "Invoke lazy fake MCP doc tool."
+        },
+        {
+          "call_id": "call_003",
+          "tool_id": "finish_task",
+          "arguments": {"summary": "Lazy fake MCP doc completed."},
+          "reason": "Finish."
+        }
+      ]
+    },
+    "expected": {
+      "status": "succeeded",
+      "required_artifacts": ["tool_audit.jsonl", "trace.jsonl", "final_report.md"]
+    }
+  },
+  {
+    "case_id": "langgraph_gateway_sensitive_requires_approval",
+    "description": "Sensitive browser submit returns approval_required through ToolGateway.",
+    "case_type": "tool_gateway",
+    "backends": ["langgraph"],
+    "request": {
+      "url": "tests/fixtures/mock_site/risk_actions.html",
+      "tool_calls": [
+        {
+          "call_id": "call_001",
+          "tool_id": "browser_open_observe",
+          "arguments": {"url": "tests/fixtures/mock_site/risk_actions.html"},
+          "reason": "Open risk page."
+        },
+        {
+          "call_id": "call_002",
+          "tool_id": "browser_click_intent",
+          "arguments": {
+            "action": {
+              "action_type": "click",
+              "intent": "Click Submit",
+              "target_hint": "Submit",
+              "preferred_roles": ["button", "link"],
+              "preconditions": ["target_visible", "target_enabled"],
+              "expected_effect": {
+                "type": "content_appears",
+                "value": "Submitted successfully"
+              },
+              "risk_level": "read_only"
+            }
+          },
+          "reason": "Sensitive submit requires approval."
+        }
+      ]
+    },
+    "expected": {
+      "status": "requires_approval",
+      "required_artifacts": [
+        "tool_audit.jsonl",
+        "approvals.jsonl",
+        "pending.jsonl",
+        "risk_report.json"
+      ],
+      "expected_approval_events": ["approval_required", "task_paused"],
+      "expected_risk_decision": "requires_approval"
+    }
+  },
+  {
+    "case_id": "langgraph_gateway_dangerous_blocked",
+    "description": "Dangerous fake MCP tool is blocked by ToolGateway.",
+    "case_type": "tool_gateway",
+    "backends": ["langgraph"],
+    "request": {
+      "url": "tests/fixtures/mock_site/basic.html",
+      "tool_calls": [
+        {
+          "call_id": "call_001",
+          "tool_id": "browser_open_observe",
+          "arguments": {"url": "tests/fixtures/mock_site/basic.html"},
+          "reason": "Open the local page."
+        },
+        {
+          "call_id": "call_002",
+          "tool_id": "fake_mcp_delete_data",
+          "arguments": {},
+          "reason": "Dangerous fake tool must block."
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked",
+      "required_artifacts": ["tool_audit.jsonl", "trace.jsonl"]
+    }
+  },
+  {
+    "case_id": "langgraph_gateway_unknown_tool_blocked",
+    "description": "Unknown tool is blocked by ToolGateway without crashing.",
+    "case_type": "tool_gateway",
+    "backends": ["langgraph"],
+    "request": {
+      "url": "tests/fixtures/mock_site/basic.html",
+      "tool_calls": [
+        {
+          "call_id": "call_001",
+          "tool_id": "browser_open_observe",
+          "arguments": {"url": "tests/fixtures/mock_site/basic.html"},
+          "reason": "Open the local page."
+        },
+        {
+          "call_id": "call_002",
+          "tool_id": "missing_gateway_tool",
+          "arguments": {},
+          "reason": "Unknown tool must block."
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked",
+      "required_artifacts": ["tool_audit.jsonl", "trace.jsonl"]
+    }
+  },
+  {
+    "case_id": "langgraph_gateway_disabled_tool_blocked",
+    "description": "Disabled fake MCP tool is blocked by ToolGateway.",
+    "case_type": "tool_gateway",
+    "backends": ["langgraph"],
+    "request": {
+      "url": "tests/fixtures/mock_site/basic.html",
+      "tool_calls": [
+        {
+          "call_id": "call_001",
+          "tool_id": "browser_open_observe",
+          "arguments": {"url": "tests/fixtures/mock_site/basic.html"},
+          "reason": "Open the local page."
+        },
+        {
+          "call_id": "call_002",
+          "tool_id": "fake_mcp_disabled",
+          "arguments": {},
+          "reason": "Disabled tool must block."
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked",
+      "required_artifacts": ["tool_audit.jsonl", "trace.jsonl"]
+    }
+  },
+  {
+    "case_id": "langgraph_gateway_audit_written",
+    "description": "Gateway audit records provider, decision, status, and workflow backend.",
+    "case_type": "tool_gateway",
+    "backends": ["langgraph"],
+    "request": {
+      "url": "tests/fixtures/mock_site/basic.html",
+      "tool_calls": [
+        {
+          "call_id": "call_001",
+          "tool_id": "browser_open_observe",
+          "arguments": {"url": "tests/fixtures/mock_site/basic.html"},
+          "reason": "Open the local page."
+        },
+        {
+          "call_id": "call_002",
+          "tool_id": "fake_mcp_get_time",
+          "arguments": {},
+          "reason": "Invoke fake MCP time."
+        },
+        {
+          "call_id": "call_003",
+          "tool_id": "finish_task",
+          "arguments": {"summary": "Gateway audit completed."},
+          "reason": "Finish."
+        }
+      ]
+    },
+    "expected": {
+      "status": "succeeded",
+      "required_artifacts": ["tool_audit.jsonl", "trace.jsonl", "final_report.md"]
+    }
+  }
+]

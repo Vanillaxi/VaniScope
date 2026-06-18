@@ -51,6 +51,13 @@ from webscoper.runtime.safety.risk_gate import RiskGate
 from webscoper.runtime.execution.tool_executor import LocalToolExecutor
 from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.runtime.artifacts.transcript import TranscriptStore
+from webscoper.tools.gateway import (
+    BrowserToolProvider,
+    FakeMCPToolProvider,
+    ToolGateway,
+    ToolGatewayAuditStore,
+    ToolGatewayPolicy,
+)
 from webscoper.schemas.context import RuntimeState
 from webscoper.schemas.evidence import EvidenceItem
 from webscoper.schemas.plan import ExecutionLoopResult, ExecutionPlan
@@ -68,6 +75,7 @@ class WebAgentRuntimeComponents:
     browser_runtime: StatefulBrowserToolRuntime
     tool_executor: LocalToolExecutor
     execution_loop: AgentExecutionLoop
+    tool_gateway: ToolGateway
 
 
 class WebAgentExecutionHandler:
@@ -185,10 +193,25 @@ class WebAgentExecutionHandler:
             tool_executor=tool_executor,
             event_sink=self.event_sink,
         )
+        tool_gateway = ToolGateway(
+            providers=[
+                BrowserToolProvider(
+                    browser_runtime=browser_runtime,
+                    tool_registry=self.tool_registry,
+                ),
+                FakeMCPToolProvider(),
+            ],
+            policy=ToolGatewayPolicy(self.risk_gate),
+            audit_store=ToolGatewayAuditStore(context.run_dir / "tool_audit.jsonl"),
+            approval_store=self.approval_store,
+            pending_manager=self.pending_manager,
+            event_sink=self.event_sink,
+        )
         return WebAgentRuntimeComponents(
             browser_runtime=browser_runtime,
             tool_executor=tool_executor,
             execution_loop=execution_loop,
+            tool_gateway=tool_gateway,
         )
 
     def build_prompt(self, context: WebAgentContext) -> PromptBuildResult:
@@ -284,8 +307,16 @@ class WebAgentExecutionHandler:
         )
         return plan
 
-    def validate_plan(self, context: WebAgentContext, plan: ExecutionPlan):
-        validation_result = PlanValidator(self.tool_registry).validate(
+    def validate_plan(
+        self,
+        context: WebAgentContext,
+        plan: ExecutionPlan,
+        tool_gateway: ToolGateway | None = None,
+    ):
+        validation_result = PlanValidator(
+            self.tool_registry,
+            tool_gateway=tool_gateway,
+        ).validate(
             plan,
             context.snapshot(),
         )

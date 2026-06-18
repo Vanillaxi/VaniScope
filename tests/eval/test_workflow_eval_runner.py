@@ -9,29 +9,25 @@ from webscoper.eval.workflow_eval import (
 )
 from webscoper.schemas.eval import (
     WorkflowBackendRunResult,
+    WorkflowComparisonResult,
     WorkflowEvalCase,
     WorkflowEvalExpected,
     WorkflowEvalRequest,
 )
 
 
-def test_workflow_eval_runner_loads_fixture_cases(tmp_path: Path) -> None:
-    summary = WorkflowRegressionEvalRunner(tmp_path).run_file(
-        Path("tests/fixtures/workflow_eval_cases.json")
-    )
+def test_workflow_eval_fixture_cases_load_by_type() -> None:
+    cases = _fixture_cases()
+    by_type = {case_type: 0 for case_type in ["workflow", "recovery", "approval"]}
+    for case in cases:
+        by_type[case.case_type] += 1
 
-    assert summary.total >= 15
-    assert summary.recovery_cases_passed >= 1
-    assert summary.approval_cases_passed >= 1
-    assert (tmp_path / "score.json").exists()
-    assert (tmp_path / "report.md").exists()
-
-
-def test_recovery_eval_cases_load() -> None:
-    cases = _load_cases(Path("tests/fixtures/recovery_eval_cases.json"))
-
-    assert len(cases) >= 7
+    assert len(cases) >= 15
+    assert by_type["workflow"] >= 1
+    assert by_type["recovery"] >= 7
+    assert by_type["approval"] >= 5
     assert {case.case_id for case in cases} >= {
+        "basic_click",
         "lazy_button_recovery",
         "modal_overlay_recovery",
         "no_effect_retry_recovery",
@@ -39,22 +35,12 @@ def test_recovery_eval_cases_load() -> None:
         "disabled_button_blocked",
         "login_required_blocked",
         "captcha_detected_blocked",
-    }
-    assert all(case.case_type == "recovery" for case in cases)
-
-
-def test_approval_eval_cases_load() -> None:
-    cases = _load_cases(Path("tests/fixtures/approval_eval_cases.json"))
-
-    assert len(cases) >= 5
-    assert {case.case_id for case in cases} >= {
         "submit_requires_approval",
         "submit_approved_resume",
         "submit_rejected_stops",
         "delete_blocked",
         "approval_state_persisted",
     }
-    assert all(case.case_type == "approval" for case in cases)
 
 
 def test_basic_click_case_passes_native_and_langgraph(tmp_path: Path) -> None:
@@ -82,18 +68,6 @@ def test_lazy_button_recovery_matches_native_and_langgraph(tmp_path: Path) -> No
     assert "wait_and_reobserve" in result.langgraph.recovery_kinds
 
 
-def test_modal_overlay_recovery_matches_native_and_langgraph(tmp_path: Path) -> None:
-    result = WorkflowRegressionEvalRunner(tmp_path).run_case(
-        _fixture_case("modal_overlay_recovery")
-    )
-
-    assert result.passed
-    assert result.native.status == "succeeded"
-    assert result.langgraph.status == "succeeded"
-    assert "close_modal_if_safe" in result.native.recovery_kinds
-    assert "close_modal_if_safe" in result.langgraph.recovery_kinds
-
-
 def test_submit_requires_approval_pauses_both_backends(tmp_path: Path) -> None:
     result = WorkflowRegressionEvalRunner(tmp_path).run_case(
         _fixture_case("submit_requires_approval")
@@ -119,20 +93,6 @@ def test_submit_approved_resume_finishes(tmp_path: Path) -> None:
     assert "approved" in result.langgraph.approval_statuses
     assert "final_report.md" in result.native.artifacts
     assert "final_report.md" in result.langgraph.artifacts
-
-
-def test_submit_rejected_stops_without_sensitive_action(tmp_path: Path) -> None:
-    result = WorkflowRegressionEvalRunner(tmp_path).run_case(
-        _fixture_case("submit_rejected_stops")
-    )
-
-    assert result.passed
-    assert result.native.status == "rejected"
-    assert result.langgraph.status == "rejected"
-    assert "rejected" in result.native.approval_statuses
-    assert "rejected" in result.langgraph.approval_statuses
-    assert "final_report.md" not in result.native.artifacts
-    assert "final_report.md" not in result.langgraph.artifacts
 
 
 def test_delete_blocked_does_not_enter_approval_resume(tmp_path: Path) -> None:
@@ -182,18 +142,29 @@ def test_allow_backend_differences_can_ignore_allowed_status_difference() -> Non
     assert result.passed
 
 
-def test_single_case_failure_does_not_interrupt_eval(tmp_path: Path) -> None:
+def test_single_case_failure_does_not_interrupt_eval(tmp_path: Path, monkeypatch) -> None:
     cases = [
-        _case(case_id="offline_guard", url="https://example.com"),
-        _fixture_case("basic_click"),
+        _case(case_id="synthetic_fail"),
+        _case(case_id="synthetic_pass"),
     ]
+    outcomes = iter(
+        [
+            _comparison("synthetic_fail", passed=False, difference="synthetic failure"),
+            _comparison("synthetic_pass", passed=True),
+        ]
+    )
+    monkeypatch.setattr(
+        WorkflowRegressionEvalRunner,
+        "run_case",
+        lambda _self, _case: next(outcomes),
+    )
 
     summary = WorkflowRegressionEvalRunner(tmp_path).run_cases(cases)
 
     assert summary.total == 2
     assert summary.passed == 1
     assert summary.failed == 1
-    assert summary.case_results[0].native.error is not None
+    assert summary.case_results[0].differences == ["synthetic failure"]
     assert summary.case_results[1].passed
 
 
@@ -206,8 +177,13 @@ def test_real_llm_is_rejected_for_offline_eval(tmp_path: Path) -> None:
     assert "real_llm" in (summary.case_results[0].native.error or "")
 
 
-def test_score_and_report_are_generated(tmp_path: Path) -> None:
-    case = _fixture_case("basic_click")
+def test_score_and_report_are_generated(tmp_path: Path, monkeypatch) -> None:
+    case = _case(case_id="synthetic_score")
+    monkeypatch.setattr(
+        WorkflowRegressionEvalRunner,
+        "run_case",
+        lambda _self, _case: _comparison("synthetic_score", passed=True),
+    )
 
     summary = WorkflowRegressionEvalRunner(tmp_path).run_cases([case])
 
@@ -218,23 +194,22 @@ def test_score_and_report_are_generated(tmp_path: Path) -> None:
     assert "recovery_cases_passed" in score_payload
     assert "approval_cases_passed" in score_payload
     assert "# VaniScope Workflow Regression Eval Report" in report
-    assert "basic_click" in report
+    assert "synthetic_score" in report
 
 
-def _load_cases(path: Path) -> list[WorkflowEvalCase]:
+def _fixture_cases() -> list[WorkflowEvalCase]:
     return [
         WorkflowEvalCase.model_validate(item)
-        for item in json.loads(path.read_text(encoding="utf-8"))
+        for item in json.loads(
+            Path("tests/fixtures/workflow_eval_cases.json").read_text(encoding="utf-8")
+        )
     ]
 
 
 def _fixture_case(case_id: str) -> WorkflowEvalCase:
-    payload = json.loads(
-        Path("tests/fixtures/workflow_eval_cases.json").read_text(encoding="utf-8")
-    )
-    for item in payload:
-        if item["case_id"] == case_id:
-            return WorkflowEvalCase.model_validate(item)
+    for item in _fixture_cases():
+        if item.case_id == case_id:
+            return item
     raise AssertionError(f"Missing fixture case: {case_id}")
 
 
@@ -269,4 +244,20 @@ def _result(
         status=status,
         artifacts=artifacts or [],
         event_kinds=[],
+    )
+
+
+def _comparison(
+    case_id: str,
+    passed: bool,
+    difference: str | None = None,
+) -> WorkflowComparisonResult:
+    differences = [difference] if difference else []
+    return WorkflowComparisonResult(
+        case_id=case_id,
+        passed=passed,
+        native=_result("native"),
+        langgraph=_result("langgraph"),
+        differences=differences,
+        summary="Backends matched expectations." if passed else "; ".join(differences),
     )

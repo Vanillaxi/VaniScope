@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from webscoper.runtime.llm.client import BaseLLMClient
 from webscoper.api.task_service import TaskService
 from webscoper.api.task_state import (
     TaskState,
@@ -16,6 +17,7 @@ from webscoper.api.task_state import (
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.runtime.prompt.reminders import RuntimeReminderStore
 from webscoper.runtime.task_runner import build_task_spec, llm_config_path
+from webscoper.schemas.llm import LLMRequest, LLMResponse
 from webscoper.schemas.eval import (
     WorkflowBackendRunResult,
     WorkflowComparisonResult,
@@ -80,8 +82,16 @@ class WorkflowRegressionEvalRunner:
         return summary
 
     def run_case(self, case: WorkflowEvalCase) -> WorkflowComparisonResult:
-        native = self._run_backend(case, "native")
-        langgraph = self._run_backend(case, "langgraph")
+        native = (
+            self._run_backend(case, "native")
+            if "native" in case.backends
+            else _skipped_backend_result(case, "native")
+        )
+        langgraph = (
+            self._run_backend(case, "langgraph")
+            if "langgraph" in case.backends
+            else _skipped_backend_result(case, "langgraph")
+        )
         return compare_workflow_backend_results(case, native, langgraph)
 
     def _run_backend(
@@ -115,12 +125,15 @@ class WorkflowRegressionEvalRunner:
                 headless=True,
                 workspace=Path(case.request.workspace) if case.request.workspace else None,
                 runtime_reminders=reminders,
-                planner_mode=case.request.planner,
+                planner_mode="fake_llm" if case.request.tool_calls else case.request.planner,
                 repair_attempts=case.request.repair_attempts,
                 reviewer_mode=case.request.reviewer,
                 revise_attempts=case.request.revise_attempts,
+                llm_client=_StaticToolCallsLLMClient(case.request.tool_calls)
+                if case.request.tool_calls
+                else None,
                 llm_config_path=llm_config_path(
-                    case.request.planner,
+                    "fake_llm" if case.request.tool_calls else case.request.planner,
                     None,
                     reviewer=case.request.reviewer,
                 ),
@@ -184,19 +197,26 @@ def compare_workflow_backend_results(
     expected_artifacts = sorted(
         set(expected.required_artifacts + expected.expected_artifacts)
     )
+    active_results = [
+        result for result in (native, langgraph) if result.status != "skipped"
+    ]
 
     if expected_status is not None:
-        for result in (native, langgraph):
+        for result in active_results:
             if result.status != expected_status:
                 differences.append(
                     f"{result.backend}.status expected {expected_status}, got {result.status}"
                 )
-    elif native.status != langgraph.status and "status" not in allowed:
+    elif (
+        len(active_results) == 2
+        and native.status != langgraph.status
+        and "status" not in allowed
+    ):
         differences.append(
             f"status differs: native={native.status}, langgraph={langgraph.status}"
         )
 
-    for result in (native, langgraph):
+    for result in active_results:
         missing = [
             artifact
             for artifact in expected_artifacts
@@ -207,7 +227,7 @@ def compare_workflow_backend_results(
             differences.append(f"{result.backend}.artifacts missing: {', '.join(missing)}")
 
     if expected.review_passed is not None:
-        for result in (native, langgraph):
+        for result in active_results:
             if result.review_passed != expected.review_passed:
                 differences.append(
                     f"{result.backend}.review_passed expected "
@@ -215,7 +235,7 @@ def compare_workflow_backend_results(
                 )
 
     if expected.min_review_score is not None:
-        for result in (native, langgraph):
+        for result in active_results:
             score = result.review_score
             if score is None or score < expected.min_review_score:
                 differences.append(
@@ -245,7 +265,7 @@ def compare_workflow_backend_results(
             f"native={native.review_passed}, langgraph={langgraph.review_passed}"
         )
 
-    for result in (native, langgraph):
+    for result in active_results:
         missing_events = [
             kind
             for kind in sorted(
@@ -258,7 +278,7 @@ def compare_workflow_backend_results(
                 f"{result.backend}.event_kinds missing: {', '.join(missing_events)}"
             )
 
-    for result in (native, langgraph):
+    for result in active_results:
         missing_recovery = [
             kind
             for kind in expected.expected_recovery_kinds
@@ -270,7 +290,7 @@ def compare_workflow_backend_results(
             )
 
     if expected.expected_recovery_error_type is not None:
-        for result in (native, langgraph):
+        for result in active_results:
             if expected.expected_recovery_error_type not in set(result.recovery_error_types):
                 differences.append(
                     f"{result.backend}.recovery_error_types expected "
@@ -280,7 +300,7 @@ def compare_workflow_backend_results(
 
     expected_risk_status = expected.expected_risk_decision or expected.expected_risk_status
     if expected_risk_status is not None:
-        for result in (native, langgraph):
+        for result in active_results:
             risk_status = result.metadata.get("risk_status")
             if risk_status != expected_risk_status:
                 differences.append(
@@ -293,6 +313,8 @@ def compare_workflow_backend_results(
         "recovery_attempt_count",
         "approval_request_count",
     ):
+        if len(active_results) < 2:
+            continue
         if metadata_key in allowed:
             continue
         native_value = native.metadata.get(metadata_key)
@@ -523,6 +545,36 @@ def _read_jsonl_objects(path: Path) -> list[dict[str, Any]]:
         if isinstance(payload, dict):
             rows.append(payload)
     return rows
+
+
+def _skipped_backend_result(
+    case: WorkflowEvalCase,
+    backend: WorkflowBackend,
+) -> WorkflowBackendRunResult:
+    return WorkflowBackendRunResult(
+        backend=backend,
+        task_id=f"{case.case_id}_{backend}",
+        status="skipped",
+        metadata={"skipped": True},
+    )
+
+
+class _StaticToolCallsLLMClient(BaseLLMClient):
+    def __init__(self, tool_calls: list[dict[str, Any]]) -> None:
+        self.tool_calls = tool_calls
+
+    async def generate(self, request: LLMRequest) -> LLMResponse:
+        task_id = str(request.metadata.get("task_id") or "task")
+        payload = {
+            "task_id": task_id,
+            "tool_calls": self.tool_calls,
+        }
+        return LLMResponse(
+            content=f"```json\n{json.dumps(payload, indent=2, ensure_ascii=False)}\n```",
+            model="workflow-eval-static-tool-calls",
+            usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            raw={"client": "_StaticToolCallsLLMClient"},
+        )
 
 
 def _read_json_object(path: Path) -> dict[str, Any] | None:

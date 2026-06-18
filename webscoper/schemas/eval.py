@@ -88,6 +88,7 @@ class WorkflowEvalRequest(BaseModel):
     url: str
     click: str | None = None
     expect: str | None = None
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     planner: str = "deterministic"
     reviewer: str = "deterministic"
     revise_attempts: int = 0
@@ -116,7 +117,8 @@ class WorkflowEvalExpected(BaseModel):
 class WorkflowEvalCase(BaseModel):
     case_id: str
     description: str
-    case_type: Literal["workflow", "recovery", "approval"] = "workflow"
+    case_type: Literal["workflow", "recovery", "approval", "tool_gateway"] = "workflow"
+    backends: list[str] = Field(default_factory=lambda: ["native", "langgraph"])
     request: WorkflowEvalRequest
     expected: WorkflowEvalExpected = Field(default_factory=WorkflowEvalExpected)
 
@@ -139,7 +141,7 @@ class WorkflowBackendRunResult(BaseModel):
 
 class WorkflowComparisonResult(BaseModel):
     case_id: str
-    case_type: Literal["workflow", "recovery", "approval"] = "workflow"
+    case_type: Literal["workflow", "recovery", "approval", "tool_gateway"] = "workflow"
     passed: bool
     native: WorkflowBackendRunResult
     langgraph: WorkflowBackendRunResult
