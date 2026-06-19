@@ -16,7 +16,7 @@ def test_api_post_task_supports_langgraph_workflow(api_client, tmp_path: Path) -
     client = api_client
     create_response = client.post(
         "/tasks",
-        json=basic_task_request(workflow="langgraph"),
+        json=basic_task_request(),
     )
 
     assert create_response.status_code == 200
@@ -50,7 +50,7 @@ def test_api_langgraph_approval_approved_resumes_and_finishes(
     client = api_client
     task_id = create_async_task(
         client,
-        risk_task_request("Submit", workflow="langgraph"),
+        risk_task_request("Submit"),
     )
     paused = wait_for_status(client, task_id, "requires_approval")
     assert "pending.jsonl" in paused["artifacts"]
@@ -98,7 +98,7 @@ def test_api_langgraph_approval_rejected_does_not_click(
     client = api_client
     task_id = create_async_task(
         client,
-        risk_task_request("Submit", workflow="langgraph"),
+        risk_task_request("Submit"),
     )
     wait_for_status(client, task_id, "requires_approval")
     approval_id = client.get(f"/tasks/{task_id}/approvals").json()[0]["approval_id"]
@@ -130,7 +130,7 @@ def test_api_langgraph_delete_account_is_blocked_not_interrupted(
     client = api_client
     task_id = create_async_task(
         client,
-        risk_task_request("Delete account", workflow="langgraph"),
+        risk_task_request("Delete account"),
     )
     status = wait_for_status(client, task_id, "blocked")
 

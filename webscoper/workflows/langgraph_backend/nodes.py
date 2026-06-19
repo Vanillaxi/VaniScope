@@ -288,12 +288,17 @@ class LangGraphWorkflowNodes:
                 record.model_dump(mode="json"),
             )
             if tool_result.error_type == "RISK_BLOCKED":
-                context.transcript_store.append(
+                risk_payload = {
+                    "run_id": context.run_id,
+                    "tool_name": step.tool_call.tool_id,
+                    "call": step.tool_call.model_dump(mode="json"),
+                    "result": tool_result.model_dump(mode="json"),
+                }
+                context.transcript_store.append("risk_blocked", risk_payload)
+                self.workflow.handler._emit_event(
                     "risk_blocked",
-                    {
-                        "call": step.tool_call.model_dump(mode="json"),
-                        "result": tool_result.model_dump(mode="json"),
-                    },
+                    "Risk gate blocked tool execution",
+                    risk_payload,
                 )
             self.workflow.event_emitter.emit_tool_event(
                 context,

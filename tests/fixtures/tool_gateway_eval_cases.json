@@ -3,7 +3,6 @@
     "case_id": "langgraph_gateway_browser_click",
     "description": "LangGraph browser tool calls go through ToolGateway and write audit.",
     "case_type": "tool_gateway",
-    "backends": ["langgraph"],
     "request": {
       "url": "tests/fixtures/mock_site/basic.html",
       "tool_calls": [
@@ -49,7 +48,6 @@
     "case_id": "langgraph_gateway_fake_mcp_echo",
     "description": "LangGraph can invoke deterministic fake MCP tools through ToolGateway.",
     "case_type": "tool_gateway",
-    "backends": ["langgraph"],
     "request": {
       "url": "tests/fixtures/mock_site/basic.html",
       "tool_calls": [
@@ -82,7 +80,6 @@
     "case_id": "langgraph_gateway_tool_search_lazy",
     "description": "Lazy fake MCP doc tool is discoverable and invokable deterministically through ToolGateway.",
     "case_type": "tool_gateway",
-    "backends": ["langgraph"],
     "request": {
       "url": "tests/fixtures/mock_site/basic.html",
       "tool_calls": [
@@ -115,7 +112,6 @@
     "case_id": "langgraph_gateway_sensitive_requires_approval",
     "description": "Sensitive browser submit returns approval_required through ToolGateway.",
     "case_type": "tool_gateway",
-    "backends": ["langgraph"],
     "request": {
       "url": "tests/fixtures/mock_site/risk_actions.html",
       "tool_calls": [
@@ -162,7 +158,6 @@
     "case_id": "langgraph_gateway_dangerous_blocked",
     "description": "Dangerous fake MCP tool is blocked by ToolGateway.",
     "case_type": "tool_gateway",
-    "backends": ["langgraph"],
     "request": {
       "url": "tests/fixtures/mock_site/basic.html",
       "tool_calls": [
@@ -189,7 +184,6 @@
     "case_id": "langgraph_gateway_unknown_tool_blocked",
     "description": "Unknown tool is blocked by ToolGateway without crashing.",
     "case_type": "tool_gateway",
-    "backends": ["langgraph"],
     "request": {
       "url": "tests/fixtures/mock_site/basic.html",
       "tool_calls": [
@@ -216,7 +210,6 @@
     "case_id": "langgraph_gateway_disabled_tool_blocked",
     "description": "Disabled fake MCP tool is blocked by ToolGateway.",
     "case_type": "tool_gateway",
-    "backends": ["langgraph"],
     "request": {
       "url": "tests/fixtures/mock_site/basic.html",
       "tool_calls": [
@@ -243,7 +236,6 @@
     "case_id": "langgraph_gateway_audit_written",
     "description": "Gateway audit records provider, decision, status, and workflow backend.",
     "case_type": "tool_gateway",
-    "backends": ["langgraph"],
     "request": {
       "url": "tests/fixtures/mock_site/basic.html",
       "tool_calls": [

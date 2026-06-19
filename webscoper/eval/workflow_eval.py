@@ -7,27 +7,28 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from webscoper.runtime.llm.client import BaseLLMClient
 from webscoper.api.task_service import TaskService
-from webscoper.api.task_state import (
-    TaskState,
-    status_from_context_state,
-    status_from_transcript,
-)
+from webscoper.api.task_state import TaskState, status_from_context_state, status_from_transcript
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
+from webscoper.runtime.llm.client import BaseLLMClient
 from webscoper.runtime.prompt.reminders import RuntimeReminderStore
 from webscoper.runtime.task_runner import build_task_spec, llm_config_path
-from webscoper.schemas.llm import LLMRequest, LLMResponse
 from webscoper.schemas.eval import (
-    WorkflowBackendRunResult,
-    WorkflowComparisonResult,
     WorkflowEvalCase,
+    WorkflowEvalCaseResult,
+    WorkflowEvalRunResult,
     WorkflowEvalSummary,
 )
-from webscoper.schemas.workflow import WorkflowBackend
+from webscoper.schemas.llm import LLMRequest, LLMResponse
 
 
 class WorkflowRegressionEvalRunner:
+    """Run LangGraph-only workflow eval cases.
+
+    The class name is retained for script/import compatibility; this runner no
+    runs only the LangGraph workflow.
+    """
+
     def __init__(self, output_dir: Path) -> None:
         self.output_dir = output_dir
 
@@ -60,46 +61,24 @@ class WorkflowRegressionEvalRunner:
                 for result in results
                 if result.case_type == "approval" and result.passed
             ),
-            native_failures=sum(
-                1
-                for result in results
-                if any(diff.startswith("native.") for diff in result.differences)
-            ),
-            langgraph_failures=sum(
-                1
-                for result in results
-                if any(diff.startswith("langgraph.") for diff in result.differences)
-            ),
-            comparison_failures=failed,
+            langgraph_failures=failed,
+            expectation_failures=failed,
             case_results=results,
             metadata={
                 "generated_at": datetime.now(timezone.utc).isoformat(),
                 "output_dir": str(self.output_dir),
-                "backends": ["native", "langgraph"],
+                "backend": "langgraph",
             },
         )
         write_workflow_eval_outputs(summary, self.output_dir)
         return summary
 
-    def run_case(self, case: WorkflowEvalCase) -> WorkflowComparisonResult:
-        native = (
-            self._run_backend(case, "native")
-            if "native" in case.backends
-            else _skipped_backend_result(case, "native")
-        )
-        langgraph = (
-            self._run_backend(case, "langgraph")
-            if "langgraph" in case.backends
-            else _skipped_backend_result(case, "langgraph")
-        )
-        return compare_workflow_backend_results(case, native, langgraph)
+    def run_case(self, case: WorkflowEvalCase) -> WorkflowEvalCaseResult:
+        result = self._run_langgraph_case(case)
+        return evaluate_workflow_result(case, result)
 
-    def _run_backend(
-        self,
-        case: WorkflowEvalCase,
-        backend: WorkflowBackend,
-    ) -> WorkflowBackendRunResult:
-        run_id = _safe_run_id(f"{case.case_id}_{backend}")
+    def _run_langgraph_case(self, case: WorkflowEvalCase) -> WorkflowEvalRunResult:
+        run_id = _safe_run_id(case.case_id)
         run_dir = self.output_dir / "runs" / run_id
         if run_dir.exists():
             shutil.rmtree(run_dir)
@@ -120,12 +99,13 @@ class WorkflowRegressionEvalRunner:
             reminders = RuntimeReminderStore()
             if case.request.reminder:
                 reminders.add(case.request.reminder, source="workflow_eval")
+            planner_mode = "fake_llm" if case.request.tool_calls else case.request.planner
             handler = WebAgentExecutionHandler(
                 output_root=self.output_dir / "runs",
                 headless=True,
                 workspace=Path(case.request.workspace) if case.request.workspace else None,
                 runtime_reminders=reminders,
-                planner_mode="fake_llm" if case.request.tool_calls else case.request.planner,
+                planner_mode=planner_mode,
                 repair_attempts=case.request.repair_attempts,
                 reviewer_mode=case.request.reviewer,
                 revise_attempts=case.request.revise_attempts,
@@ -133,7 +113,7 @@ class WorkflowRegressionEvalRunner:
                 if case.request.tool_calls
                 else None,
                 llm_config_path=llm_config_path(
-                    "fake_llm" if case.request.tool_calls else case.request.planner,
+                    planner_mode,
                     None,
                     reviewer=case.request.reviewer,
                 ),
@@ -142,18 +122,14 @@ class WorkflowRegressionEvalRunner:
                 approval_store=service.approval_store,
                 pending_manager=service.pending_manager,
             )
-            if backend == "native":
-                handler.run_sync(task)
-            else:
-                _run_langgraph_with_service(service, handler, task, run_id)
+            _run_langgraph_with_service(service, handler, task, run_id)
             status_override, error_override = _simulate_approval_decision(
                 service,
                 run_id,
                 case.expected.simulate_approval_decision,
             )
             service._write_task_artifacts(run_id)
-            return _collect_backend_result(
-                backend,
+            return _collect_result(
                 handler,
                 events,
                 error=error_override,
@@ -163,15 +139,13 @@ class WorkflowRegressionEvalRunner:
             if handler is not None:
                 if status_override is None:
                     status_override = _service_status(service, run_id)
-                return _collect_backend_result(
-                    backend,
+                return _collect_result(
                     handler,
                     events,
                     error=error_override or f"{type(exc).__name__}: {exc}",
                     status_override=status_override,
                 )
-            return WorkflowBackendRunResult(
-                backend=backend,
+            return WorkflowEvalRunResult(
                 task_id=run_id,
                 status="failed",
                 error=f"{type(exc).__name__}: {exc}",
@@ -184,167 +158,96 @@ class WorkflowRegressionEvalRunner:
                 pass
 
 
-def compare_workflow_backend_results(
+def evaluate_workflow_result(
     case: WorkflowEvalCase,
-    native: WorkflowBackendRunResult,
-    langgraph: WorkflowBackendRunResult,
-) -> WorkflowComparisonResult:
+    result: WorkflowEvalRunResult,
+) -> WorkflowEvalCaseResult:
     differences: list[str] = []
-    missing_artifacts: dict[str, list[str]] = {}
     expected = case.expected
-    allowed = set(expected.allow_backend_differences)
     expected_status = expected.expected_status or expected.status
     expected_artifacts = sorted(
         set(expected.required_artifacts + expected.expected_artifacts)
     )
-    active_results = [
-        result for result in (native, langgraph) if result.status != "skipped"
-    ]
 
-    if expected_status is not None:
-        for result in active_results:
-            if result.status != expected_status:
-                differences.append(
-                    f"{result.backend}.status expected {expected_status}, got {result.status}"
-                )
-    elif (
-        len(active_results) == 2
-        and native.status != langgraph.status
-        and "status" not in allowed
-    ):
+    if expected_status is not None and result.status != expected_status:
         differences.append(
-            f"status differs: native={native.status}, langgraph={langgraph.status}"
+            f"langgraph.status expected {expected_status}, got {result.status}"
         )
 
-    for result in active_results:
-        missing = [
-            artifact
-            for artifact in expected_artifacts
-            if artifact not in set(result.artifacts)
-        ]
-        if missing:
-            missing_artifacts[result.backend] = missing
-            differences.append(f"{result.backend}.artifacts missing: {', '.join(missing)}")
+    missing_artifacts = [
+        artifact
+        for artifact in expected_artifacts
+        if artifact not in set(result.artifacts)
+    ]
+    if missing_artifacts:
+        differences.append(
+            "langgraph.artifacts missing: " + ", ".join(missing_artifacts)
+        )
 
-    if expected.review_passed is not None:
-        for result in active_results:
-            if result.review_passed != expected.review_passed:
-                differences.append(
-                    f"{result.backend}.review_passed expected "
-                    f"{expected.review_passed}, got {result.review_passed}"
-                )
+    if expected.review_passed is not None and result.review_passed != expected.review_passed:
+        differences.append(
+            f"langgraph.review_passed expected "
+            f"{expected.review_passed}, got {result.review_passed}"
+        )
 
     if expected.min_review_score is not None:
-        for result in active_results:
-            score = result.review_score
-            if score is None or score < expected.min_review_score:
-                differences.append(
-                    f"{result.backend}.review_score expected >= "
-                    f"{expected.min_review_score}, got {score}"
-                )
-    elif (
-        native.review_score is not None
-        and langgraph.review_score is not None
-        and abs(native.review_score - langgraph.review_score) > 0.0001
-        and "review_score" not in allowed
-    ):
+        score = result.review_score
+        if score is None or score < expected.min_review_score:
+            differences.append(
+                f"langgraph.review_score expected >= "
+                f"{expected.min_review_score}, got {score}"
+            )
+
+    missing_events = [
+        kind
+        for kind in sorted(
+            set(expected.expected_event_kinds + expected.expected_approval_events)
+        )
+        if kind not in set(result.event_kinds)
+    ]
+    if missing_events:
         differences.append(
-            "review_score differs: "
-            f"native={native.review_score}, langgraph={langgraph.review_score}"
+            f"langgraph.event_kinds missing: {', '.join(missing_events)}"
         )
 
-    if (
-        expected.review_passed is None
-        and native.review_passed is not None
-        and langgraph.review_passed is not None
-        and native.review_passed != langgraph.review_passed
-        and "review_passed" not in allowed
-    ):
+    missing_recovery = [
+        kind
+        for kind in expected.expected_recovery_kinds
+        if kind not in set(result.recovery_kinds)
+    ]
+    if missing_recovery:
         differences.append(
-            "review_passed differs: "
-            f"native={native.review_passed}, langgraph={langgraph.review_passed}"
+            f"langgraph.recovery_kinds missing: {', '.join(missing_recovery)}"
         )
-
-    for result in active_results:
-        missing_events = [
-            kind
-            for kind in sorted(
-                set(expected.expected_event_kinds + expected.expected_approval_events)
-            )
-            if kind not in set(result.event_kinds)
-        ]
-        if missing_events:
-            differences.append(
-                f"{result.backend}.event_kinds missing: {', '.join(missing_events)}"
-            )
-
-    for result in active_results:
-        missing_recovery = [
-            kind
-            for kind in expected.expected_recovery_kinds
-            if kind not in set(result.recovery_kinds)
-        ]
-        if missing_recovery:
-            differences.append(
-                f"{result.backend}.recovery_kinds missing: {', '.join(missing_recovery)}"
-            )
 
     if expected.expected_recovery_error_type is not None:
-        for result in active_results:
-            if expected.expected_recovery_error_type not in set(result.recovery_error_types):
-                differences.append(
-                    f"{result.backend}.recovery_error_types expected "
-                    f"{expected.expected_recovery_error_type}, got "
-                    f"{', '.join(result.recovery_error_types) or None}"
-                )
+        if expected.expected_recovery_error_type not in set(result.recovery_error_types):
+            differences.append(
+                f"langgraph.recovery_error_types expected "
+                f"{expected.expected_recovery_error_type}, got "
+                f"{', '.join(result.recovery_error_types) or None}"
+            )
 
     expected_risk_status = expected.expected_risk_decision or expected.expected_risk_status
     if expected_risk_status is not None:
-        for result in active_results:
-            risk_status = result.metadata.get("risk_status")
-            if risk_status != expected_risk_status:
-                differences.append(
-                    f"{result.backend}.risk_status expected "
-                    f"{expected_risk_status}, got {risk_status}"
-                )
-
-    for metadata_key in (
-        "evidence_count",
-        "recovery_attempt_count",
-        "approval_request_count",
-    ):
-        if len(active_results) < 2:
-            continue
-        if metadata_key in allowed:
-            continue
-        native_value = native.metadata.get(metadata_key)
-        langgraph_value = langgraph.metadata.get(metadata_key)
-        if native_value != langgraph_value:
+        risk_status = result.metadata.get("risk_status")
+        if risk_status != expected_risk_status:
             differences.append(
-                f"{metadata_key} differs: "
-                f"native={native_value}, langgraph={langgraph_value}"
+                f"langgraph.risk_status expected {expected_risk_status}, got {risk_status}"
             )
 
-    if _unexpected_error(native, expected_status) and "native.error" not in allowed:
-        differences.append(f"native.error: {native.error}")
-    if _unexpected_error(langgraph, expected_status) and "langgraph.error" not in allowed:
-        differences.append(f"langgraph.error: {langgraph.error}")
+    if _unexpected_error(result, expected_status):
+        differences.append(f"langgraph.error: {result.error}")
 
-    differences = [
-        difference
-        for difference in differences
-        if not _allowed_difference(difference, allowed)
-    ]
     passed = not differences and not missing_artifacts
-    return WorkflowComparisonResult(
+    return WorkflowEvalCaseResult(
         case_id=case.case_id,
         case_type=case.case_type,
         passed=passed,
-        native=native,
-        langgraph=langgraph,
+        result=result,
         differences=differences,
         missing_artifacts=missing_artifacts,
-        summary="Backends matched expectations." if passed else "; ".join(differences),
+        summary="LangGraph matched expectations." if passed else "; ".join(differences),
     )
 
 
@@ -363,13 +266,12 @@ def write_workflow_eval_outputs(
     )
 
 
-def _collect_backend_result(
-    backend: str,
+def _collect_result(
     handler: WebAgentExecutionHandler,
     event_sink_kinds: list[str],
     error: str | None = None,
     status_override: str | None = None,
-) -> WorkflowBackendRunResult:
+) -> WorkflowEvalRunResult:
     context = handler.last_context
     run_dir = context.run_dir if context is not None else None
     artifacts = _list_artifacts(run_dir)
@@ -382,8 +284,7 @@ def _collect_backend_result(
     risk_status = _read_risk_status(run_dir)
     recovery_kinds, recovery_error_types = _read_recovery_summary(run_dir)
     approval_statuses = _read_approval_statuses(run_dir)
-    return WorkflowBackendRunResult(
-        backend=backend,
+    return WorkflowEvalRunResult(
         task_id=context.run_id if context is not None else None,
         status=status,
         run_dir=str(run_dir) if run_dir is not None else None,
@@ -547,18 +448,6 @@ def _read_jsonl_objects(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _skipped_backend_result(
-    case: WorkflowEvalCase,
-    backend: WorkflowBackend,
-) -> WorkflowBackendRunResult:
-    return WorkflowBackendRunResult(
-        backend=backend,
-        task_id=f"{case.case_id}_{backend}",
-        status="skipped",
-        metadata={"skipped": True},
-    )
-
-
 class _StaticToolCallsLLMClient(BaseLLMClient):
     def __init__(self, tool_calls: list[dict[str, Any]]) -> None:
         self.tool_calls = tool_calls
@@ -662,12 +551,8 @@ def _safe_run_id(value: str) -> str:
     return safe or "workflow_eval_case"
 
 
-def _allowed_difference(difference: str, allowed: set[str]) -> bool:
-    return any(token and token in difference for token in allowed)
-
-
 def _unexpected_error(
-    result: WorkflowBackendRunResult,
+    result: WorkflowEvalRunResult,
     expected_status: str | None,
 ) -> bool:
     if not result.error:
@@ -679,7 +564,7 @@ def _unexpected_error(
 
 def _report_markdown(summary: WorkflowEvalSummary) -> str:
     lines = [
-        "# VaniScope Workflow Regression Eval Report",
+        "# VaniScope LangGraph Eval Report",
         "",
         "## Summary",
         "",
@@ -689,44 +574,38 @@ def _report_markdown(summary: WorkflowEvalSummary) -> str:
         f"- Pass rate: {summary.pass_rate:.4f}",
         f"- Recovery cases passed: {summary.recovery_cases_passed}",
         f"- Approval cases passed: {summary.approval_cases_passed}",
-        f"- Native expectation failures: {summary.native_failures}",
         f"- LangGraph expectation failures: {summary.langgraph_failures}",
-        f"- Comparison failures: {summary.comparison_failures}",
         "",
         "## Cases",
         "",
-        "| Case | Type | Passed | Native Status | LangGraph Status | Differences |",
-        "|---|---|---:|---|---|---|",
+        "| Case | Type | Passed | Status | Differences |",
+        "|---|---|---:|---|---|",
     ]
     for result in summary.case_results:
         differences = "<br>".join(result.differences) if result.differences else ""
         lines.append(
-            "| {case_id} | {case_type} | {passed} | {native_status} | {langgraph_status} | {diffs} |".format(
+            "| {case_id} | {case_type} | {passed} | {status} | {diffs} |".format(
                 case_id=result.case_id,
                 case_type=result.case_type,
                 passed="yes" if result.passed else "no",
-                native_status=result.native.status,
-                langgraph_status=result.langgraph.status,
+                status=result.result.status,
                 diffs=differences,
             )
         )
     lines.extend(["", "## Details", ""])
     for result in summary.case_results:
+        run = result.result
         lines.extend(
             [
                 f"### {result.case_id}",
                 "",
                 f"- Passed: {'yes' if result.passed else 'no'}",
-                f"- Native run dir: {result.native.run_dir or ''}",
-                f"- LangGraph run dir: {result.langgraph.run_dir or ''}",
+                f"- Run dir: {run.run_dir or ''}",
                 f"- Summary: {result.summary}",
-                f"- Missing artifacts: {result.missing_artifacts or {}}",
-                f"- Native events: {', '.join(result.native.event_kinds)}",
-                f"- LangGraph events: {', '.join(result.langgraph.event_kinds)}",
-                f"- Native recovery: {', '.join(result.native.recovery_kinds)}",
-                f"- LangGraph recovery: {', '.join(result.langgraph.recovery_kinds)}",
-                f"- Native approvals: {', '.join(result.native.approval_statuses)}",
-                f"- LangGraph approvals: {', '.join(result.langgraph.approval_statuses)}",
+                f"- Missing artifacts: {result.missing_artifacts or []}",
+                f"- Events: {', '.join(run.event_kinds)}",
+                f"- Recovery: {', '.join(run.recovery_kinds)}",
+                f"- Approvals: {', '.join(run.approval_statuses)}",
                 "",
             ]
         )

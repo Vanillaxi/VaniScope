@@ -6,7 +6,7 @@ VaniScope / Web-Scoper is a LangGraph-based browser-agent runtime for local and 
 
 The runtime package is split by responsibility into `runtime/execution`, `runtime/artifacts`, `runtime/llm`, `runtime/prompt`, `runtime/review`, and `runtime/safety`. Old flat runtime import paths are temporarily kept as a compatibility layer.
 
-`webscoper/workflows/langgraph_adapter.py` remains the public LangGraph workflow entry point. Its orchestration internals live under `webscoper/workflows/langgraph_backend/`. LangGraph is the formal workflow orchestration layer; the native runner is retained only for direct execution, smoke tests, and compatibility imports.
+`webscoper/workflows/langgraph_adapter.py` remains the public LangGraph workflow entry point. Its orchestration internals live under `webscoper/workflows/langgraph_backend/`. LangGraph is the only task orchestration layer.
 
 `webscoper/tools/gateway/` contains the formal tool invocation entry point. LangGraph tool nodes call `ToolGateway.invoke()`, which applies policy, risk/approval decisions, provider dispatch, and `tool_audit.jsonl` audit records. Browser Runtime is exposed as a ToolGateway provider, and `FakeMCPToolProvider` gives deterministic local MCP-shaped tools for tests. Future real MCP servers and a Go control plane can attach behind this gateway abstraction.
 
@@ -43,7 +43,7 @@ webscoper/
   runtime/       # Agent Runtime: execution, artifacts, LLM, prompt, review, safety compatibility layer
   api/           # FastAPI Task API, async tasks, approvals, SSE event stream, artifact access
   eval/          # Browser, planner, reviewer, and workflow regression eval harnesses
-  workflows/     # LangGraph backend orchestration modules plus native compatibility path
+  workflows/     # LangGraph backend orchestration modules
   tools/         # Tool registry, browser tool definitions, and ToolGateway providers
   schemas/       # Shared Pydantic schemas
 
@@ -89,7 +89,7 @@ Use `configs/llm.example.toml` as the committed template. Put local provider set
 
 ## Workflow Eval
 
-Workflow regression eval compares native and LangGraph workflow backends across the same local task cases without real network or real LLM calls. The combined fixture covers:
+LangGraph workflow eval runs local task cases without real network or real LLM calls. The main fixture covers:
 
 - workflow cases for status, artifacts, review, evidence, and compaction
 - recovery cases for lazy controls, modal overlays, no-effect retries, ambiguous targets, disabled controls, login/password blocking, and captcha blocking
@@ -97,11 +97,11 @@ Workflow regression eval compares native and LangGraph workflow backends across 
 
 ```bash
 uv run python scripts/run_workflow_eval.py \
-  --cases tests/fixtures/workflow_eval_cases.json \
-  --output-dir eval_results/workflow_eval_local
+  --cases tests/fixtures/langgraph_main_eval_cases.json \
+  --output-dir eval_results/langgraph_eval_local
 ```
 
-The runner writes `score.json` and `report.md` under the selected output directory. `score.json` includes total/pass/fail counts, recovery and approval pass counts, native/LangGraph expectation failures, and comparison failures.
+The runner writes `score.json` and `report.md` under the selected output directory. `score.json` includes total/pass/fail counts, recovery and approval pass counts, and LangGraph expectation failures.
 
 Tool Gateway eval is LangGraph-first and verifies browser, local deterministic MCP-shaped tools, approval, blocking, and audit behavior:
 

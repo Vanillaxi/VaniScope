@@ -7,7 +7,7 @@ This document is a lightweight boundary map for `webscoper/runtime/`. The runtim
 - `execution/handler.py` owns the high-level agent execution handler: context creation, prompt building, planning, validation, tool-loop execution, and artifact finalization.
 - `execution/loop.py` runs validated tool-call plans through `LocalToolExecutor`, records transcript events, emits task events, and stores evidence.
 - `execution/tool_executor.py` bridges native/direct tool calls to the local tool registry and browser runtime while enforcing risk checks and approval pause behavior.
-- `task_runner.py` is the CLI-facing orchestration layer for native and LangGraph workflow selection.
+- `task_runner.py` is the CLI-facing orchestration layer for the LangGraph workflow.
 - `execution/planner.py`, `execution/plan_validator.py`, and `execution/tool_call_parser.py` support deterministic plans, plan validation, and LLM tool-call parsing.
 
 ## Tool Gateway
@@ -63,13 +63,13 @@ Flat modules such as `webscoper.runtime.evidence`, `webscoper.runtime.llm_client
 
 ## Workflow Integration Boundary
 
-LangGraph is the formal workflow orchestration backend. `webscoper/runtime/` stays workflow-backend neutral where possible, and Browser Runtime, Tool Runtime, Evidence, Review, Approval, Eval, and Audit are core runtime capabilities beneath LangGraph. Native execution remains as a direct runner, CLI smoke path, and compatibility path; it is not a long-term peer backend for new workflow behavior.
+LangGraph is the only workflow orchestration backend. `webscoper/runtime/` stays focused on core runtime capabilities beneath LangGraph: Browser Runtime, Tool Runtime, Evidence, Review, Approval, Eval, and Audit.
 
 `webscoper/workflows/langgraph_adapter.py` is kept as the public compatibility entry. LangGraph orchestration internals live under `webscoper/workflows/langgraph_backend/`, split into graph construction, node implementations, resume handling, artifact/state writing, and workflow event helpers.
 
-Workflow regression eval lives in `webscoper/eval/workflow_eval.py`. Existing native-vs-LangGraph cases remain as compatibility regression coverage, while new Tool Gateway eval cases are LangGraph-first. The eval runner records status, artifacts, review, evidence, recovery, approval, risk, audit, and event behavior without changing runtime semantics.
+Workflow eval lives in `webscoper/eval/workflow_eval.py` and is LangGraph-only. The eval runner records status, artifacts, review, evidence, recovery, approval, risk, audit, and event behavior without changing runtime semantics.
 
-The workflow eval schema supports `case_type` values of `workflow`, `recovery`, `approval`, and `tool_gateway`. Recovery cases assert expected recovery strategies and error types from `recovery.jsonl`. Approval cases assert RiskGate decisions, approval-required/task-paused events, approve/reject resume outcomes, and persisted `approvals.jsonl`, `pending.jsonl`, `events.jsonl`, and `risk_report.json` artifacts. Tool Gateway cases assert LangGraph gateway provider, decision, status, risk level, workflow backend, and audit behavior. `tests/fixtures/workflow_eval_cases.json` is the canonical compatibility matrix; `tests/fixtures/tool_gateway_eval_cases.json` is the LangGraph-first gateway matrix. Eval cases are guarded to use local fixture URLs and non-real planner/reviewer modes, so pytest and eval runs do not access real network targets or real LLM providers.
+The workflow eval schema supports `case_type` values of `workflow`, `recovery`, `approval`, and `tool_gateway`. Recovery cases assert expected recovery strategies and error types from `recovery.jsonl`. Approval cases assert RiskGate decisions, approval-required/task-paused events, approve/reject resume outcomes, and persisted `approvals.jsonl`, `pending.jsonl`, `events.jsonl`, and `risk_report.json` artifacts. Tool Gateway cases assert LangGraph gateway provider, decision, status, risk level, workflow backend, and audit behavior. `tests/fixtures/langgraph_main_eval_cases.json` is the main LangGraph matrix; `tests/fixtures/tool_gateway_eval_cases.json` is the gateway matrix. Eval cases are guarded to use local fixture URLs and non-real planner/reviewer modes, so pytest and eval runs do not access real network targets or real LLM providers.
 
 ## Browser Recovery Boundary
 

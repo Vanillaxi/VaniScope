@@ -5,7 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-WorkflowBackend = Literal["native", "langgraph"]
+WorkflowBackend = Literal["langgraph"]
 
 
 class WorkflowRunResult(BaseModel):

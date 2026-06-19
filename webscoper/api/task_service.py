@@ -14,8 +14,6 @@ from webscoper.api.artifacts import (
     write_task_artifacts,
 )
 from webscoper.api.resume import (
-    context_from_pending,
-    resume_after_approval as resume_after_approval_for_service,
     resume_langgraph_after_approval as resume_langgraph_after_approval_for_service,
     run_langgraph_workflow,
 )
@@ -41,7 +39,7 @@ from webscoper.runtime.events import (
 )
 from webscoper.runtime.safety.pending import PendingApprovalManager
 from webscoper.schemas.events import TaskEvent, TaskEventKind
-from webscoper.schemas.risk import ApprovalRequest, TaskResumeResult
+from webscoper.schemas.risk import ApprovalRequest
 from webscoper.schemas.task import TaskSpec
 from webscoper.schemas.workflow import LangGraphResumeResult
 
@@ -67,12 +65,7 @@ class TaskService:
         task = build_api_task(task_id, request)
 
         try:
-            if request.workflow == "native":
-                handler.run_sync(task)
-            elif request.workflow == "langgraph":
-                self._run_langgraph_workflow(handler, task, task_id)
-            else:
-                raise ValueError(f"Unsupported workflow backend: {request.workflow}")
+            self._run_langgraph_workflow(handler, task, task_id)
             context = handler.last_context
             if context is None:
                 raise RuntimeError("Task completed without run context.")
@@ -115,7 +108,7 @@ class TaskService:
             status="running",
             run_dir=run_dir,
             workflow=request.workflow,
-            thread_id=task_id if request.workflow == "langgraph" else None,
+            thread_id=task_id,
         )
         self._publish_task_event(
             task_id,
@@ -188,17 +181,12 @@ class TaskService:
 
         state = self._task_states[task_id]
         try:
-            if request.workflow == "native":
-                await handler.run(task)
-            elif request.workflow == "langgraph":
-                await asyncio.to_thread(
-                    self._run_langgraph_workflow,
-                    handler,
-                    task,
-                    task_id,
-                )
-            else:
-                raise ValueError(f"Unsupported workflow backend: {request.workflow}")
+            await asyncio.to_thread(
+                self._run_langgraph_workflow,
+                handler,
+                task,
+                task_id,
+            )
             context = handler.last_context
             state.status = (
                 status_from_context_state(context.state.status)
@@ -292,12 +280,6 @@ class TaskService:
     ) -> LangGraphResumeResult:
         return resume_langgraph_after_approval_for_service(self, approval_id, decision)
 
-    async def resume_after_approval(self, approval_id: str) -> TaskResumeResult:
-        return await resume_after_approval_for_service(self, approval_id)
-
-    def _context_from_pending(self, pending) -> WebAgentContext:
-        return context_from_pending(pending)
-
     def _set_task_state(
         self,
         task_id: str,
@@ -327,14 +309,7 @@ class TaskService:
         return run_langgraph_workflow(self, handler, task, task_id)
 
     def _workflow_for_task(self, task_id: str) -> str:
-        state = self._task_states.get(task_id)
-        if state is not None:
-            return state.workflow
-        approval = self.approval_store.list_for_task(task_id)
-        for item in approval:
-            if item.metadata.get("workflow") == "langgraph":
-                return "langgraph"
-        return "native"
+        return "langgraph"
 
     def _run_dir(self, task_id: str) -> Path:
         return self.runs_dir / task_id

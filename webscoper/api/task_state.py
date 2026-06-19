@@ -10,7 +10,7 @@ class TaskState:
     task_id: str
     status: str
     run_dir: Path
-    workflow: str = "native"
+    workflow: str = "langgraph"
     thread_id: str | None = None
     artifacts: list[str] = field(default_factory=list)
     error: str | None = None

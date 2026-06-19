@@ -9,7 +9,7 @@ from pathlib import Path
 def test_run_workflow_eval_script_writes_outputs(tmp_path: Path) -> None:
     cases_path = tmp_path / "workflow_cases.json"
     fixture_cases = json.loads(
-        Path("tests/fixtures/workflow_eval_cases.json").read_text(encoding="utf-8")
+        Path("tests/fixtures/langgraph_main_eval_cases.json").read_text(encoding="utf-8")
     )
     cases_path.write_text(
         json.dumps([fixture_cases[0]], indent=2),

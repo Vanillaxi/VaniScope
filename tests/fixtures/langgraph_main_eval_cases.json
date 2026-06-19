@@ -1,7 +1,7 @@
 [
   {
     "case_id": "basic_click",
-    "description": "Basic click intent should succeed in both native and langgraph workflows.",
+    "description": "Basic click intent should succeed in LangGraph workflow.",
     "case_type": "workflow",
     "request": {
       "url": "tests/fixtures/mock_site/basic.html",
@@ -31,10 +31,6 @@
         "execution_completed",
         "review_completed",
         "compaction_written"
-      ],
-      "allow_backend_differences": [
-        "workflow_started",
-        "workflow_state.json"
       ]
     }
   },
@@ -69,16 +65,12 @@
         "llm_response",
         "execution_completed",
         "review_completed"
-      ],
-      "allow_backend_differences": [
-        "workflow_started",
-        "workflow_state.json"
       ]
     }
   },
   {
     "case_id": "lazy_button_recovery",
-    "description": "Lazy button recovery should converge in both workflow backends.",
+    "description": "Lazy button recovery should converge in the LangGraph workflow.",
     "case_type": "recovery",
     "request": {
       "url": "tests/fixtures/mock_site/lazy_button.html",
@@ -111,11 +103,7 @@
       "expected_recovery_kinds": [
         "wait_and_reobserve"
       ],
-      "expected_recovery_error_type": "target_not_found",
-      "allow_backend_differences": [
-        "workflow_started",
-        "workflow_state.json"
-      ]
+      "expected_recovery_error_type": "target_not_found"
     }
   },
   {
@@ -152,11 +140,7 @@
       "expected_recovery_kinds": [
         "close_modal_if_safe"
       ],
-      "expected_recovery_error_type": "target_covered",
-      "allow_backend_differences": [
-        "workflow_started",
-        "workflow_state.json"
-      ]
+      "expected_recovery_error_type": "target_covered"
     }
   },
   {
@@ -193,11 +177,7 @@
       "expected_recovery_kinds": [
         "wait_and_reobserve"
       ],
-      "expected_recovery_error_type": "postcondition_failed",
-      "allow_backend_differences": [
-        "workflow_started",
-        "workflow_state.json"
-      ]
+      "expected_recovery_error_type": "postcondition_failed"
     }
   },
   {
@@ -235,16 +215,12 @@
       "expected_recovery_kinds": [
         "wait_and_reobserve"
       ],
-      "expected_recovery_error_type": "postcondition_failed",
-      "allow_backend_differences": [
-        "workflow_started",
-        "workflow_state.json"
-      ]
+      "expected_recovery_error_type": "postcondition_failed"
     }
   },
   {
     "case_id": "submit_requires_approval",
-    "description": "Submit action should pause for approval in both workflow backends.",
+    "description": "Submit action should pause for approval in the LangGraph workflow.",
     "case_type": "approval",
     "request": {
       "url": "tests/fixtures/mock_site/risk_actions.html",
@@ -273,12 +249,7 @@
         "approval_required",
         "task_paused"
       ],
-      "expected_risk_decision": "requires_approval",
-      "allow_backend_differences": [
-        "langgraph_interrupts.jsonl",
-        "workflow_state.json",
-        "workflow_started"
-      ]
+      "expected_risk_decision": "requires_approval"
     }
   },
   {
@@ -310,11 +281,7 @@
       "expected_recovery_kinds": [
         "abort_as_failed"
       ],
-      "expected_recovery_error_type": "target_disabled",
-      "allow_backend_differences": [
-        "workflow_state.json",
-        "workflow_started"
-      ]
+      "expected_recovery_error_type": "target_disabled"
     }
   },
   {
@@ -344,11 +311,7 @@
         "risk_blocked",
         "execution_failed"
       ],
-      "expected_risk_decision": "blocked",
-      "allow_backend_differences": [
-        "workflow_state.json",
-        "workflow_started"
-      ]
+      "expected_risk_decision": "blocked"
     }
   },
   {
@@ -378,11 +341,7 @@
         "risk_blocked",
         "execution_failed"
       ],
-      "expected_risk_decision": "blocked",
-      "allow_backend_differences": [
-        "workflow_state.json",
-        "workflow_started"
-      ]
+      "expected_risk_decision": "blocked"
     }
   },
   {
@@ -421,15 +380,7 @@
         "task_finished"
       ],
       "expected_risk_decision": "requires_approval",
-      "simulate_approval_decision": "approved",
-      "allow_backend_differences": [
-        "evidence_count",
-        "langgraph_interrupted",
-        "langgraph_interrupts.jsonl",
-        "langgraph_resumed",
-        "workflow_state.json",
-        "workflow_started"
-      ]
+      "simulate_approval_decision": "approved"
     }
   },
   {
@@ -463,18 +414,12 @@
         "task_rejected"
       ],
       "expected_risk_decision": "requires_approval",
-      "simulate_approval_decision": "rejected",
-      "allow_backend_differences": [
-        "langgraph_interrupted",
-        "langgraph_interrupts.jsonl",
-        "workflow_state.json",
-        "workflow_started"
-      ]
+      "simulate_approval_decision": "rejected"
     }
   },
   {
     "case_id": "delete_blocked",
-    "description": "Delete action should be blocked in both workflow backends.",
+    "description": "Delete action should be blocked in the LangGraph workflow.",
     "case_type": "approval",
     "request": {
       "url": "tests/fixtures/mock_site/risk_actions.html",
@@ -499,11 +444,7 @@
         "risk_blocked",
         "execution_failed"
       ],
-      "expected_risk_decision": "blocked",
-      "allow_backend_differences": [
-        "workflow_state.json",
-        "workflow_started"
-      ]
+      "expected_risk_decision": "blocked"
     }
   },
   {
@@ -534,18 +475,12 @@
         "approval_required",
         "task_paused"
       ],
-      "expected_risk_decision": "requires_approval",
-      "allow_backend_differences": [
-        "langgraph_interrupted",
-        "langgraph_interrupts.jsonl",
-        "workflow_state.json",
-        "workflow_started"
-      ]
+      "expected_risk_decision": "requires_approval"
     }
   },
   {
     "case_id": "review_revise_loop",
-    "description": "Reviewer revise loop artifacts should be generated by both workflow backends.",
+    "description": "Reviewer revise loop artifacts should be generated by the LangGraph workflow.",
     "request": {
       "url": "tests/fixtures/mock_site/basic.html",
       "click": "Quickstart",
@@ -578,10 +513,6 @@
         "report_revised",
         "final_review_finished",
         "revise_loop_finished"
-      ],
-      "allow_backend_differences": [
-        "workflow_started",
-        "workflow_state.json"
       ]
     }
   }

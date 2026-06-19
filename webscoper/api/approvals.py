@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-
 from webscoper.api.schemas import ApprovalDecisionResponse
 from webscoper.runtime.safety.approvals import ApprovalStoreError
 from webscoper.schemas.risk import TaskResumeResult
@@ -46,14 +44,10 @@ def decide_approval(
         pass
 
     if approved:
-        workflow = service._workflow_for_task(approval.task_id)
-        if workflow == "langgraph":
-            resume_result = service.resume_langgraph_after_approval(
-                approval_id,
-                approval.decision,
-            )
-        else:
-            resume_result = asyncio.run(service.resume_after_approval(approval_id))
+        resume_result = service.resume_langgraph_after_approval(
+            approval_id,
+            approval.decision,
+        )
     else:
         pending = service.pending_manager.pop_by_approval_id(approval_id)
         if pending is not None:

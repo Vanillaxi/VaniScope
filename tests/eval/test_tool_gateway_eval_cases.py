@@ -12,7 +12,6 @@ def test_tool_gateway_eval_fixture_cases_are_langgraph_first() -> None:
 
     assert len(cases) == 8
     assert {case.case_type for case in cases} == {"tool_gateway"}
-    assert all(case.backends == ["langgraph"] for case in cases)
     assert {case.case_id for case in cases} == {
         "langgraph_gateway_browser_click",
         "langgraph_gateway_fake_mcp_echo",
@@ -34,9 +33,8 @@ def test_tool_gateway_eval_cases_pass_and_write_langgraph_audit(tmp_path: Path) 
     assert summary.passed == 8
     assert summary.failed == 0
     for result in summary.case_results:
-        assert result.native.status == "skipped"
-        assert result.langgraph.status in {"succeeded", "requires_approval", "blocked"}
-        run_dir = Path(result.langgraph.run_dir or "")
+        assert result.result.status in {"succeeded", "requires_approval", "blocked"}
+        run_dir = Path(result.result.run_dir or "")
         audit_rows = _read_jsonl(run_dir / "tool_audit.jsonl")
         assert audit_rows
         assert all(row["workflow_backend"] == "langgraph" for row in audit_rows)

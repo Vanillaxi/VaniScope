@@ -8,7 +8,7 @@ from webscoper.runtime.prompt.reminders import RuntimeReminderStore
 from webscoper.schemas.action import ActionContract, ExpectedEffect
 from webscoper.schemas.observation import PageObservation
 from webscoper.schemas.task import TaskSpec
-from webscoper.schemas.workflow import WorkflowBackend, WorkflowRunResult
+from webscoper.schemas.workflow import WorkflowRunResult
 
 
 @dataclass
@@ -23,7 +23,6 @@ def run_browser_task_sync(
     click: str | None = None,
     expect: str | None = None,
     planner: str = "deterministic",
-    workflow: WorkflowBackend = "native",
     workspace: str | Path | None = None,
     reminders: list[str] | None = None,
     output_root: Path = Path("runs"),
@@ -60,15 +59,10 @@ def run_browser_task_sync(
         llm_config_path=llm_config_path(planner, llm_config, reviewer=reviewer),
         llm_provider=llm_provider,
     )
-    if workflow == "native":
-        observation = handler.run_sync(task)
-    elif workflow == "langgraph":
-        workflow_result = run_langgraph_workflow_sync(handler, task)
-        if workflow_result.error and workflow_result.status == "failed":
-            raise RuntimeError(workflow_result.error)
-        observation = _last_observation_from_handler(handler)
-    else:
-        raise ValueError(f"Unsupported workflow backend: {workflow}")
+    workflow_result = run_langgraph_workflow_sync(handler, task)
+    if workflow_result.error and workflow_result.status == "failed":
+        raise RuntimeError(workflow_result.error)
+    observation = _last_observation_from_handler(handler)
     return TaskRunOutput(task=task, observation=observation, handler=handler)
 
 
@@ -76,21 +70,12 @@ class TaskRunner:
     def __init__(self, handler: WebAgentExecutionHandler) -> None:
         self.handler = handler
 
-    def run(
-        self,
-        task: TaskSpec,
-        workflow: WorkflowBackend = "native",
-    ) -> TaskRunOutput:
-        if workflow == "native":
-            observation = self.handler.run_sync(task)
-            return TaskRunOutput(task=task, observation=observation, handler=self.handler)
-        if workflow == "langgraph":
-            result = run_langgraph_workflow_sync(self.handler, task)
-            if result.error and result.status == "failed":
-                raise RuntimeError(result.error)
-            observation = _last_observation_from_handler(self.handler)
-            return TaskRunOutput(task=task, observation=observation, handler=self.handler)
-        raise ValueError(f"Unsupported workflow backend: {workflow}")
+    def run(self, task: TaskSpec) -> TaskRunOutput:
+        result = run_langgraph_workflow_sync(self.handler, task)
+        if result.error and result.status == "failed":
+            raise RuntimeError(result.error)
+        observation = _last_observation_from_handler(self.handler)
+        return TaskRunOutput(task=task, observation=observation, handler=self.handler)
 
 
 def run_langgraph_workflow_sync(

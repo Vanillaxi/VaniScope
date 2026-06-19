@@ -13,11 +13,11 @@ from webscoper.eval.workflow_eval import WorkflowRegressionEvalRunner
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run workflow regression eval cases.")
+    parser = argparse.ArgumentParser(description="Run LangGraph workflow eval cases.")
     parser.add_argument(
         "--cases",
-        default="tests/fixtures/workflow_eval_cases.json",
-        help="Path to workflow eval cases JSON.",
+        default="tests/fixtures/langgraph_main_eval_cases.json",
+        help="Path to LangGraph eval cases JSON.",
     )
     parser.add_argument(
         "--output-dir",
@@ -29,7 +29,7 @@ def main() -> int:
         Path(args.output_dir)
         if args.output_dir
         else Path("eval_results")
-        / f"workflow_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        / f"langgraph_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     )
     summary = WorkflowRegressionEvalRunner(output_dir).run_file(Path(args.cases))
 

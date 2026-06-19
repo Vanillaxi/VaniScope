@@ -111,20 +111,17 @@ class WorkflowEvalExpected(BaseModel):
     expected_risk_status: str | None = None
     expected_risk_decision: str | None = None
     simulate_approval_decision: Literal["approved", "rejected"] | None = None
-    allow_backend_differences: list[str] = Field(default_factory=list)
 
 
 class WorkflowEvalCase(BaseModel):
     case_id: str
     description: str
     case_type: Literal["workflow", "recovery", "approval", "tool_gateway"] = "workflow"
-    backends: list[str] = Field(default_factory=lambda: ["native", "langgraph"])
     request: WorkflowEvalRequest
     expected: WorkflowEvalExpected = Field(default_factory=WorkflowEvalExpected)
 
 
-class WorkflowBackendRunResult(BaseModel):
-    backend: str
+class WorkflowEvalRunResult(BaseModel):
     task_id: str | None = None
     status: str
     run_dir: str | None = None
@@ -139,14 +136,13 @@ class WorkflowBackendRunResult(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class WorkflowComparisonResult(BaseModel):
+class WorkflowEvalCaseResult(BaseModel):
     case_id: str
     case_type: Literal["workflow", "recovery", "approval", "tool_gateway"] = "workflow"
     passed: bool
-    native: WorkflowBackendRunResult
-    langgraph: WorkflowBackendRunResult
+    result: WorkflowEvalRunResult
     differences: list[str] = Field(default_factory=list)
-    missing_artifacts: dict[str, list[str]] = Field(default_factory=dict)
+    missing_artifacts: list[str] = Field(default_factory=list)
     summary: str
 
 
@@ -160,8 +156,7 @@ class WorkflowEvalSummary(BaseModel):
     failed_cases: int
     recovery_cases_passed: int = 0
     approval_cases_passed: int = 0
-    native_failures: int = 0
     langgraph_failures: int = 0
-    comparison_failures: int = 0
-    case_results: list[WorkflowComparisonResult] = Field(default_factory=list)
+    expectation_failures: int = 0
+    case_results: list[WorkflowEvalCaseResult] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)

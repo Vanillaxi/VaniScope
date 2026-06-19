@@ -40,12 +40,6 @@ def main() -> int:
         default="deterministic",
         help="Planner mode to use.",
     )
-    parser.add_argument(
-        "--workflow",
-        choices=["native", "langgraph"],
-        default="native",
-        help="Workflow backend to use.",
-    )
     parser.add_argument("--model", help="LLM model override for real_llm mode.")
     parser.add_argument(
         "--llm-config",
@@ -81,7 +75,6 @@ def main() -> int:
             click=args.click,
             expect=args.expect,
             planner=args.planner,
-            workflow=args.workflow,
             output_root=Path(args.output_root),
             headed=args.headed,
             workspace=Path(args.workspace) if args.workspace else None,
@@ -107,7 +100,7 @@ def main() -> int:
     print(f"final_url: {observation.url}")
     print(f"title: {observation.title}")
     print(f"planner_mode: {args.planner}")
-    print(f"workflow_backend: {args.workflow}")
+    print("workflow_backend: langgraph")
     if handler.llm_config_path is not None:
         print(f"llm_config_path: {handler.llm_config_path}")
     if args.llm_provider:

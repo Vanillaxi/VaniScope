@@ -27,7 +27,7 @@ class TaskCreateRequest(BaseModel):
     click: str | None = None
     expect: str | None = None
     planner: PlannerMode = "deterministic"
-    workflow: WorkflowBackend = "native"
+    workflow: WorkflowBackend = "langgraph"
     reviewer: ReviewerMode = "deterministic"
     workspace: str | None = None
     reminder: str | None = None

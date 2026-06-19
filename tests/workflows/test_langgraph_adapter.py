@@ -13,7 +13,6 @@ def test_langgraph_workflow_generates_core_artifacts(tmp_path: Path) -> None:
         click="Quickstart",
         expect="pip install playwright",
         planner="deterministic",
-        workflow="langgraph",
         workspace=Path("tests/fixtures/workspace"),
         reminders=["This is a test runtime reminder."],
         output_root=tmp_path,
@@ -40,7 +39,6 @@ def test_langgraph_fake_llm_planner_runs(tmp_path: Path) -> None:
         click="Quickstart",
         expect="pip install playwright",
         planner="fake_llm",
-        workflow="langgraph",
         workspace=Path("tests/fixtures/workspace"),
         reminders=["Return valid JSON tool_calls only."],
         output_root=tmp_path,
@@ -58,7 +56,6 @@ def test_langgraph_fake_llm_revise_loop_runs(tmp_path: Path) -> None:
         click="Quickstart",
         expect="pip install playwright",
         planner="deterministic",
-        workflow="langgraph",
         reviewer="fake_llm",
         revise_attempts=1,
         workspace=Path("tests/fixtures/workspace"),
@@ -88,7 +85,6 @@ def test_langgraph_missing_dependency_error(monkeypatch, tmp_path: Path) -> None
             url="tests/fixtures/mock_site/basic.html",
             click="Quickstart",
             expect="pip install playwright",
-            workflow="langgraph",
             output_root=tmp_path,
         )
     except RuntimeError as exc:
