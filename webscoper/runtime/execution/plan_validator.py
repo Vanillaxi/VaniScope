@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from webscoper.schemas.context import WebAgentContextSnapshot
-from webscoper.schemas.plan import ExecutionPlan, PlannedStep
-from webscoper.schemas.plan_validation import (
+from webscoper.schemas.runtime import WebAgentContextSnapshot
+from webscoper.schemas.tool import ExecutionPlan, PlannedStep
+from webscoper.schemas.tool import (
     PlanValidationIssue,
     PlanValidationResult,
 )

@@ -8,7 +8,7 @@ from typing import Any
 
 from webscoper.runtime.llm.client import BaseLLMClient, OpenAICompatibleLLMClient
 from webscoper.schemas.llm import LLMMessage, LLMRequest
-from webscoper.schemas.revise import (
+from webscoper.schemas.review import (
     LLMReviewFinding,
     LLMReviewRequest,
     LLMReviewResult,

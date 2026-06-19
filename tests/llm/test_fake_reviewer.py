@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from webscoper.runtime.llm.reviewer import FakeLLMReportReviewer
 from webscoper.runtime.review.reviewer import ReportReviewer
-from webscoper.schemas.evidence import EvidenceItem
-from webscoper.schemas.revise import LLMReviewRequest
+from webscoper.schemas.artifact import EvidenceItem
+from webscoper.schemas.review import LLMReviewRequest
 
 
 def test_fake_llm_reviewer_generates_findings_from_deterministic_review() -> None:

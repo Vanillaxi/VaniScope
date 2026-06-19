@@ -10,13 +10,13 @@ from webscoper.browser.effects import EffectVerifier
 from webscoper.browser.observer import observe_page
 from webscoper.browser.recovery import RecoveryManager
 from webscoper.browser.session import BrowserSession
-from webscoper.runtime.events import TaskEventSink
+from webscoper.runtime.execution.events import TaskEventSink
 from webscoper.runtime.artifacts.evidence import EvidenceStore
 from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.runtime.artifacts.transcript import TranscriptStore
-from webscoper.schemas.action import ActionContract
-from webscoper.schemas.observation import PageObservation
-from webscoper.schemas.trace import TraceStep
+from webscoper.schemas.browser import ActionContract
+from webscoper.schemas.browser import PageObservation
+from webscoper.schemas.artifact import TraceStep
 
 
 class BrowserRuntime:

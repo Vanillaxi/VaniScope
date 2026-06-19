@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from webscoper.schemas.recovery import (
+from webscoper.schemas.browser import (
     RecoveryErrorType,
     RecoveryPlan,
     RecoveryStrategy,

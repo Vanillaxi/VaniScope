@@ -5,13 +5,13 @@ from pathlib import Path
 from typing import Any
 
 from webscoper.runtime.safety.approvals import ApprovalStore
-from webscoper.runtime.events import TaskEventSink
+from webscoper.runtime.execution.events import TaskEventSink
 from webscoper.runtime.safety.pending import PendingApprovalManager
 from webscoper.runtime.safety.risk_gate import RiskGate
-from webscoper.schemas.action import ActionContract
-from webscoper.schemas.context import WebAgentContextSnapshot
-from webscoper.schemas.risk import RiskCheckResult
-from webscoper.schemas.tool_call import ToolCall, ToolResult
+from webscoper.schemas.browser import ActionContract
+from webscoper.schemas.runtime import WebAgentContextSnapshot
+from webscoper.schemas.runtime import RiskCheckResult
+from webscoper.schemas.tool import ToolCall, ToolResult
 from webscoper.browser.tool_runtime import StatefulBrowserToolRuntime
 from webscoper.tools.registry import ToolRegistry
 

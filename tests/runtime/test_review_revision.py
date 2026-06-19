@@ -3,7 +3,7 @@ from __future__ import annotations
 # From test_report_reviewer.py
 from webscoper.runtime.artifacts.evidence import EvidenceStore
 from webscoper.runtime.review.reviewer import ReportReviewer, build_review_summary_markdown
-from webscoper.schemas.action import ExpectedEffect
+from webscoper.schemas.browser import ExpectedEffect
 from webscoper.schemas.task import TaskSpec
 
 
@@ -167,7 +167,7 @@ def _issue_types(result) -> list[str]:
 # From test_report_reviser.py
 from webscoper.runtime.review.reviewer import ReportReviewer
 from webscoper.runtime.review.revision import ReportReviser, ReviewRevisionPlanner
-from webscoper.schemas.evidence import EvidenceItem
+from webscoper.schemas.artifact import EvidenceItem
 
 
 def test_report_reviser_generates_revised_report_with_valid_evidence_id() -> None:
@@ -227,7 +227,7 @@ def test_report_reviser_replaces_unknown_evidence_id() -> None:
 # From test_revision_planner.py
 from webscoper.runtime.review.reviewer import ReportReviewer
 from webscoper.runtime.review.revision import ReviewRevisionPlanner
-from webscoper.schemas.evidence import EvidenceItem
+from webscoper.schemas.artifact import EvidenceItem
 
 
 def test_revision_planner_adds_missing_sections_and_evidence_reference() -> None:
@@ -285,7 +285,7 @@ from webscoper.runtime.llm.reviewer import FakeLLMReportReviewer
 from webscoper.runtime.review.reviewer import ReportReviewer
 from webscoper.runtime.review.revise_loop import ReviewReviseLoop
 from webscoper.runtime.review.revision import ReportReviser, ReviewRevisionPlanner
-from webscoper.schemas.evidence import EvidenceItem
+from webscoper.schemas.artifact import EvidenceItem
 
 
 def test_revise_loop_writes_artifacts_and_final_review(tmp_path: Path) -> None:
@@ -330,7 +330,7 @@ def test_revise_loop_writes_artifacts_and_final_review(tmp_path: Path) -> None:
 import json
 from pathlib import Path
 
-from webscoper.runtime.task_runner import run_browser_task_sync
+from webscoper.runtime.execution.runner import run_browser_task_sync
 
 
 def test_run_task_fake_llm_revise_loop_generates_artifacts(tmp_path: Path) -> None:

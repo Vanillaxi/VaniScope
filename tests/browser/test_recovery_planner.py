@@ -3,7 +3,7 @@ from __future__ import annotations
 from webscoper.browser.recovery import RecoveryManager
 from webscoper.browser.recovery.manager import RecoveryManager as ManagerImport
 from webscoper.browser.recovery.planner import RecoveryPlanner
-from webscoper.schemas.recovery import RecoveryErrorType, RecoveryStrategy
+from webscoper.schemas.browser import RecoveryErrorType, RecoveryStrategy
 
 
 def test_recovery_manager_public_imports_remain_available() -> None:

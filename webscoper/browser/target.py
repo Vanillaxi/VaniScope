@@ -5,7 +5,7 @@ from typing import Any
 
 from playwright.async_api import Locator, Page
 
-from webscoper.schemas.action import ResolvedTarget, TargetCandidate
+from webscoper.schemas.browser import ResolvedTarget, TargetCandidate
 
 
 class TargetResolver:

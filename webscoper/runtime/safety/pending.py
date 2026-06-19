@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from webscoper.schemas.risk import PendingToolCall
+from webscoper.schemas.runtime import PendingToolCall
 
 
 class PendingApprovalManager:

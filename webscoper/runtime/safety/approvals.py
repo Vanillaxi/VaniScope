@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from webscoper.schemas.risk import (
+from webscoper.schemas.runtime import (
     ApprovalDecision,
     ApprovalRequest,
     RiskCheckResult,

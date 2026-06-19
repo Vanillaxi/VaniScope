@@ -4,7 +4,7 @@ import pytest
 
 from webscoper.browser.effects import EffectVerifier
 from webscoper.browser.session import BrowserSession
-from webscoper.schemas.action import ExpectedEffect
+from webscoper.schemas.browser import ExpectedEffect
 
 
 @pytest.mark.asyncio

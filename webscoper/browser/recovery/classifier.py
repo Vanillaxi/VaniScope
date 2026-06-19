@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from webscoper.schemas.observation import PageObservation
-from webscoper.schemas.action import ActionResult, EffectVerificationResult
-from webscoper.schemas.recovery import RecoveryErrorType
+from webscoper.schemas.browser import PageObservation
+from webscoper.schemas.browser import ActionResult, EffectVerificationResult
+from webscoper.schemas.browser import RecoveryErrorType
 
 
 class RecoveryClassifier:

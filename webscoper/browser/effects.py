@@ -4,7 +4,7 @@ from time import monotonic
 
 from playwright.async_api import Page
 
-from webscoper.schemas.action import EffectVerificationResult, ExpectedEffect
+from webscoper.schemas.browser import EffectVerificationResult, ExpectedEffect
 
 
 class EffectVerifier:

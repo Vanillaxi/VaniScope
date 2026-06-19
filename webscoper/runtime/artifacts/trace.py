@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from webscoper.schemas.trace import TraceStep
+from webscoper.schemas.artifact import TraceStep
 
 
 class TraceRecorder:

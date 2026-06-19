@@ -12,7 +12,7 @@ from webscoper.api.task_state import TaskState, status_from_context_state, statu
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.runtime.llm.client import BaseLLMClient
 from webscoper.runtime.prompt.reminders import RuntimeReminderStore
-from webscoper.runtime.task_runner import build_task_spec, llm_config_path
+from webscoper.runtime.execution.runner import build_task_spec, llm_config_path
 from webscoper.schemas.eval import (
     WorkflowEvalCase,
     WorkflowEvalCaseResult,
@@ -25,8 +25,8 @@ from webscoper.schemas.llm import LLMRequest, LLMResponse
 class WorkflowRegressionEvalRunner:
     """Run LangGraph-only workflow eval cases.
 
-    The class name is retained for script/import compatibility; this runner no
-    runs only the LangGraph workflow.
+    The class name is stable for scripts and tests; this runner uses only the
+    LangGraph workflow.
     """
 
     def __init__(self, output_dir: Path) -> None:

@@ -15,13 +15,13 @@ from webscoper.browser.recovery.strategies import (
     VerifyFn,
     default_observe_with_screenshot,
 )
-from webscoper.runtime.events import TaskEventSink
+from webscoper.runtime.execution.events import TaskEventSink
 from webscoper.runtime.artifacts.evidence import EvidenceStore
 from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.runtime.artifacts.transcript import TranscriptStore
-from webscoper.schemas.action import ActionResult, EffectVerificationResult
-from webscoper.schemas.observation import PageObservation
-from webscoper.schemas.recovery import RecoveryErrorType, RecoveryPlan, RecoveryResult
+from webscoper.schemas.browser import ActionResult, EffectVerificationResult
+from webscoper.schemas.browser import PageObservation
+from webscoper.schemas.browser import RecoveryErrorType, RecoveryPlan, RecoveryResult
 
 
 class RecoveryManager:

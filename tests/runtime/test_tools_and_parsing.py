@@ -7,9 +7,9 @@ import pytest
 
 from webscoper.runtime.execution.tool_executor import LocalToolExecutor
 from webscoper.runtime.artifacts.trace import TraceRecorder
-from webscoper.schemas.context import RuntimeState, TraceContext, WebAgentContextSnapshot
+from webscoper.schemas.runtime import RuntimeState, TraceContext, WebAgentContextSnapshot
 from webscoper.schemas.task import TaskSpec
-from webscoper.schemas.tool_call import ToolCall
+from webscoper.schemas.tool import ToolCall
 from webscoper.tools.browser_tools import StatefulBrowserToolRuntime
 from webscoper.tools.registry import create_default_tool_registry
 
@@ -194,7 +194,7 @@ def test_parse_non_json_fails() -> None:
     assert result.error_type == "TOOL_CALL_PARSE_ERROR"
 
 # From test_tool_call_schema.py
-from webscoper.schemas.tool_call import ToolCall, ToolExecutionRecord, ToolResult
+from webscoper.schemas.tool import ToolCall, ToolExecutionRecord, ToolResult
 
 
 def test_tool_call_models_dump_json() -> None:

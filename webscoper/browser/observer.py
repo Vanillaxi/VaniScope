@@ -6,7 +6,7 @@ from typing import Any
 from playwright.async_api import ElementHandle, Page
 
 from webscoper.browser.risk import detect_risks
-from webscoper.schemas.observation import InteractiveElement, PageObservation
+from webscoper.schemas.browser import InteractiveElement, PageObservation
 
 
 INTERACTIVE_SELECTOR = (

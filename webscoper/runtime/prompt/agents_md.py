@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from webscoper.schemas.prompt import AgentsMdInstruction
+from webscoper.schemas.runtime import AgentsMdInstruction
 
 
 MAX_AGENTS_MD_FILES = 5

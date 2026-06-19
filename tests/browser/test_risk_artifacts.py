@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from webscoper.runtime.task_runner import run_browser_task_sync
+from webscoper.runtime.execution.runner import run_browser_task_sync
 
 
 def test_risk_block_writes_artifacts_without_clicking(tmp_path: Path) -> None:

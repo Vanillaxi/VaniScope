@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from webscoper.runtime.context import WebAgentContext
+from webscoper.runtime.execution.context import WebAgentContext
 from webscoper.runtime.execution.handler import WebAgentRuntimeComponents
-from webscoper.runtime.execution_results import merge_final_output, record_evidence
-from webscoper.runtime.execution_state import state_payload, status_from_loop_error
-from webscoper.schemas.observation import PageObservation
-from webscoper.schemas.plan import ExecutionLoopResult, ExecutionPlan
+from webscoper.runtime.execution.results import merge_final_output, record_evidence
+from webscoper.runtime.execution.state import state_payload, status_from_loop_error
+from webscoper.schemas.browser import PageObservation
+from webscoper.schemas.tool import ExecutionLoopResult, ExecutionPlan
 from webscoper.schemas.task import TaskSpec
-from webscoper.schemas.tool_call import ToolExecutionRecord, ToolResult
+from webscoper.schemas.tool import ToolExecutionRecord, ToolResult
 from webscoper.tools.gateway import ToolInvocationRequest, ToolInvocationResult
 from webscoper.schemas.workflow import LangGraphResumePayload
 from webscoper.workflows.langgraph_backend.state_io import (

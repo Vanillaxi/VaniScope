@@ -5,25 +5,23 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from webscoper.runtime.context import WebAgentContext
+from webscoper.runtime.execution.context import WebAgentContext
 from webscoper.runtime.llm.client import BaseLLMClient
 from webscoper.runtime.llm.planner import LLMTaskPlanner
 from webscoper.runtime.execution.plan_validator import PlanValidator
 from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.runtime.artifacts.transcript import TranscriptStore
-from webscoper.schemas.action import ActionContract, ExpectedEffect
-from webscoper.schemas.context import RuntimeState
+from webscoper.schemas.browser import ActionContract, ExpectedEffect
+from webscoper.schemas.runtime import RuntimeState
 from webscoper.schemas.llm import LLMRequest, LLMResponse
-from webscoper.schemas.plan import ExecutionPlan
-from webscoper.schemas.plan_validation import PlanValidationResult
-from webscoper.schemas.planner_eval import (
+from webscoper.schemas.tool import ExecutionPlan, PlanValidationResult
+from webscoper.schemas.eval import (
     PlannerEvalCase,
     PlannerEvalCaseResult,
     PlannerEvalSummary,
 )
-from webscoper.schemas.prompt import PromptBuildResult
+from webscoper.schemas.runtime import PromptBuildResult, VersionContext
 from webscoper.schemas.task import TaskSpec
-from webscoper.schemas.version import VersionContext
 from webscoper.tools.registry import create_default_tool_registry
 
 

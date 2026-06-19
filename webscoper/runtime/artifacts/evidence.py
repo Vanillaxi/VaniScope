@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from webscoper.schemas.evidence import EvidenceItem, EvidenceKind
+from webscoper.schemas.artifact import EvidenceItem, EvidenceKind
 
 
 class EvidenceStore:

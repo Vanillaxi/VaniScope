@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from webscoper.runtime.context import WebAgentContext
+from webscoper.runtime.execution.context import WebAgentContext
 from webscoper.schemas.workflow import LangGraphResumePayload, LangGraphResumeResult
 from webscoper.workflows.langgraph_approval import LangGraphApprovalBridge
 from webscoper.workflows.langgraph_backend.artifacts import WorkflowArtifactWriter

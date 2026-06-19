@@ -5,9 +5,9 @@ import json
 from pathlib import Path
 
 from webscoper.runtime.artifacts.compaction import ContextCompactor
-from webscoper.schemas.compaction import CompactionPolicy
-from webscoper.schemas.evidence import EvidenceItem
-from webscoper.schemas.risk import ApprovalRequest
+from webscoper.schemas.artifact import CompactionPolicy
+from webscoper.schemas.artifact import EvidenceItem
+from webscoper.schemas.runtime import ApprovalRequest
 
 
 def test_context_compactor_should_compact_when_transcript_exceeds_threshold() -> None:
@@ -122,7 +122,7 @@ import json
 from pathlib import Path
 
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
-from webscoper.runtime.task_runner import build_task_spec
+from webscoper.runtime.execution.runner import build_task_spec
 
 
 def test_execution_handler_writes_compaction_artifacts(tmp_path: Path) -> None:

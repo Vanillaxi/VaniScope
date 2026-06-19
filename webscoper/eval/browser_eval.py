@@ -6,15 +6,15 @@ from pathlib import Path
 from typing import Any
 
 from webscoper.eval.scorer import summarize_results
-from webscoper.runtime.browser_runtime import BrowserRuntime
+from webscoper.browser.legacy_runtime import BrowserRuntime
 from webscoper.runtime.artifacts.trace import TraceRecorder
-from webscoper.schemas.action import ActionContract, ExpectedEffect
+from webscoper.schemas.browser import ActionContract, ExpectedEffect
 from webscoper.schemas.eval import (
     BrowserEvalCase,
     BrowserEvalCaseResult,
     BrowserEvalSummary,
 )
-from webscoper.schemas.observation import PageObservation
+from webscoper.schemas.browser import PageObservation
 
 
 class BrowserEvalRunner:

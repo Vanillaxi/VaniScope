@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from webscoper.schemas.compaction import ContextPack
-from webscoper.schemas.context import WebAgentContextSnapshot
-from webscoper.schemas.prompt import (
+from webscoper.schemas.artifact import ContextPack
+from webscoper.schemas.runtime import WebAgentContextSnapshot
+from webscoper.schemas.runtime import (
     AgentsMdInstruction,
     PromptBuildResult,
     RuntimeReminder,

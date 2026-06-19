@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from webscoper.runtime.browser_runtime import BrowserRuntime
+from webscoper.browser.legacy_runtime import BrowserRuntime
 from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.runtime.artifacts.transcript import TranscriptStore
-from webscoper.schemas.action import ActionContract, ExpectedEffect
+from webscoper.schemas.browser import ActionContract, ExpectedEffect
 
 
 @pytest.mark.asyncio

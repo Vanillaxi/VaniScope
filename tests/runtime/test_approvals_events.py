@@ -82,8 +82,8 @@ def test_pending_approval_manager_create_get_pop_and_list() -> None:
 # From test_task_events.py
 from pathlib import Path
 
-from webscoper.runtime.events import TaskEventStore
-from webscoper.schemas.events import TaskEvent
+from webscoper.runtime.execution.events import TaskEventStore
+from webscoper.schemas.runtime import TaskEvent
 
 
 def test_task_event_store_appends_and_lists_events(tmp_path: Path) -> None:

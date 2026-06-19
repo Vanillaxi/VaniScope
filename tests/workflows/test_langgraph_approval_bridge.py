@@ -4,7 +4,7 @@ import json
 
 from webscoper.runtime.safety.approvals import ApprovalStore
 from webscoper.runtime.safety.pending import PendingApprovalManager
-from webscoper.schemas.risk import RiskCheckResult, RiskSignal
+from webscoper.schemas.runtime import RiskCheckResult, RiskSignal
 from webscoper.workflows.langgraph_approval import LangGraphApprovalBridge
 
 

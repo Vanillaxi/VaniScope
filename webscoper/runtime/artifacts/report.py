@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from webscoper.schemas.evidence import EvidenceItem
-from webscoper.schemas.observation import PageObservation
+from webscoper.schemas.artifact import EvidenceItem
+from webscoper.schemas.browser import PageObservation
 from webscoper.schemas.task import TaskSpec
 
 

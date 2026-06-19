@@ -12,9 +12,9 @@ from webscoper.browser.recovery.classifier import (
     observation_summary,
     risk_error_type,
 )
-from webscoper.schemas.action import ActionResult, EffectVerificationResult
-from webscoper.schemas.observation import PageObservation
-from webscoper.schemas.recovery import RecoveryAttempt, RecoveryStrategy
+from webscoper.schemas.browser import ActionResult, EffectVerificationResult
+from webscoper.schemas.browser import PageObservation
+from webscoper.schemas.browser import RecoveryAttempt, RecoveryStrategy
 
 
 ObserveFn = Callable[[], Awaitable[PageObservation] | PageObservation]

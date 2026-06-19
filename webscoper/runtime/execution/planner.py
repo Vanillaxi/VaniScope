@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from webscoper.schemas.plan import ExecutionPlan, PlannedStep
+from webscoper.schemas.tool import ExecutionPlan, PlannedStep
 from webscoper.schemas.task import TaskSpec
-from webscoper.schemas.tool_call import ToolCall
+from webscoper.schemas.tool import ToolCall
 
 SUPPORTED_PLANNER_MODES = {"deterministic", "fake_llm", "real_llm"}
 

@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from webscoper.schemas.action import ActionContract
-from webscoper.schemas.risk import RiskCheckResult, RiskPolicy, RiskSignal
+from webscoper.schemas.browser import ActionContract
+from webscoper.schemas.runtime import RiskCheckResult, RiskPolicy, RiskSignal
 
 
 class RiskGate:

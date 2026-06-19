@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from webscoper.runtime.llm.client import BaseLLMClient
 from webscoper.runtime.execution.tool_call_parser import ToolCallParser
-from webscoper.schemas.context import WebAgentContextSnapshot
+from webscoper.schemas.runtime import WebAgentContextSnapshot
 from webscoper.schemas.llm import LLMMessage, LLMRequest, LLMResponse, ParsedToolCalls
-from webscoper.schemas.plan import ExecutionPlan, PlannedStep
-from webscoper.schemas.prompt import PromptBuildResult
+from webscoper.schemas.tool import ExecutionPlan, PlannedStep
+from webscoper.schemas.runtime import PromptBuildResult
 
 
 class LLMTaskPlanner:

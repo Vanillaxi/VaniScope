@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from webscoper.browser.tool_runtime import StatefulBrowserToolRuntime
-from webscoper.schemas.action import ActionContract
+from webscoper.schemas.browser import ActionContract
 from webscoper.tools.gateway.descriptors import (
     ToolDescriptor,
     ToolInvocationRequest,

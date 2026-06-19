@@ -7,7 +7,7 @@ import pytest
 
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.runtime.llm.client import BaseLLMClient
-from webscoper.schemas.action import ActionContract, ExpectedEffect
+from webscoper.schemas.browser import ActionContract, ExpectedEffect
 from webscoper.schemas.llm import LLMRequest, LLMResponse
 from webscoper.schemas.task import TaskSpec
 

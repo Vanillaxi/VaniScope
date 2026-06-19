@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from webscoper.schemas.prompt import RuntimeReminder
+from webscoper.schemas.runtime import RuntimeReminder
 
 
 class RuntimeReminderStore:

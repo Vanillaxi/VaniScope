@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # From test_deterministic_planner.py
 from webscoper.runtime.execution.planner import DeterministicTaskPlanner
-from webscoper.schemas.action import ActionContract, ExpectedEffect
+from webscoper.schemas.browser import ActionContract, ExpectedEffect
 from webscoper.schemas.task import TaskSpec
 
 
@@ -56,8 +56,8 @@ from pathlib import Path
 import pytest
 
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
-from webscoper.schemas.action import ActionContract, ExpectedEffect
-from webscoper.schemas.observation import PageObservation
+from webscoper.schemas.browser import ActionContract, ExpectedEffect
+from webscoper.schemas.browser import PageObservation
 from webscoper.schemas.task import TaskSpec
 
 
@@ -145,7 +145,7 @@ from pathlib import Path
 import pytest
 
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
-from webscoper.schemas.action import ActionContract, ExpectedEffect
+from webscoper.schemas.browser import ActionContract, ExpectedEffect
 from webscoper.schemas.task import TaskSpec
 
 
@@ -214,7 +214,7 @@ from pathlib import Path
 import pytest
 
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
-from webscoper.schemas.action import ActionContract, ExpectedEffect
+from webscoper.schemas.browser import ActionContract, ExpectedEffect
 from webscoper.schemas.task import TaskSpec
 
 
@@ -268,16 +268,16 @@ from pathlib import Path
 
 import pytest
 
-from webscoper.runtime.context import WebAgentContext
+from webscoper.runtime.execution.context import WebAgentContext
 from webscoper.runtime.execution.loop import AgentExecutionLoop
 from webscoper.runtime.execution.planner import DeterministicTaskPlanner
 from webscoper.runtime.execution.tool_executor import LocalToolExecutor
 from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.runtime.artifacts.transcript import TranscriptStore
-from webscoper.schemas.action import ActionContract, ExpectedEffect
-from webscoper.schemas.context import RuntimeState
+from webscoper.schemas.browser import ActionContract, ExpectedEffect
+from webscoper.schemas.runtime import RuntimeState
 from webscoper.schemas.task import TaskSpec
-from webscoper.schemas.version import VersionContext
+from webscoper.schemas.runtime import VersionContext
 from webscoper.tools.browser_tools import StatefulBrowserToolRuntime
 from webscoper.tools.registry import create_default_tool_registry
 

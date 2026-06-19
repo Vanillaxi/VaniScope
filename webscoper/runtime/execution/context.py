@@ -6,13 +6,13 @@ from pathlib import Path
 from webscoper.runtime.artifacts.evidence import EvidenceStore
 from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.runtime.artifacts.transcript import TranscriptStore
-from webscoper.schemas.context import (
+from webscoper.schemas.runtime import (
     RuntimeState,
     TraceContext,
+    VersionContext,
     WebAgentContextSnapshot,
 )
 from webscoper.schemas.task import TaskSpec
-from webscoper.schemas.version import VersionContext
 
 
 @dataclass

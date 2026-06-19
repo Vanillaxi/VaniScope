@@ -5,17 +5,17 @@ from pathlib import Path
 from typing import Any
 
 from webscoper.runtime.artifacts.compaction import ContextCompactor, load_jsonl
-from webscoper.runtime.context import WebAgentContext
-from webscoper.runtime.events import TaskEventSink
+from webscoper.runtime.execution.context import WebAgentContext
+from webscoper.runtime.execution.events import TaskEventSink
 from webscoper.runtime.llm.reviewer import BaseLLMReportReviewer
 from webscoper.runtime.artifacts.report import FinalReportBuilder
 from webscoper.runtime.review.reviewer import ReportReviewer, build_review_summary_markdown
 from webscoper.runtime.review.revise_loop import ReviewReviseLoop
 from webscoper.runtime.review.revision import ReportReviser, ReviewRevisionPlanner
-from webscoper.schemas.evidence import EvidenceItem
-from webscoper.schemas.observation import PageObservation
-from webscoper.schemas.prompt import PromptBuildResult
-from webscoper.schemas.revise import ReviewerMode
+from webscoper.schemas.artifact import EvidenceItem
+from webscoper.schemas.browser import PageObservation
+from webscoper.schemas.runtime import PromptBuildResult
+from webscoper.schemas.review import ReviewerMode
 
 
 def persist_prompt_context(run_dir: Path, prompt_result: PromptBuildResult) -> None:

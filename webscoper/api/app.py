@@ -15,9 +15,9 @@ from webscoper.api.schemas import (
     TaskStatusResponse,
 )
 from webscoper.api.task_service import TaskService
-from webscoper.runtime.events import TERMINAL_EVENT_KINDS
-from webscoper.schemas.events import TaskEvent
-from webscoper.schemas.risk import ApprovalRequest
+from webscoper.runtime.execution.events import TERMINAL_EVENT_KINDS
+from webscoper.schemas.runtime import TaskEvent
+from webscoper.schemas.runtime import ApprovalRequest
 
 
 app = FastAPI(title="VaniScope API", version="0.1.0")

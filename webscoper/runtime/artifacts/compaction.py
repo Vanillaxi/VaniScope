@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from webscoper.schemas.compaction import (
+from webscoper.schemas.artifact import (
     CompactedBrowserState,
     CompactedEvidenceRef,
     CompactedRecoveryState,
@@ -14,7 +14,7 @@ from webscoper.schemas.compaction import (
     CompactionResult,
     ContextPack,
 )
-from webscoper.schemas.evidence import EvidenceItem
+from webscoper.schemas.artifact import EvidenceItem
 
 
 class ContextCompactor:

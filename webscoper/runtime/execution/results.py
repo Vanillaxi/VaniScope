@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from webscoper.runtime.context import WebAgentContext
-from webscoper.schemas.tool_call import ToolCall, ToolResult
+from webscoper.runtime.execution.context import WebAgentContext
+from webscoper.schemas.tool import ToolCall, ToolResult
 
 
 def merge_final_output(final_output: dict, output: dict) -> None:

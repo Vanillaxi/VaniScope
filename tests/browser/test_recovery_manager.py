@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from webscoper.browser.recovery import RecoveryManager
-from webscoper.schemas.action import ActionResult, EffectVerificationResult
-from webscoper.schemas.observation import PageObservation, RiskSignal
-from webscoper.schemas.recovery import RecoveryErrorType, RecoveryStrategy
+from webscoper.schemas.browser import ActionResult, EffectVerificationResult
+from webscoper.schemas.browser import PageObservation, RiskSignal
+from webscoper.schemas.browser import RecoveryErrorType, RecoveryStrategy
 
 
 def test_recovery_manager_classifies_target_not_found() -> None:

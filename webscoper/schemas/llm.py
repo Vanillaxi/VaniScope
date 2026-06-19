@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from webscoper.schemas.tool_call import ToolCall
+from webscoper.schemas.tool import ToolCall
 
 
 class LLMMessage(BaseModel):

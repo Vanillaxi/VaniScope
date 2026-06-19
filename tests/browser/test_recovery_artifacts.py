@@ -6,7 +6,7 @@ from pathlib import Path
 from webscoper.api.task_service import ARTIFACT_ALLOWLIST
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.runtime.prompt.reminders import RuntimeReminderStore
-from webscoper.runtime.task_runner import build_task_spec
+from webscoper.runtime.execution.runner import build_task_spec
 
 
 def test_run_task_writes_recovery_artifact_and_events(tmp_path: Path) -> None:

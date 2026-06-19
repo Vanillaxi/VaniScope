@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from webscoper.runtime.context import WebAgentContext
+from webscoper.runtime.execution.context import WebAgentContext
 from webscoper.schemas.task import TaskSpec
 from webscoper.workflows.state import VaniScopeGraphState
 

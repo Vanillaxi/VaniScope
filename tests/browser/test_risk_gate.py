@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from webscoper.runtime.safety.risk_gate import RiskGate
-from webscoper.schemas.action import ActionContract
+from webscoper.schemas.browser import ActionContract
 
 
 def test_risk_gate_allows_safe_browser_open() -> None:

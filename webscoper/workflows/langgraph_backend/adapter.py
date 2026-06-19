@@ -3,14 +3,14 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from webscoper.runtime.context import WebAgentContext
+from webscoper.runtime.execution.context import WebAgentContext
 from webscoper.runtime.execution.handler import (
     WebAgentExecutionHandler,
     WebAgentRuntimeComponents,
 )
-from webscoper.schemas.observation import PageObservation
-from webscoper.schemas.plan import ExecutionPlan
-from webscoper.schemas.prompt import PromptBuildResult
+from webscoper.schemas.browser import PageObservation
+from webscoper.schemas.tool import ExecutionPlan
+from webscoper.schemas.runtime import PromptBuildResult
 from webscoper.schemas.workflow import (
     LangGraphResumePayload,
     LangGraphResumeResult,

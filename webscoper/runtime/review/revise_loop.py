@@ -7,8 +7,8 @@ from typing import Any
 from webscoper.runtime.llm.reviewer import BaseLLMReportReviewer
 from webscoper.runtime.review.reviewer import ReportReviewer
 from webscoper.runtime.review.revision import ReportReviser, ReviewRevisionPlanner
-from webscoper.schemas.evidence import EvidenceItem
-from webscoper.schemas.revise import (
+from webscoper.schemas.artifact import EvidenceItem
+from webscoper.schemas.review import (
     LLMReviewRequest,
     RevisionPlan,
     ReviseLoopResult,

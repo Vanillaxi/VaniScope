@@ -3,7 +3,7 @@ from __future__ import annotations
 from playwright.async_api import Page
 
 from webscoper.browser.target import TargetResolver
-from webscoper.schemas.action import ActionContract, ActionResult, ResolvedTarget, TargetCandidate
+from webscoper.schemas.browser import ActionContract, ActionResult, ResolvedTarget, TargetCandidate
 
 
 class ActionExecutor:

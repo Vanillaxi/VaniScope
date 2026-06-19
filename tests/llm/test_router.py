@@ -19,7 +19,7 @@ def test_llm_provider_router_creates_openai_compatible_client(tmp_path: Path) ->
 
 
 def test_llm_provider_router_unsupported_provider_type_raises(tmp_path: Path) -> None:
-    path = _write_config(tmp_path, provider_type="native_only")
+    path = _write_config(tmp_path, provider_type="unsupported_provider")
 
     with pytest.raises(ValueError, match="Unsupported LLM provider_type") as exc_info:
         LLMProviderRouter(path).create_client(provider_id="deepseek")

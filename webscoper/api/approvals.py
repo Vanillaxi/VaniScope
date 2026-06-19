@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from webscoper.api.schemas import ApprovalDecisionResponse
 from webscoper.runtime.safety.approvals import ApprovalStoreError
-from webscoper.schemas.risk import TaskResumeResult
+from webscoper.schemas.runtime import TaskResumeResult
 from webscoper.schemas.workflow import LangGraphResumeResult
 
 

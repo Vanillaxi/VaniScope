@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 
 from webscoper.runtime.review.reviewer import ReportReviewer
-from webscoper.schemas.action import ExpectedEffect
-from webscoper.schemas.evidence import EvidenceItem
+from webscoper.schemas.browser import ExpectedEffect
+from webscoper.schemas.artifact import EvidenceItem
 from webscoper.schemas.eval import (
     ReviewerEvalCase,
     ReviewerEvalCaseResult,

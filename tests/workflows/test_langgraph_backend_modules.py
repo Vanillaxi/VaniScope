@@ -3,18 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
-from webscoper.runtime.task_runner import build_task_spec
+from webscoper.runtime.execution.runner import build_task_spec
 
 
-def test_langgraph_adapter_imports_remain_compatible() -> None:
+def test_langgraph_adapter_public_entry_matches_backend_adapter() -> None:
     from webscoper.workflows.langgraph_adapter import (
-        LangGraphWorkflowAdapter as LegacyAdapter,
+        LangGraphWorkflowAdapter as PublicAdapter,
     )
     from webscoper.workflows.langgraph_backend.adapter import (
         LangGraphWorkflowAdapter as BackendAdapter,
     )
 
-    assert LegacyAdapter is BackendAdapter
+    assert PublicAdapter is BackendAdapter
 
 
 def test_langgraph_workflow_events_still_emit(tmp_path: Path) -> None:

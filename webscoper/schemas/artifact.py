@@ -1,10 +1,66 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
+
+
+EvidenceKind = Literal[
+    "page_observation",
+    "text_excerpt",
+    "action_result",
+    "screenshot",
+    "tool_result",
+]
+
+
+class EvidenceSource(BaseModel):
+    source_url: str | None = None
+    page_title: str | None = None
+    trace_event_id: str | None = None
+    transcript_event_id: str | None = None
+
+
+class EvidenceItem(BaseModel):
+    evidence_id: str
+    kind: EvidenceKind
+    source_url: str | None = None
+    page_title: str | None = None
+    text: str | None = None
+    screenshot_path: str | None = None
+    trace_event_id: str | None = None
+    transcript_event_id: str | None = None
+    created_at: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class EvidenceStoreRecord(BaseModel):
+    item: EvidenceItem
+
+
+def utc_now_iso() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+class TraceStep(BaseModel):
+    step_id: str
+    run_id: str
+    phase: str
+    actor: str
+    action_type: str
+    status: str
+    url_before: str | None = None
+    url_after: str | None = None
+    title: str | None = None
+    observation: dict[str, Any] | None = None
+    screenshot_path: str | None = None
+    error_type: str | None = None
+    error_message: str | None = None
+    latency_ms: int | None = None
+    created_at: str = Field(default_factory=utc_now_iso)
 
 
 class CompactionTrigger(StrEnum):

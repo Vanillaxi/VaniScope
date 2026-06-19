@@ -5,7 +5,7 @@ import re
 from typing import Any
 
 from webscoper.schemas.llm import ParsedToolCalls
-from webscoper.schemas.tool_call import ToolCall
+from webscoper.schemas.tool import ToolCall
 
 
 class ToolCallParser:

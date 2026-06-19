@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from webscoper.schemas.risk import ApprovalRequest, TaskResumeResult
+from webscoper.schemas.runtime import ApprovalRequest, TaskResumeResult
 from webscoper.schemas.workflow import LangGraphResumeResult, WorkflowBackend
 
 

@@ -17,14 +17,14 @@ def test_agents_md_loader_loads_workspace_instructions() -> None:
 
 # From test_prompt_builder.py
 from webscoper.runtime.prompt.builder import DynamicPromptBuilder
-from webscoper.schemas.context import (
+from webscoper.schemas.runtime import (
     RuntimeState,
     TraceContext,
     WebAgentContextSnapshot,
 )
-from webscoper.schemas.prompt import AgentsMdInstruction, RuntimeReminder
+from webscoper.schemas.runtime import AgentsMdInstruction, RuntimeReminder
 from webscoper.schemas.task import TaskSpec
-from webscoper.schemas.version import VersionContext
+from webscoper.schemas.runtime import VersionContext
 from webscoper.tools.registry import create_default_tool_registry
 
 
@@ -78,7 +78,7 @@ def test_dynamic_prompt_builder_includes_task_tools_agents_and_reminders() -> No
 
 # From test_prompt_builder_compacted_context.py
 from webscoper.runtime.prompt.builder import DynamicPromptBuilder
-from webscoper.schemas.compaction import (
+from webscoper.schemas.artifact import (
     CompactedBrowserState,
     CompactedEvidenceRef,
     CompactedRecoveryState,
@@ -86,9 +86,9 @@ from webscoper.schemas.compaction import (
     CompactedStep,
     ContextPack,
 )
-from webscoper.schemas.context import RuntimeState, TraceContext, WebAgentContextSnapshot
+from webscoper.schemas.runtime import RuntimeState, TraceContext, WebAgentContextSnapshot
 from webscoper.schemas.task import TaskSpec
-from webscoper.schemas.version import VersionContext
+from webscoper.schemas.runtime import VersionContext
 from webscoper.tools.registry import create_default_tool_registry
 
 

@@ -4,7 +4,7 @@ from typing import Any
 
 from playwright.async_api import Page
 
-from webscoper.schemas.observation import RiskSignal
+from webscoper.schemas.browser import RiskSignal
 
 
 async def detect_risks(page: Page) -> list[RiskSignal]:

@@ -4,7 +4,7 @@ import json
 import builtins
 from pathlib import Path
 
-from webscoper.runtime.task_runner import run_browser_task_sync
+from webscoper.runtime.execution.runner import run_browser_task_sync
 
 
 def test_langgraph_workflow_generates_core_artifacts(tmp_path: Path) -> None:

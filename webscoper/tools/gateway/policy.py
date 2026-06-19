@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from webscoper.runtime.safety.risk_gate import RiskGate
-from webscoper.schemas.risk import RiskCheckResult
+from webscoper.schemas.runtime import RiskCheckResult
 from webscoper.tools.gateway.descriptors import ToolDescriptor
 
 

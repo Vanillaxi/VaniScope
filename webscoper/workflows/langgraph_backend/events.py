@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from webscoper.runtime.context import WebAgentContext
+from webscoper.runtime.execution.context import WebAgentContext
 from webscoper.workflows.langgraph_backend.state_io import json_safe
 from webscoper.workflows.state import VaniScopeGraphState
 

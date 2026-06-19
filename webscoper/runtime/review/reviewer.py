@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from webscoper.schemas.evidence import EvidenceItem
+from webscoper.schemas.artifact import EvidenceItem
 from webscoper.schemas.review import ClaimEvidenceCheck, ReviewIssue, ReviewResult
 from webscoper.schemas.task import TaskSpec
 

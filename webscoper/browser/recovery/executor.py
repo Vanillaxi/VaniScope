@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from playwright.async_api import Page
 
-from webscoper.runtime.events import TaskEventSink
+from webscoper.runtime.execution.events import TaskEventSink
 from webscoper.runtime.artifacts.evidence import EvidenceStore
 from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.runtime.artifacts.transcript import TranscriptStore
@@ -16,8 +16,8 @@ from webscoper.browser.recovery.strategies import (
     safe_page_url,
 )
 from webscoper.browser.recovery.telemetry import RecoveryTelemetry
-from webscoper.schemas.observation import PageObservation
-from webscoper.schemas.recovery import RecoveryAttempt, RecoveryPlan, RecoveryResult
+from webscoper.schemas.browser import PageObservation
+from webscoper.schemas.browser import RecoveryAttempt, RecoveryPlan, RecoveryResult
 
 
 class RecoveryExecutor:

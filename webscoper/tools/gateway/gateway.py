@@ -4,10 +4,10 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
-from webscoper.runtime.events import TaskEventSink
+from webscoper.runtime.execution.events import TaskEventSink
 from webscoper.runtime.safety.approvals import ApprovalStore
 from webscoper.runtime.safety.pending import PendingApprovalManager
-from webscoper.schemas.risk import RiskCheckResult
+from webscoper.schemas.runtime import RiskCheckResult
 from webscoper.tools.gateway.audit import ToolAuditEvent, ToolGatewayAuditStore, utc_now
 from webscoper.tools.gateway.descriptors import (
     ToolDescriptor,

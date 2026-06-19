@@ -80,7 +80,7 @@ import json
 from pathlib import Path
 
 from webscoper.runtime.artifacts.trace import TraceRecorder
-from webscoper.schemas.trace import TraceStep
+from webscoper.schemas.artifact import TraceStep
 
 
 def test_trace_recorder_appends_jsonl(tmp_path: Path) -> None:
@@ -131,7 +131,7 @@ from pathlib import Path
 import pytest
 
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
-from webscoper.schemas.action import ActionContract, ExpectedEffect
+from webscoper.schemas.browser import ActionContract, ExpectedEffect
 from webscoper.schemas.task import TaskSpec
 
 

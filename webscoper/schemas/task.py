@@ -2,22 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from webscoper.schemas.action import ActionContract, ExpectedEffect
-
-
-class BudgetContext(BaseModel):
-    max_steps: int = 10
-    timeout_ms: int = 10000
-    retry_limit: int = 0
-    max_cost_usd: float | None = None
-
-
-class SafetyContext(BaseModel):
-    mode: str = "read_only"
-    allow_login: bool = False
-    allow_captcha_bypass: bool = False
-    allow_sensitive_input: bool = False
-    allow_external_submit: bool = False
+from webscoper.schemas.browser import ActionContract, ExpectedEffect
+from webscoper.schemas.runtime import BudgetContext, SafetyContext
 
 
 class TaskSpec(BaseModel):

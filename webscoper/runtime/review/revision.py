@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from webscoper.schemas.evidence import EvidenceItem
+from webscoper.schemas.artifact import EvidenceItem
 from webscoper.schemas.review import ReviewResult
-from webscoper.schemas.revise import (
+from webscoper.schemas.review import (
     LLMReviewResult,
     RevisionAction,
     RevisionPlan,

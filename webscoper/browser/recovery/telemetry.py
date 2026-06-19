@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from webscoper.runtime.events import TaskEventSink
+from webscoper.runtime.execution.events import TaskEventSink
 from webscoper.runtime.artifacts.evidence import EvidenceStore
 from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.runtime.artifacts.transcript import TranscriptStore
-from webscoper.schemas.recovery import RecoveryAttempt, RecoveryResult
-from webscoper.schemas.trace import TraceStep
+from webscoper.schemas.browser import RecoveryAttempt, RecoveryResult
+from webscoper.schemas.artifact import TraceStep
 
 
 class RecoveryTelemetry:

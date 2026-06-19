@@ -19,10 +19,10 @@ from webscoper.runtime.artifacts.pipeline import (
     persist_revise_loop_artifacts,
     read_json_object,
 )
-from webscoper.runtime.context import WebAgentContext
+from webscoper.runtime.execution.context import WebAgentContext
 from webscoper.runtime.artifacts.evidence import EvidenceStore
-from webscoper.runtime.events import TaskEventSink
-from webscoper.runtime.execution_state import (
+from webscoper.runtime.execution.events import TaskEventSink
+from webscoper.runtime.execution.state import (
     observation_summary,
     state_payload,
     status_from_loop_error,
@@ -58,14 +58,14 @@ from webscoper.tools.gateway import (
     ToolGatewayAuditStore,
     ToolGatewayPolicy,
 )
-from webscoper.schemas.context import RuntimeState
-from webscoper.schemas.evidence import EvidenceItem
-from webscoper.schemas.plan import ExecutionLoopResult, ExecutionPlan
-from webscoper.schemas.observation import PageObservation
-from webscoper.schemas.prompt import PromptBuildResult
-from webscoper.schemas.revise import ReviewerMode
+from webscoper.schemas.runtime import RuntimeState
+from webscoper.schemas.artifact import EvidenceItem
+from webscoper.schemas.tool import ExecutionLoopResult, ExecutionPlan
+from webscoper.schemas.browser import PageObservation
+from webscoper.schemas.runtime import PromptBuildResult
+from webscoper.schemas.review import ReviewerMode
 from webscoper.schemas.task import TaskSpec
-from webscoper.schemas.version import VersionContext
+from webscoper.schemas.runtime import VersionContext
 from webscoper.browser.tool_runtime import StatefulBrowserToolRuntime
 from webscoper.tools.registry import ToolRegistry, create_default_tool_registry
 

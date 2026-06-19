@@ -1,13 +1,14 @@
 # Runtime Module Map
 
-This document is a lightweight boundary map for `webscoper/runtime/`. The runtime package is now split by responsibility into execution, artifact, LLM, prompt, review, and safety subpackages. Old flat runtime import paths remain as a compatibility layer; project-internal code should prefer the package paths below.
+This document is a lightweight boundary map for `webscoper/runtime/`. The runtime package is split by responsibility into execution, artifacts, LLM, prompt, review, and safety subpackages. Project code imports these package paths directly.
 
 ## Execution-Related Modules
 
 - `execution/handler.py` owns the high-level agent execution handler: context creation, prompt building, planning, validation, tool-loop execution, and artifact finalization.
 - `execution/loop.py` runs validated tool-call plans through `LocalToolExecutor`, records transcript events, emits task events, and stores evidence.
-- `execution/tool_executor.py` bridges native/direct tool calls to the local tool registry and browser runtime while enforcing risk checks and approval pause behavior.
-- `task_runner.py` is the CLI-facing orchestration layer for the LangGraph workflow.
+- `execution/tool_executor.py` bridges tool calls to the local tool registry and browser runtime while enforcing risk checks and approval pause behavior.
+- `execution/runner.py` is the CLI-facing orchestration layer for the LangGraph workflow.
+- `execution/context.py`, `execution/events.py`, `execution/state.py`, and `execution/results.py` hold run context, task events, state payload helpers, and tool-result evidence helpers.
 - `execution/planner.py`, `execution/plan_validator.py`, and `execution/tool_call_parser.py` support deterministic plans, plan validation, and LLM tool-call parsing.
 
 ## Tool Gateway
@@ -57,15 +58,11 @@ Gateway providers currently include:
 - `prompt/agents_md.py` loads workspace instructions.
 - `prompt/reminders.py` stores runtime reminders.
 
-## Compatibility Imports
-
-Flat modules such as `webscoper.runtime.evidence`, `webscoper.runtime.llm_client`, and `webscoper.runtime.tool_executor` are retained as one-line compatibility re-exports. See `docs/compatibility_imports.md` for the legacy-to-new path map.
-
 ## Workflow Integration Boundary
 
 LangGraph is the only workflow orchestration backend. `webscoper/runtime/` stays focused on core runtime capabilities beneath LangGraph: Browser Runtime, Tool Runtime, Evidence, Review, Approval, Eval, and Audit.
 
-`webscoper/workflows/langgraph_adapter.py` is kept as the public compatibility entry. LangGraph orchestration internals live under `webscoper/workflows/langgraph_backend/`, split into graph construction, node implementations, resume handling, artifact/state writing, and workflow event helpers.
+`webscoper/workflows/langgraph_adapter.py` is the public LangGraph entry point. LangGraph orchestration internals live under `webscoper/workflows/langgraph_backend/`, split into graph construction, node implementations, resume handling, artifact/state writing, and workflow event helpers.
 
 Workflow eval lives in `webscoper/eval/workflow_eval.py` and is LangGraph-only. The eval runner records status, artifacts, review, evidence, recovery, approval, risk, audit, and event behavior without changing runtime semantics.
 

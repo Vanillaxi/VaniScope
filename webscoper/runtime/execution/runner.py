@@ -5,8 +5,7 @@ from pathlib import Path
 
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.runtime.prompt.reminders import RuntimeReminderStore
-from webscoper.schemas.action import ActionContract, ExpectedEffect
-from webscoper.schemas.observation import PageObservation
+from webscoper.schemas.browser import ActionContract, ExpectedEffect, PageObservation
 from webscoper.schemas.task import TaskSpec
 from webscoper.schemas.workflow import WorkflowRunResult
 

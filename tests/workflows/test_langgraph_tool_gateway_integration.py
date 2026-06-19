@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
-from webscoper.runtime.task_runner import build_task_spec
+from webscoper.runtime.execution.runner import build_task_spec
 from webscoper.workflows.langgraph_adapter import LangGraphWorkflowAdapter
 
 

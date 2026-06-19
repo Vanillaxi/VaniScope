@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from webscoper.runtime.context import WebAgentContext
-from webscoper.schemas.observation import PageObservation
+from webscoper.runtime.execution.context import WebAgentContext
+from webscoper.schemas.browser import PageObservation
 from webscoper.schemas.task import TaskSpec
 
 
