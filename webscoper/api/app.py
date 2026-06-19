@@ -19,51 +19,62 @@ from webscoper.runtime.execution.events import TERMINAL_EVENT_KINDS
 from webscoper.schemas.runtime import TaskEvent
 from webscoper.schemas.runtime import ApprovalRequest
 
+# FastAPI
 
 app = FastAPI(title="VaniScope API", version="0.1.0")
 task_service = TaskService()
 
-
+# 健康检查
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "vaniscope-api"}
 
-
+# 创建并同步运行任务
 @app.post("/tasks", response_model=TaskCreateResponse)
 def create_task(request: TaskCreateRequest) -> TaskCreateResponse:
     return task_service.create_and_run_task(request)
 
-
+# 创建并异步运行任务
 @app.post("/tasks/async", response_model=TaskCreateResponse)
 async def create_task_async(request: TaskCreateRequest) -> TaskCreateResponse:
     return await task_service.create_and_run_task_async(request)
 
-
+# 查看任务状态
 @app.get("/tasks/{task_id}", response_model=TaskStatusResponse)
 def get_task(task_id: str) -> TaskStatusResponse:
     return task_service.get_task_status(task_id)
 
-
+# SSE流式事件
 @app.get("/tasks/{task_id}/events")
 async def stream_task_events(task_id: str) -> StreamingResponse:
+    # 先检查任务是否存在
     if _task_missing(task_id):
         raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
 
+    # 异步生成器
     async def event_generator():
+        # 给这个任务开一个事件订阅，只要任务产生新事件，就可以从这个subscription里面拿到
         subscription = task_service.open_event_subscription(task_id)
+        # 用set集合去重，因为一开始会发送历史事件，后面又会监听新事件
         seen_event_ids: set[str] = set()
+
+        # 确保关闭订阅，资源清理
         try:
             history = task_service.get_events(task_id)
+            # 不是历史事件而且任务不在running ，那就是没东西推送
             if not history and task_service.get_task_status(task_id).status != "running":
                 return
 
+            # 把历史事件逐个发送给前端
             for event in history:
                 seen_event_ids.add(event.event_id)
                 yield format_sse(event)
 
+            # 任务已经结束，不再监听
             if task_service.get_task_status(task_id).status != "running":
                 return
 
+            # 继续监听实时新事件
             async for event in subscription:
                 if event.event_id in seen_event_ids:
                     continue
@@ -74,12 +85,13 @@ async def stream_task_events(task_id: str) -> StreamingResponse:
         finally:
             subscription.close()
 
+    # 把刚才的生成器包装成HTTP流式响应，而不是普通JSON
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
     )
 
-
+# 查看任务产物列表
 @app.get("/tasks/{task_id}/artifacts", response_model=TaskArtifactListResponse)
 def list_artifacts(task_id: str) -> TaskArtifactListResponse:
     try:
@@ -87,7 +99,7 @@ def list_artifacts(task_id: str) -> TaskArtifactListResponse:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-
+#查看某个任务的审批请求
 @app.get("/tasks/{task_id}/approvals", response_model=list[ApprovalRequest])
 def list_task_approvals(task_id: str) -> list[ApprovalRequest]:
     try:
@@ -95,7 +107,7 @@ def list_task_approvals(task_id: str) -> list[ApprovalRequest]:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-
+# 查询审批
 @app.get("/approvals/{approval_id}", response_model=ApprovalRequest)
 def get_approval(approval_id: str) -> ApprovalRequest:
     try:
@@ -103,7 +115,7 @@ def get_approval(approval_id: str) -> ApprovalRequest:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-
+# 提交审批决定
 @app.post("/approvals/{approval_id}/decision", response_model=ApprovalDecisionResponse)
 def decide_approval(
     approval_id: str,

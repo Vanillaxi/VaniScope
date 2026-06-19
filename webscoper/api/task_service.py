@@ -31,6 +31,7 @@ from webscoper.api.task_state import (
     status_from_context_state,
     status_from_transcript,
 )
+from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.runtime.safety.approvals import ApprovalStore
 from webscoper.runtime.execution.events import (
     InMemoryTaskEventBus,
