@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 type ArtifactListProps = {
   artifacts: string[];
   selected?: string | null;
@@ -7,8 +9,10 @@ type ArtifactListProps = {
 };
 
 export function ArtifactList({ artifacts, selected, onSelect }: ArtifactListProps) {
+  const { t } = useI18n();
+
   if (artifacts.length === 0) {
-    return <div className="text-sm text-[var(--muted)]">暂无 artifacts。</div>;
+    return <div className="text-sm text-[var(--muted)]">{t.artifacts.empty}</div>;
   }
 
   return (

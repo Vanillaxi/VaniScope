@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { getArtifact } from "@/lib/api";
 import { formatArtifactContent } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
 
 type ArtifactViewerProps = {
   taskId: string;
@@ -19,9 +20,10 @@ const COMPACT_ARTIFACT_CHARS = 12_000;
 export function ArtifactViewer({
   taskId,
   artifactName,
-  title = "任务产物查看器",
+  title,
   compact = false,
 }: ArtifactViewerProps) {
+  const { t } = useI18n();
   const [content, setContent] = useState("");
   const [loadedArtifactName, setLoadedArtifactName] = useState<string | null>(null);
   const [error, setError] = useState<{
@@ -43,6 +45,7 @@ export function ArtifactViewer({
             truncateContent(
               formatArtifactContent(artifact.artifact_name, artifact.content),
               compact ? COMPACT_ARTIFACT_CHARS : MAX_ARTIFACT_CHARS,
+              t.artifacts.truncated,
             ),
           );
         } catch {
@@ -50,6 +53,7 @@ export function ArtifactViewer({
             truncateContent(
               artifact.content,
               compact ? COMPACT_ARTIFACT_CHARS : MAX_ARTIFACT_CHARS,
+              t.artifacts.truncated,
             ),
           );
         }
@@ -80,14 +84,14 @@ export function ArtifactViewer({
     <Card className="p-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">{title}</h2>
+          <h2 className="text-lg font-semibold">{title ?? t.artifacts.viewer}</h2>
           <div className="mt-1 break-all text-sm text-[var(--muted)]">
-            {artifactName ?? "请选择 artifact"}
+            {artifactName ?? t.artifacts.select}
           </div>
         </div>
         {artifactName ? (
           <Button variant="secondary" onClick={() => void loadArtifact()}>
-            刷新
+            {t.artifacts.refresh}
           </Button>
         ) : null}
       </div>
@@ -99,16 +103,19 @@ export function ArtifactViewer({
             {content}
           </pre>
         ) : artifactName ? (
-          <div className="text-sm text-[#d0d5dd]">正在加载 artifact...</div>
+          <div className="text-sm text-[#d0d5dd]">{t.artifacts.loading}</div>
         ) : (
-          <div className="text-sm text-[#d0d5dd]">尚未选择 artifact。</div>
+          <div className="text-sm text-[#d0d5dd]">{t.artifacts.noneSelected}</div>
         )}
       </div>
     </Card>
   );
 }
 
-function truncateContent(content: string, maxChars: number) {
+function truncateContent(content: string, maxChars: number, messageTemplate: string) {
   if (content.length <= maxChars) return content;
-  return `${content.slice(0, maxChars)}\n\n...已截断，原始内容共 ${content.length} 个字符。`;
+  return `${content.slice(0, maxChars)}\n\n...${messageTemplate.replace(
+    "{count}",
+    String(content.length),
+  )}`;
 }

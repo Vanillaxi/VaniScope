@@ -7,9 +7,11 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { createTask } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import type { PlannerMode } from "@/lib/types";
 
 export function TaskCreateForm() {
+  const { t } = useI18n();
   const router = useRouter();
   const [url, setUrl] = useState("tests/fixtures/mock_site/basic.html");
   const [click, setClick] = useState("Quickstart");
@@ -27,7 +29,7 @@ export function TaskCreateForm() {
     setExpect("pip install playwright");
     setPlanner("deterministic");
     setWorkspace("tests/fixtures/workspace");
-    setReminder("This is a local full-stack console demo.");
+    setReminder(t.taskCreate.demoReminder);
     setRiskMode("read_only");
   };
 
@@ -57,65 +59,65 @@ export function TaskCreateForm() {
     <Card className="p-5">
       <form onSubmit={onSubmit} className="flex flex-col gap-5">
         <div>
-          <h1 className="text-2xl font-semibold">新建任务</h1>
+          <h1 className="text-2xl font-semibold">{t.taskCreate.title}</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            通过 FastAPI Task API 提交 LangGraph 浏览器任务。
+            {t.taskCreate.description}
           </p>
           <p className="mt-2 text-sm text-[var(--muted)]">
-            Demo 默认使用仓库内 mock site 路径，不访问真实网页。
+            {t.taskCreate.demoHint}
           </p>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
           <Input
-            label="URL 或 fixture 路径"
+            label={t.taskCreate.url}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             required
           />
           <Input
-            label="点击目标 / 意图"
+            label={t.taskCreate.click}
             value={click}
             onChange={(e) => setClick(e.target.value)}
           />
           <Input
-            label="期望文本"
+            label={t.taskCreate.expect}
             value={expect}
             onChange={(e) => setExpect(e.target.value)}
           />
           <label className="flex flex-col gap-1.5 text-sm font-medium text-[#344054]">
-            Planner
+            {t.taskCreate.planner}
             <select
               value={planner}
               onChange={(event) => setPlanner(event.target.value as PlannerMode)}
               className="min-h-10 rounded-md border border-[var(--line)] bg-white px-3 text-[var(--foreground)] outline-none focus:border-[var(--brand)] focus:ring-2 focus:ring-[#0f6f7826]"
             >
-              <option value="deterministic">确定性 deterministic</option>
-              <option value="fake_llm">模拟 LLM fake_llm</option>
-              <option value="llm">真实 LLM llm</option>
+              <option value="deterministic">{t.taskCreate.deterministic}</option>
+              <option value="fake_llm">{t.taskCreate.fakeLlm}</option>
+              <option value="llm">{t.taskCreate.llm}</option>
             </select>
           </label>
           <Input
-            label="Workspace 路径"
+            label={t.taskCreate.workspace}
             value={workspace}
             onChange={(e) => setWorkspace(e.target.value)}
           />
           <label className="flex flex-col gap-1.5 text-sm font-medium text-[#344054]">
-            风险模式
+            {t.taskCreate.riskMode}
             <select
               value={riskMode}
               onChange={(event) => setRiskMode(event.target.value)}
               className="min-h-10 rounded-md border border-[var(--line)] bg-white px-3 text-[var(--foreground)] outline-none focus:border-[var(--brand)] focus:ring-2 focus:ring-[#0f6f7826]"
             >
-              <option value="read_only">只读 read_only</option>
-              <option value="approval_required">需要审批 approval_required</option>
+              <option value="read_only">{t.taskCreate.readOnly}</option>
+              <option value="approval_required">{t.taskCreate.approvalRequired}</option>
             </select>
           </label>
         </div>
         <Textarea
-          label="运行提醒"
+          label={t.taskCreate.reminder}
           value={reminder}
           onChange={(e) => setReminder(e.target.value)}
-          placeholder="可选的 runtime reminder"
+          placeholder={t.taskCreate.reminderPlaceholder}
         />
         {error ? (
           <div className="rounded-md border border-[#fecdca] bg-[#fef3f2] p-3 text-sm text-[var(--danger)]">
@@ -124,10 +126,10 @@ export function TaskCreateForm() {
         ) : null}
         <div className="flex flex-wrap justify-end gap-2">
           <Button type="button" variant="secondary" onClick={fillDemoCase}>
-            填入 demo case
+            {t.taskCreate.fillDemo}
           </Button>
           <Button type="submit" disabled={submitting}>
-            {submitting ? "创建中..." : "创建任务"}
+            {submitting ? t.taskCreate.creating : t.taskCreate.create}
           </Button>
         </div>
       </form>

@@ -9,6 +9,7 @@ import { TaskStatusCard } from "@/components/tasks/TaskStatusCard";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { getTask, listArtifacts } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import type { TaskArtifactListResponse, TaskEvent, TaskStatusResponse } from "@/lib/types";
 
 type TaskPageProps = {
@@ -18,6 +19,7 @@ type TaskPageProps = {
 };
 
 export default function TaskPage({ params }: TaskPageProps) {
+  const { t } = useI18n();
   const { taskId } = use(params);
   const [task, setTask] = useState<TaskStatusResponse | null>(null);
   const [artifacts, setArtifacts] = useState<string[]>([]);
@@ -58,7 +60,7 @@ export default function TaskPage({ params }: TaskPageProps) {
   if (error) {
     return (
       <Card className="p-5">
-        <h1 className="text-xl font-semibold">任务不可用</h1>
+        <h1 className="text-xl font-semibold">{t.taskDetail.unavailable}</h1>
         <div className="mt-3 rounded-md border border-[#fecdca] bg-[#fef3f2] p-3 text-sm text-[var(--danger)]">
           {error}
         </div>
@@ -71,16 +73,16 @@ export default function TaskPage({ params }: TaskPageProps) {
       {task ? (
         <TaskStatusCard task={task} latestEvent={latestEvent} />
       ) : (
-        <Card className="p-5 text-sm text-[var(--muted)]">正在加载任务...</Card>
+        <Card className="p-5 text-sm text-[var(--muted)]">{t.taskDetail.loading}</Card>
       )}
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex flex-col gap-5">
           <EventStreamPanel taskId={taskId} onEventsChange={setEvents} />
           <Card className="p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold">任务产物</h2>
+              <h2 className="text-lg font-semibold">{t.taskDetail.artifacts}</h2>
               <Button variant="secondary" onClick={() => void refresh()}>
-                刷新产物
+                {t.taskDetail.refreshArtifacts}
               </Button>
             </div>
             <ArtifactList
@@ -93,7 +95,7 @@ export default function TaskPage({ params }: TaskPageProps) {
             <ArtifactViewer
               taskId={taskId}
               artifactName="final_report.md"
-              title="Final report 预览"
+              title={t.taskDetail.finalReportPreview}
               compact
             />
           ) : null}

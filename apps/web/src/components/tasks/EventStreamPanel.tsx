@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { getArtifact } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
 import { openTaskEventSource } from "@/lib/sse";
 import type { TaskEvent } from "@/lib/types";
 
@@ -14,6 +15,7 @@ type EventStreamPanelProps = {
 };
 
 export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelProps) {
+  const { language, t } = useI18n();
   const [events, setEvents] = useState<TaskEvent[]>([]);
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [connectionState, setConnectionState] = useState("connecting");
@@ -51,7 +53,7 @@ export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelPro
             try {
               return JSON.parse(line) as TaskEvent;
             } catch {
-              setStreamWarning("events.jsonl 中存在无法解析的事件行，已跳过。");
+              setStreamWarning(t.events.invalidJsonl);
               return null;
             }
           })
@@ -70,7 +72,7 @@ export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelPro
           setConnectionState("live");
           pushEvent(event);
         },
-        setStreamWarning,
+        () => setStreamWarning(t.events.invalidSse),
         () => {
           setConnectionState("polling");
           void loadFallback();
@@ -89,7 +91,7 @@ export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelPro
       window.clearInterval(interval);
       source?.close();
     };
-  }, [onEventsChange, taskId]);
+  }, [onEventsChange, taskId, t.events.invalidJsonl, t.events.invalidSse]);
 
   const renderedEvents = useMemo(() => [...events].reverse(), [events]);
 
@@ -97,13 +99,13 @@ export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelPro
     <Card className="p-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">事件流</h2>
+          <h2 className="text-lg font-semibold">{t.events.title}</h2>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            {connectionStateLabel(connectionState)}
+            {connectionStateLabel(connectionState, t)}
           </p>
         </div>
         <Button variant="secondary" onClick={() => void loadEventsSnapshot(taskId, setEvents)}>
-          手动刷新
+          {t.events.manualRefresh}
         </Button>
       </div>
       {streamWarning ? (
@@ -113,7 +115,7 @@ export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelPro
       ) : null}
       <div className="mt-4 max-h-[520px] overflow-auto rounded-md border border-[var(--line)]">
         {renderedEvents.length === 0 ? (
-          <div className="p-4 text-sm text-[var(--muted)]">暂无事件。</div>
+          <div className="p-4 text-sm text-[var(--muted)]">{t.events.empty}</div>
         ) : (
           renderedEvents.map((event, index) => {
             const eventKey = event.event_id || `${event.kind}-${event.created_at}-${index}`;
@@ -133,7 +135,7 @@ export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelPro
                       {event.kind}
                     </span>
                     <span className="text-xs text-[var(--muted)]">
-                      {formatDateTime(event.created_at)}
+                      {formatDateTime(event.created_at, language)}
                     </span>
                   </div>
                   <div className="text-sm text-[#26323f]">{event.message}</div>
@@ -171,9 +173,12 @@ async function loadEventsSnapshot(
   setEvents(events);
 }
 
-function connectionStateLabel(state: string) {
-  if (state === "live") return "实时连接";
-  if (state === "polling") return "轮询回退";
-  if (state === "unavailable") return "暂不可用";
-  return "连接中";
+function connectionStateLabel(
+  state: string,
+  t: ReturnType<typeof useI18n>["t"],
+) {
+  if (state === "live") return t.events.live;
+  if (state === "polling") return t.events.polling;
+  if (state === "unavailable") return t.events.unavailable;
+  return t.events.connecting;
 }

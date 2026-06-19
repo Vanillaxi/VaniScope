@@ -1,3 +1,4 @@
+import type { Language } from "@/lib/i18n";
 import type { TaskStatus } from "@/lib/types";
 
 export function statusTone(status: TaskStatus) {
@@ -10,25 +11,15 @@ export function statusTone(status: TaskStatus) {
   return "neutral";
 }
 
-export function statusLabel(status: TaskStatus) {
-  const labels: Record<TaskStatus, string> = {
-    running: "运行中",
-    succeeded: "已成功",
-    failed: "已失败",
-    requires_approval: "等待审批",
-    resuming: "恢复中",
-    blocked: "已阻止",
-    rejected: "已拒绝",
-    not_found: "未找到",
-  };
-  return labels[status];
-}
-
-export function formatDateTime(value?: string | null) {
-  if (!value) return "未知";
+export function formatDateTime(
+  value?: string | null,
+  language: Language = "zh",
+  fallback = language === "zh" ? "未知" : "Unknown",
+) {
+  if (!value) return fallback;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return date.toLocaleString(language === "zh" ? "zh-CN" : "en-US");
 }
 
 export function formatArtifactContent(name: string, content: string) {

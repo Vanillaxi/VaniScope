@@ -4,7 +4,7 @@ import type { TaskEvent } from "@/lib/types";
 export function openTaskEventSource(
   taskId: string,
   onEvent: (event: TaskEvent) => void,
-  onInvalidEvent: (message: string) => void,
+  onInvalidEvent: () => void,
   onError: (error: Event) => void,
 ) {
   const source = new EventSource(
@@ -71,11 +71,11 @@ export function openTaskEventSource(
 function handleMessage(
   message: MessageEvent,
   onEvent: (event: TaskEvent) => void,
-  onInvalidEvent: (message: string) => void,
+  onInvalidEvent: () => void,
 ) {
   try {
     onEvent(JSON.parse(message.data) as TaskEvent);
   } catch {
-    onInvalidEvent("收到无法解析的 SSE 事件，已跳过。");
+    onInvalidEvent();
   }
 }

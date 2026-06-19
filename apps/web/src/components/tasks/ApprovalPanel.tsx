@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { listApprovals, submitApprovalDecision } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
 import type { ApprovalRequest } from "@/lib/types";
 
 type ApprovalPanelProps = {
@@ -14,6 +15,7 @@ type ApprovalPanelProps = {
 };
 
 export function ApprovalPanel({ taskId, onDecision }: ApprovalPanelProps) {
+  const { language, t } = useI18n();
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +43,7 @@ export function ApprovalPanel({ taskId, onDecision }: ApprovalPanelProps) {
     try {
       await submitApprovalDecision(approval.approval_id, {
         approved,
-        reason: approved ? "在控制台批准" : "在控制台拒绝",
+        reason: approved ? t.approvals.approvedReason : t.approvals.rejectedReason,
       });
       await refresh();
       onDecision?.();
@@ -56,13 +58,13 @@ export function ApprovalPanel({ taskId, onDecision }: ApprovalPanelProps) {
     <Card className="p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">审批</h2>
+          <h2 className="text-lg font-semibold">{t.approvals.title}</h2>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            高风险工具调用会暂停任务，等待人工确认后再继续。
+            {t.approvals.description}
           </p>
         </div>
         <Button variant="secondary" onClick={() => void refresh()}>
-          刷新
+          {t.approvals.refresh}
         </Button>
       </div>
       {error ? (
@@ -72,7 +74,7 @@ export function ApprovalPanel({ taskId, onDecision }: ApprovalPanelProps) {
       ) : null}
       <div className="mt-4 flex flex-col gap-3">
         {approvals.length === 0 ? (
-          <div className="text-sm text-[var(--muted)]">暂无审批请求。</div>
+          <div className="text-sm text-[var(--muted)]">{t.approvals.empty}</div>
         ) : (
           approvals.map((approval) => (
             <div
@@ -81,7 +83,7 @@ export function ApprovalPanel({ taskId, onDecision }: ApprovalPanelProps) {
             >
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone={approval.status === "pending" ? "warning" : "neutral"}>
-                  {approvalStatusLabel(approval.status)}
+                  {approvalStatusLabel(approval.status, t)}
                 </Badge>
                 <span className="break-all text-sm font-semibold">
                   {approval.approval_id}
@@ -89,20 +91,28 @@ export function ApprovalPanel({ taskId, onDecision }: ApprovalPanelProps) {
               </div>
               <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
                 <div>
-                  <dt className="font-semibold text-[var(--muted)]">工具</dt>
-                  <dd>{approval.tool_name ?? "未知"}</dd>
+                  <dt className="font-semibold text-[var(--muted)]">
+                    {t.approvals.tool}
+                  </dt>
+                  <dd>{approval.tool_name ?? t.approvals.unknown}</dd>
                 </div>
                 <div>
-                  <dt className="font-semibold text-[var(--muted)]">风险等级</dt>
+                  <dt className="font-semibold text-[var(--muted)]">
+                    {t.approvals.riskLevel}
+                  </dt>
                   <dd>{approval.risk_level}</dd>
                 </div>
                 <div>
-                  <dt className="font-semibold text-[var(--muted)]">请求动作</dt>
-                  <dd>{approval.action_type ?? approval.target_hint ?? "未知"}</dd>
+                  <dt className="font-semibold text-[var(--muted)]">
+                    {t.approvals.requestedAction}
+                  </dt>
+                  <dd>{approval.action_type ?? approval.target_hint ?? t.approvals.unknown}</dd>
                 </div>
                 <div>
-                  <dt className="font-semibold text-[var(--muted)]">创建时间</dt>
-                  <dd>{formatDateTime(approval.created_at)}</dd>
+                  <dt className="font-semibold text-[var(--muted)]">
+                    {t.approvals.createdAt}
+                  </dt>
+                  <dd>{formatDateTime(approval.created_at, language)}</dd>
                 </div>
               </dl>
               <div className="mt-3 rounded-md bg-[var(--panel-soft)] p-3 text-sm">
@@ -114,14 +124,14 @@ export function ApprovalPanel({ taskId, onDecision }: ApprovalPanelProps) {
                     onClick={() => void decide(approval, true)}
                     disabled={busyId === approval.approval_id}
                   >
-                    批准
+                    {t.approvals.approve}
                   </Button>
                   <Button
                     variant="danger"
                     onClick={() => void decide(approval, false)}
                     disabled={busyId === approval.approval_id}
                   >
-                    拒绝
+                    {t.approvals.reject}
                   </Button>
                 </div>
               ) : null}
@@ -133,8 +143,11 @@ export function ApprovalPanel({ taskId, onDecision }: ApprovalPanelProps) {
   );
 }
 
-function approvalStatusLabel(status: ApprovalRequest["status"]) {
-  if (status === "approved") return "已批准";
-  if (status === "rejected") return "已拒绝";
-  return "待审批";
+function approvalStatusLabel(
+  status: ApprovalRequest["status"],
+  t: ReturnType<typeof useI18n>["t"],
+) {
+  if (status === "approved") return t.approvals.approved;
+  if (status === "rejected") return t.approvals.rejected;
+  return t.approvals.pending;
 }
