@@ -45,7 +45,19 @@ NEXT_PUBLIC_VANISCOPE_API_BASE_URL=http://localhost:8000
 
 ## 3. Create The Demo Task
 
-Open `http://localhost:3000`, then go to `新建任务`.
+Open `http://localhost:3000`. The first screen is a task workspace with skill
+cards, API health, and a recent-task preview. The sidebar contains `+ New Task`,
+skill shortcuts, Recent Tasks, language switching, and API health.
+
+Click a skill card or sidebar shortcut:
+
+```text
+/tasks/new?skill=browser_task
+/tasks/new?skill=docs_research
+/tasks/new?skill=github_issue_research
+```
+
+Each skill shows only its relevant fields.
 
 Use the demo case:
 
@@ -57,9 +69,11 @@ planner: deterministic
 workspace: tests/fixtures/workspace
 ```
 
-The form has a `填入 demo case` button that restores these values.
+The Browser Task form has a `Quickstart click demo` preset that restores these
+values.
 
-For the skill demo, use `Docs Research Demo`:
+For the skill demo, use the Docs Research card or sidebar shortcut and choose
+`Install docs demo`:
 
 ```text
 task_type: docs_research
@@ -76,7 +90,8 @@ query: 如何安装并运行 VaniScope？
 language: zh
 ```
 
-For the GitHub issue skill demo, use `GitHub Issue Demo`:
+For the GitHub issue skill demo, use the GitHub Issue Research card or sidebar
+shortcut and choose `Issue value analysis demo`:
 
 ```text
 task_type: github_issue_research
@@ -99,6 +114,9 @@ Submit the form. The console should redirect to:
 /tasks/{task_id}
 ```
 
+The created task is added to sidebar Recent Tasks via browser `localStorage`.
+Opening a task detail page updates `last_opened_at` and the latest known status.
+
 ## 4. Verify Task Detail
 
 On the task detail page, verify:
@@ -113,6 +131,8 @@ On the task detail page, verify:
 - GitHub issue research tasks show `skill_id`, `task_type`, `difficulty`, and
   `recommendation`
 - docs research tasks include `skill_result.json`
+- `prompt_preview.md` and `prompt_context.json` appear after prompt build
+- `llm_calls.jsonl` appears when fake/mock/real LLM planning is used
 
 The artifact viewer formats JSON and JSONL for readability and truncates very large content to keep the page responsive.
 
@@ -142,7 +162,9 @@ Click `批准` to resume the task, or `拒绝` to stop it. The task detail page 
 ## Manual Smoke Checklist
 
 - Backend health OK
-- Frontend health card OK
+- Sidebar API health OK
+- Sidebar skill shortcuts OK
+- Sidebar Recent Tasks OK after task creation
 - Create task OK
 - Task detail page OK
 - SSE events visible

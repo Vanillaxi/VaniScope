@@ -106,6 +106,12 @@ class LangGraphWorkflowNodes:
         self.workflow.prompt_result = self.workflow.handler.build_prompt(context)
         state["prompt_markdown"] = self.workflow.prompt_result.prompt_text
         state["prompt_context"] = self.workflow.prompt_result.model_dump(mode="json")
+        if self.workflow.handler.dry_run:
+            self.workflow.handler.persist_dry_run_result(
+                context,
+                self.workflow.prompt_result,
+            )
+            state["dry_run_complete"] = True
         return state
 
     def plan_task(self, state: VaniScopeGraphState) -> VaniScopeGraphState:

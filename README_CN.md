@@ -48,6 +48,9 @@ uv run pytest
 
 Next.js 16 控制台位于 `apps/web`，只对接 FastAPI Task API。它支持完整跑通本地 LangGraph browser task，通过 SSE 查看实时事件，查看 artifacts，处理审批，查看 evidence / review / report 输出，以及打开本地 eval 命令辅助页面。
 
+控制台现在整理为 ChatGPT-style task workspace：左侧 sidebar 包含 `+ New Task`、
+skill shortcuts、API health、语言切换，以及保存在浏览器 `localStorage` 的最近任务历史。Skill 选择从大表单中移出，放到 sidebar 和首页 skill cards；`/tasks/new?skill=...` 会按 Browser Task、Docs Research、GitHub Issue Research 动态显示字段。
+
 The Next.js 16 control console lives in `apps/web` and talks only to the FastAPI Task API. It can create and complete local LangGraph browser tasks, stream task events over SSE, inspect artifacts, handle approvals, view evidence/review/report outputs, and show the local eval command helper.
 
 启动 API：
@@ -142,6 +145,12 @@ tests/
 ## 配置
 
 `configs/llm.example.toml` 是可提交的配置模板。本地 provider 配置放在 `configs/llm.local.toml`；本地配置文件和生成的 run/eval artifact 会被 git 忽略。
+
+LLM 接入默认保持受控。默认任务路径使用 deterministic 或 fake planner，
+pytest 不需要真实 LLM。真实 provider 必须通过 `configs/llm.local.toml` 显式设置
+`router.mode = "real"` 并配置 OpenAI-compatible provider。LLM readiness、budget
+控制、`prompt_preview.md`、`prompt_context.json`、`llm_calls.jsonl` 和 dry-run
+模式见 `docs/llm_readiness.md`。
 
 ## Workflow Eval
 

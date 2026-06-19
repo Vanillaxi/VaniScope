@@ -31,17 +31,14 @@ from webscoper.runtime.execution.state import (
 from webscoper.runtime.execution.loop import AgentExecutionLoop
 from webscoper.runtime.llm.client import (
     BaseLLMClient,
-    FakeLLMClient,
-    OpenAICompatibleLLMClient,
 )
-from webscoper.runtime.llm.config import load_llm_config_from_env
 from webscoper.runtime.llm.planner import LLMTaskPlanner
 from webscoper.runtime.llm.reviewer import (
     BaseLLMReportReviewer,
     FakeLLMReportReviewer,
     OpenAICompatibleLLMReportReviewer,
 )
-from webscoper.runtime.llm.router import LLMProviderRouter
+from webscoper.runtime.llm.router import AuditedBudgetedLLMClient, LLMProviderRouter
 from webscoper.runtime.safety.pending import PendingApprovalManager
 from webscoper.runtime.execution.plan_validator import PlanValidator
 from webscoper.runtime.execution.planner import DeterministicTaskPlanner, normalize_planner_mode
@@ -101,6 +98,7 @@ class WebAgentExecutionHandler:
         pending_manager: PendingApprovalManager | None = None,
         reviewer_mode: str = "deterministic",
         revise_attempts: int = 0,
+        dry_run: bool = False,
     ) -> None:
         self.output_root = output_root
         self.headless = headless
@@ -122,6 +120,7 @@ class WebAgentExecutionHandler:
         self.pending_manager = pending_manager or PendingApprovalManager()
         self.reviewer_mode = ReviewerMode(reviewer_mode)
         self.revise_attempts = max(0, revise_attempts)
+        self.dry_run = dry_run
         if self.model_override:
             self.version.model = self.model_override
         self.last_context: WebAgentContext | None = None
@@ -133,6 +132,20 @@ class WebAgentExecutionHandler:
         runtime = self.build_runtime_components(context)
         try:
             prompt_result = self.build_prompt(context)
+            if self.dry_run:
+                self.persist_dry_run_result(context, prompt_result)
+                context.state.status = "completed"
+                context.state.current_step = 3
+                self.finalize_success(context)
+                return PageObservation(
+                    url=context.task.target_url,
+                    title="Dry run",
+                    visible_text_summary=(
+                        "Dry run completed before LLM planning or browser execution."
+                    ),
+                    interactive_elements=[],
+                    risk_signals=[],
+                )
             plan = await self.plan_task(context, prompt_result)
             self.validate_plan(context, plan)
             observation = await self.execute_plan(context, plan, runtime)
@@ -284,7 +297,20 @@ class WebAgentExecutionHandler:
                 "model": self.version.model,
             },
         )
-        plan = await self._build_plan(context, prompt_result)
+        try:
+            plan = await self._build_plan(context, prompt_result)
+        except RuntimeError as exc:
+            if "LLM budget exceeded" in str(exc):
+                context.transcript_store.append(
+                    "budget_exceeded",
+                    {"error": str(exc), "planner_mode": self.planner_mode},
+                )
+                self._emit_event(
+                    "budget_exceeded",
+                    "LLM budget exceeded",
+                    {"run_id": context.run_id, "error": str(exc)},
+                )
+            raise
         if self.planner_mode == "real_llm":
             context.transcript_store.append(
                 "llm_provider_selected",
@@ -307,6 +333,28 @@ class WebAgentExecutionHandler:
             },
         )
         return plan
+
+    def persist_dry_run_result(
+        self,
+        context: WebAgentContext,
+        prompt_result: PromptBuildResult,
+    ) -> None:
+        result = {
+            "task_id": context.run_id,
+            "dry_run": True,
+            "planner_mode": self.planner_mode,
+            "llm_provider": self.llm_provider,
+            "prompt_preview_path": str(context.run_dir / "prompt_preview.md"),
+            "prompt_context_path": str(context.run_dir / "prompt_context.json"),
+            "estimated_prompt_tokens": max(1, (len(prompt_result.prompt_text) + 3) // 4),
+            "skipped": ["llm_call", "browser_execution"],
+        }
+        (context.run_dir / "dry_run_result.json").write_text(
+            json.dumps(result, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        context.transcript_store.append("dry_run_completed", result)
+        self._emit_event("dry_run_completed", "Dry run completed", result)
 
     def validate_plan(
         self,
@@ -405,7 +453,7 @@ class WebAgentExecutionHandler:
             self.event_sink,
             reviewer_mode=self.reviewer_mode,
             revise_attempts=self.revise_attempts,
-            llm_reviewer=self._build_llm_reviewer(),
+            llm_reviewer=self._build_llm_reviewer(context),
         )
 
     def build_final_report(
@@ -450,7 +498,7 @@ class WebAgentExecutionHandler:
             event_sink=self.event_sink,
             reviewer_mode=self.reviewer_mode,
             revise_attempts=self.revise_attempts,
-            llm_reviewer=self._build_llm_reviewer(),
+            llm_reviewer=self._build_llm_reviewer(context),
         )
 
     def snapshot_context(self, context: WebAgentContext) -> None:
@@ -494,7 +542,10 @@ class WebAgentExecutionHandler:
     def run_sync(self, task: TaskSpec) -> PageObservation:
         return asyncio.run(self.run(task))
 
-    def _build_llm_reviewer(self) -> BaseLLMReportReviewer | None:
+    def _build_llm_reviewer(
+        self,
+        context: WebAgentContext,
+    ) -> BaseLLMReportReviewer | None:
         if self.revise_attempts <= 0:
             return None
         if self.reviewer_mode == ReviewerMode.DETERMINISTIC:
@@ -502,13 +553,14 @@ class WebAgentExecutionHandler:
         if self.reviewer_mode == ReviewerMode.FAKE_LLM:
             return FakeLLMReportReviewer()
         if self.reviewer_mode == ReviewerMode.REAL_LLM:
-            if self.llm_config_path is not None:
-                client = LLMProviderRouter(self.llm_config_path).create_client(
-                    provider_id=self.llm_provider,
-                    model_override=self.model_override,
-                )
-            else:
-                client = self._build_llm_client()
+            client = LLMProviderRouter(self.llm_config_path).create_client(
+                provider_id=self.llm_provider,
+                model_override=self.model_override,
+                run_dir=context.run_dir,
+                task_id=context.run_id,
+                purpose="reviewer",
+                budget=context.task.budget,
+            )
             return OpenAICompatibleLLMReportReviewer(
                 client=client,
                 model=self.version.model,
@@ -524,7 +576,7 @@ class WebAgentExecutionHandler:
             return DeterministicTaskPlanner().build_plan(context.task)
 
         planner = LLMTaskPlanner(
-            self._create_llm_client(),
+            self._create_llm_client(context, purpose="planner"),
             repair_attempts=self.repair_attempts,
         )
         try:
@@ -532,23 +584,32 @@ class WebAgentExecutionHandler:
         finally:
             _append_llm_planner_transcript(context, planner)
 
-    def _create_llm_client(self) -> BaseLLMClient:
+    def _create_llm_client(
+        self,
+        context: WebAgentContext,
+        purpose: str,
+    ) -> BaseLLMClient:
         if self.llm_client is not None:
-            return self.llm_client
-        if self.planner_mode == "fake_llm":
-            return FakeLLMClient()
-        if self.planner_mode == "real_llm":
-            if self.llm_config_path is not None:
-                client = LLMProviderRouter(self.llm_config_path).create_client(
-                    provider_id=self.llm_provider,
-                    model_override=self.model_override,
-                )
-                if isinstance(client, OpenAICompatibleLLMClient):
-                    self.version.model = client.config.model
-                return client
-            config = load_llm_config_from_env(self.model_override)
-            self.version.model = config.model
-            return OpenAICompatibleLLMClient(config)
+            return AuditedBudgetedLLMClient(
+                self.llm_client,
+                provider="mock",
+                model=self.model_override or self.version.model or "mock",
+                mode=self.planner_mode,
+                audit_path=context.run_dir / "llm_calls.jsonl",
+                task_id=context.run_id,
+                purpose=purpose,
+                budget=context.task.budget,
+            )
+        if self.planner_mode in {"fake_llm", "real_llm"}:
+            client = LLMProviderRouter(self.llm_config_path).create_client(
+                provider_id=self.llm_provider,
+                model_override=self.model_override,
+                run_dir=context.run_dir,
+                task_id=context.run_id,
+                purpose=purpose,
+                budget=context.task.budget,
+            )
+            return client
         raise ValueError(f"Unsupported planner mode: {self.planner_mode}")
 
     def build_context(self, task: TaskSpec) -> WebAgentContext:

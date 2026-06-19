@@ -37,8 +37,8 @@ class ParsedToolCalls(BaseModel):
 
 class LLMClientConfig(BaseModel):
     provider: str = "openai_compatible"
-    base_url: str
-    api_key: str
+    base_url: str = ""
+    api_key: str = ""
     model: str
     timeout_ms: int = 30000
     temperature: float = 0.0
@@ -50,7 +50,8 @@ class LLMProviderConfig(BaseModel):
     provider_id: str
     enabled: bool = True
     provider_type: str = "openai_compatible"
-    base_url: str
+    mode: str | None = None
+    base_url: str = ""
     api_key: str | None = None
     api_key_env: str | None = None
     model: str
@@ -61,5 +62,8 @@ class LLMProviderConfig(BaseModel):
 
 
 class LLMRouterConfig(BaseModel):
-    default_provider: str
+    default_provider: str = "fake"
+    default_model: str = "fake-planner"
+    mode: str = "fake"
     providers: dict[str, LLMProviderConfig] = Field(default_factory=dict)
+    budget: dict[str, Any] = Field(default_factory=dict)

@@ -41,6 +41,7 @@ class TaskCreateRequest(BaseModel):
     llm_config: str | None = None
     llm_provider: str | None = None
     model: str | None = None
+    dry_run: bool = False
 
 
 class TaskCreateResponse(BaseModel):

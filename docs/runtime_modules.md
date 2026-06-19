@@ -32,8 +32,13 @@ Gateway providers currently include:
 ## LLM-Related Modules
 
 - `llm/client.py` defines fake and OpenAI-compatible LLM clients.
-- `llm/config.py` loads environment/file-backed provider configuration.
-- `llm/router.py` resolves configured providers into concrete clients.
+- `llm/config.py` loads TOML provider configuration. No path means a fake
+  router config; real providers require an explicit config path and
+  `router.mode = "real"`.
+- `llm/router.py` resolves configured fake/mock/OpenAI-compatible providers into
+  audited, budgeted clients. LLM calls append `llm_calls.jsonl` with provider,
+  model, mode, purpose, estimated tokens, duration, status, error type, and
+  budget decision.
 - `llm/planner.py` builds plans from LLM tool-call responses and handles repair attempts.
 - `llm/reviewer.py` provides LLM-backed review integration for the revise loop.
 
@@ -63,6 +68,8 @@ Gateway providers currently include:
 
 - `context.py` defines runtime context snapshots and run state.
 - `prompt/builder.py` builds planner prompts from task context, tool schemas, reminders, compacted context, and AGENTS.md instructions.
+- `prompt_preview.md` and `prompt_context.json` are written before LLM planning.
+  Dry-run mode stops after this point and writes `dry_run_result.json`.
 - Skill instructions are injected by `prompt/builder.py` before tool
   instructions when LangGraph routes a task to a skill.
 - `prompt/agents_md.py` loads workspace instructions.
@@ -89,7 +96,7 @@ status without real network or real LLM calls.
 
 `apps/web` contains the Next.js 16 control console for the LangGraph-based Browser Agent Runtime. The console is intentionally a thin FastAPI client: it creates tasks through `/tasks/async`, reads task status from `/tasks/{task_id}`, streams `/tasks/{task_id}/events`, loads allowlisted artifacts through the artifact endpoints, and submits approval decisions through the approval endpoints.
 
-The console can complete the local LangGraph demo path end to end: create a fixture-backed task, observe execution over SSE, open final report / review / evidence / audit artifacts, and resolve approval-required pauses from the UI. It does not import Python runtime internals, does not store data, and does not add authentication. Browser access to the local API is enabled through FastAPI CORS for `http://localhost:3000` by default, with `VANISCOPE_CORS_ORIGINS` available for local overrides.
+The console can complete the local LangGraph demo path end to end: create a fixture-backed task, observe execution over SSE, open final report / review / evidence / audit artifacts, and resolve approval-required pauses from the UI. Its layout is ChatGPT-style: sidebar skill shortcuts, local recent task history, dynamic skill forms, and task detail panes for events, artifacts, approval, report, and review. It does not import Python runtime internals, does not use a database, stores recent task history only in browser `localStorage`, and does not add authentication. Browser access to the local API is enabled through FastAPI CORS for `http://localhost:3000` by default, with `VANISCOPE_CORS_ORIGINS` available for local overrides.
 
 `docs/demo_next_console.md` documents the manual full-stack smoke path. The project remains LangGraph-only.
 

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from webscoper.runtime.llm.client import OpenAICompatibleLLMClient
-from webscoper.runtime.llm.router import LLMProviderRouter
+from webscoper.runtime.llm.router import AuditedBudgetedLLMClient, LLMProviderRouter
 
 
 def test_llm_provider_router_creates_openai_compatible_client(tmp_path: Path) -> None:
@@ -13,9 +13,10 @@ def test_llm_provider_router_creates_openai_compatible_client(tmp_path: Path) ->
 
     client = LLMProviderRouter(path).create_client(provider_id="deepseek")
 
-    assert isinstance(client, OpenAICompatibleLLMClient)
-    assert client.config.base_url == "https://example.test/v1"
-    assert client.config.model == "test-model"
+    assert isinstance(client, AuditedBudgetedLLMClient)
+    assert isinstance(client.client, OpenAICompatibleLLMClient)
+    assert client.client.config.base_url == "https://example.test/v1"
+    assert client.client.config.model == "test-model"
 
 
 def test_llm_provider_router_unsupported_provider_type_raises(tmp_path: Path) -> None:

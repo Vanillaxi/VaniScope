@@ -27,6 +27,7 @@ export type TaskCreateRequest = {
   reminder?: string;
   workspace?: string;
   risk_mode?: string;
+  dry_run?: boolean;
 };
 
 export type TaskCreateApiRequest = Omit<TaskCreateRequest, "planner"> & {
@@ -38,6 +39,8 @@ export type TaskCreateResponse = {
   status: Exclude<TaskStatus, "not_found">;
   run_dir: string;
   artifacts: string[];
+  skill_id?: string | null;
+  task_type?: string | null;
   error?: string | null;
 };
 

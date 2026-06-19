@@ -33,6 +33,7 @@ def build_handler(service, task_id: str, request: TaskCreateRequest) -> WebAgent
         event_sink=service._make_event_sink(task_id),
         approval_store=service.approval_store,
         pending_manager=service.pending_manager,
+        dry_run=request.dry_run,
     )
 
 

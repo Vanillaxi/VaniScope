@@ -10,6 +10,8 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { getTask, listArtifacts } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { skillIdFromTask } from "@/lib/skills";
+import { updateTaskHistoryOpened } from "@/lib/taskHistory";
 import type { TaskArtifactListResponse, TaskEvent, TaskStatusResponse } from "@/lib/types";
 
 type TaskPageProps = {
@@ -54,6 +56,19 @@ export default function TaskPage({ params }: TaskPageProps) {
     };
   }, [refresh]);
 
+  useEffect(() => {
+    if (!task || task.status === "not_found") return;
+    updateTaskHistoryOpened(taskId, {
+      status: task.status,
+      task_type: task.task_type ?? "browser_task",
+      skill_id: task.skill_id,
+      title: historyTitle(
+        skillIdFromTask(task.task_type, task.skill_id),
+        task.task_id,
+      ),
+    });
+  }, [task, taskId]);
+
   const latestEvent = useMemo(() => events.at(-1), [events]);
   const hasFinalReport = artifacts.includes("final_report.md");
 
@@ -91,6 +106,10 @@ export default function TaskPage({ params }: TaskPageProps) {
               onSelect={setSelectedArtifact}
             />
           </Card>
+          <ArtifactViewer taskId={taskId} artifactName={selectedArtifact} />
+        </div>
+        <aside className="flex flex-col gap-5">
+          <ApprovalPanel taskId={taskId} onDecision={refresh} />
           {hasFinalReport ? (
             <ArtifactViewer
               taskId={taskId}
@@ -99,10 +118,18 @@ export default function TaskPage({ params }: TaskPageProps) {
               compact
             />
           ) : null}
-          <ArtifactViewer taskId={taskId} artifactName={selectedArtifact} />
-        </div>
-        <ApprovalPanel taskId={taskId} onDecision={refresh} />
+        </aside>
       </div>
     </>
   );
+}
+
+function historyTitle(skillId: string, taskId: string) {
+  const prefix =
+    skillId === "docs_research"
+      ? "Docs"
+      : skillId === "github_issue_research"
+        ? "Issue"
+        : "Browser";
+  return `${prefix}: ${taskId}`;
 }

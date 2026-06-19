@@ -27,6 +27,10 @@ export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelPro
   }, [connectionState]);
 
   useEffect(() => {
+    onEventsChange?.(events);
+  }, [events, onEventsChange]);
+
+  useEffect(() => {
     let closed = false;
     let source: EventSource | null = null;
     const seen = new Set<string>();
@@ -36,9 +40,7 @@ export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelPro
       if (seen.has(key)) return;
       seen.add(key);
       setEvents((current) => {
-        const next = [...current, event].slice(-80);
-        onEventsChange?.(next);
-        return next;
+        return appendUniqueEvent(current, event);
       });
     };
 
@@ -91,7 +93,7 @@ export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelPro
       window.clearInterval(interval);
       source?.close();
     };
-  }, [onEventsChange, taskId, t.events.invalidJsonl, t.events.invalidSse]);
+  }, [taskId, t.events.invalidJsonl, t.events.invalidSse]);
 
   const renderedEvents = useMemo(() => [...events].reverse(), [events]);
 
@@ -168,9 +170,30 @@ async function loadEventsSnapshot(
       } catch {
         return [];
       }
-    })
-    .slice(-80);
-  setEvents(events);
+    });
+  setEvents(dedupeEvents(events));
+}
+
+function appendUniqueEvent(current: TaskEvent[], event: TaskEvent) {
+  const key = eventKey(event);
+  if (current.some((item) => eventKey(item) === key)) return current;
+  return [...current, event].slice(-80);
+}
+
+function dedupeEvents(events: TaskEvent[]) {
+  const seen = new Set<string>();
+  const result: TaskEvent[] = [];
+  for (const event of events) {
+    const key = eventKey(event);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(event);
+  }
+  return result.slice(-80);
+}
+
+function eventKey(event: TaskEvent) {
+  return event.event_id || `${event.kind}-${event.created_at}`;
 }
 
 function connectionStateLabel(

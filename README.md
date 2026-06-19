@@ -46,6 +46,12 @@ Default pytest keeps workflow coverage to focused smoke cases. Run the explicit 
 
 The Next.js 16 control console lives in `apps/web` and talks only to the FastAPI Task API. It can create and complete local LangGraph browser tasks, stream task events over SSE, inspect artifacts, handle approvals, view evidence/review/report outputs, and show the local eval command helper.
 
+The console is now organized as a ChatGPT-style task workspace: the sidebar has
+`+ New Task`, skill shortcuts, API health, language switching, and a recent task
+history stored in browser `localStorage`. Skill selection lives in the sidebar
+and home-page skill cards instead of a large mixed form; `/tasks/new?skill=...`
+renders fields specific to Browser Task, Docs Research, or GitHub Issue Research.
+
 Next.js 16 控制台位于 `apps/web`，只对接 FastAPI Task API。它支持完整跑通本地 LangGraph 浏览器任务，通过 SSE 查看实时事件，检查 artifacts，处理审批，查看 evidence / review / report 输出，并提供本地 eval 命令辅助页。
 
 Start the API:
@@ -140,6 +146,13 @@ tests/
 ## Configuration
 
 Use `configs/llm.example.toml` as the committed template. Put local provider settings in `configs/llm.local.toml`; local config files and generated run/eval artifacts are ignored by git.
+
+LLM integration is intentionally controlled. Default task paths use deterministic
+or fake planning and pytest does not require real LLM calls. Real providers must
+be enabled through `configs/llm.local.toml` with `router.mode = "real"` and a
+configured OpenAI-compatible provider. LLM readiness details, budget controls,
+`prompt_preview.md`, `prompt_context.json`, `llm_calls.jsonl`, and dry-run mode
+are documented in `docs/llm_readiness.md`.
 
 ## Workflow Eval
 

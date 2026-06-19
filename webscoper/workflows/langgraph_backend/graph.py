@@ -81,7 +81,7 @@ def build_langgraph_workflow(*, nodes: Any, checkpointer: Any | None = None):
 
 def _route_to(next_node: str):
     def route(state: VaniScopeGraphState) -> str:
-        if state.get("status") in TERMINAL_GRAPH_STATUSES:
+        if state.get("status") in TERMINAL_GRAPH_STATUSES or state.get("dry_run_complete"):
             return "finalize_task"
         return next_node
 

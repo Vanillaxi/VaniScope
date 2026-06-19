@@ -45,9 +45,12 @@ def load_llm_router_config_from_file(path: Path) -> LLMRouterConfig:
     except tomllib.TOMLDecodeError as exc:
         raise ValueError(f"Failed to parse LLM config file: {path}") from exc
 
-    default_provider = payload.get("default_provider")
+    router_payload = payload.get("router") if isinstance(payload.get("router"), dict) else {}
+    default_provider = router_payload.get("default_provider") or payload.get("default_provider")
     if not default_provider:
         raise ValueError("LLM config must include default_provider")
+    default_model = router_payload.get("default_model") or payload.get("default_model")
+    mode = router_payload.get("mode") or payload.get("mode") or "real"
 
     providers_payload = payload.get("providers")
     if not isinstance(providers_payload, dict) or not providers_payload:
@@ -57,10 +60,12 @@ def load_llm_router_config_from_file(path: Path) -> LLMRouterConfig:
     for provider_id, provider_payload in providers_payload.items():
         if not isinstance(provider_payload, dict):
             raise ValueError(f"Provider config must be a table: {provider_id}")
+        provider_type = provider_payload.get("type") or provider_payload.get("provider_type")
         try:
             providers[provider_id] = LLMProviderConfig.model_validate(
                 {
                     **provider_payload,
+                    "provider_type": provider_type or "openai_compatible",
                     "provider_id": provider_id,
                 }
             )
@@ -69,8 +74,33 @@ def load_llm_router_config_from_file(path: Path) -> LLMRouterConfig:
 
     return LLMRouterConfig(
         default_provider=str(default_provider),
+        default_model=str(default_model or "fake-planner"),
+        mode=str(mode),
         providers=providers,
+        budget=payload.get("budget") if isinstance(payload.get("budget"), dict) else {},
     )
+
+
+def default_fake_router_config() -> LLMRouterConfig:
+    return LLMRouterConfig(
+        default_provider="fake",
+        default_model="fake-planner",
+        mode="fake",
+        providers={
+            "fake": LLMProviderConfig(
+                provider_id="fake",
+                provider_type="fake",
+                mode="fake",
+                model="fake-planner",
+            )
+        },
+    )
+
+
+def load_llm_router_config(path: Path | None = None) -> LLMRouterConfig:
+    if path is None:
+        return default_fake_router_config()
+    return load_llm_router_config_from_file(path)
 
 
 def resolve_llm_provider_config(
@@ -84,6 +114,19 @@ def resolve_llm_provider_config(
         raise ValueError(f"Unknown LLM provider: {selected_provider_id}")
     if not provider.enabled:
         raise ValueError(f"LLM provider is disabled: {selected_provider_id}")
+
+    if provider.provider_type in {"fake", "mock"}:
+        return provider.model_copy(
+            update={
+                "model": model_override or provider.model or router_config.default_model,
+                "mode": provider.mode or router_config.mode,
+            }
+        )
+
+    if router_config.mode not in {"real", "openai_compatible"}:
+        raise ValueError(
+            "Real LLM provider requires router.mode = \"real\" in the LLM config."
+        )
 
     api_key = provider.api_key
     if not api_key and provider.api_key_env:
@@ -100,6 +143,17 @@ def resolve_llm_provider_config(
 
 
 def provider_config_to_client_config(provider: LLMProviderConfig) -> LLMClientConfig:
+    if provider.provider_type in {"fake", "mock"}:
+        return LLMClientConfig(
+            provider=provider.provider_type,
+            base_url=provider.base_url,
+            api_key=provider.api_key or "",
+            model=provider.model,
+            timeout_ms=provider.timeout_ms,
+            temperature=provider.temperature,
+            max_tokens=provider.max_tokens,
+            extra_headers=provider.extra_headers,
+        )
     if not provider.api_key:
         raise ValueError(f"Missing API key for LLM provider: {provider.provider_id}")
     return LLMClientConfig(

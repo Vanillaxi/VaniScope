@@ -10,6 +10,7 @@ from webscoper.runtime.llm.client import BaseLLMClient
 from webscoper.runtime.llm.router import LLMProviderRouter
 from webscoper.schemas.browser import ActionContract, ExpectedEffect
 from webscoper.schemas.llm import LLMRequest, LLMResponse
+from webscoper.schemas.runtime import BudgetContext
 from webscoper.schemas.task import TaskSpec
 
 
@@ -60,9 +61,18 @@ async def test_execution_handler_real_llm_uses_config_router(
         self: LLMProviderRouter,
         provider_id: str | None = None,
         model_override: str | None = None,
+        *,
+        run_dir: Path | None = None,
+        task_id: str | None = None,
+        purpose: str = "planner",
+        budget: BudgetContext | None = None,
     ) -> BaseLLMClient:
         captured["provider_id"] = provider_id
         captured["model_override"] = model_override
+        captured["run_dir"] = run_dir
+        captured["task_id"] = task_id
+        captured["purpose"] = purpose
+        captured["budget"] = budget
         return ConfigMockLLMClient()
 
     monkeypatch.setattr(LLMProviderRouter, "create_client", fake_create_client)
@@ -98,6 +108,10 @@ async def test_execution_handler_real_llm_uses_config_router(
     assert context is not None
     assert "pip install playwright" in observation.visible_text_summary
     assert captured["provider_id"] == "deepseek"
+    assert captured["run_dir"] == context.run_dir
+    assert captured["task_id"] == context.run_id
+    assert captured["purpose"] == "planner"
+    assert isinstance(captured["budget"], BudgetContext)
 
     transcript_text = context.transcript_store.transcript_path.read_text(
         encoding="utf-8",

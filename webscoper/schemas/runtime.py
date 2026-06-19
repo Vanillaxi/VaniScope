@@ -10,6 +10,13 @@ class BudgetContext(BaseModel):
     timeout_ms: int = 10000
     retry_limit: int = 0
     max_cost_usd: float | None = None
+    max_tool_calls: int = 50
+    max_prompt_tokens: int = 12000
+    max_completion_tokens: int = 2000
+    max_total_tokens_per_task: int = 50000
+    max_llm_calls_per_task: int = 20
+    timeout_seconds: int = 60
+    llm_timeout_seconds: int = 60
 
 
 class SafetyContext(BaseModel):
@@ -93,6 +100,8 @@ TaskEventKind = Literal[
     "workflow_failed",
     "task_finished",
     "task_failed",
+    "budget_exceeded",
+    "dry_run_completed",
 ]
 
 

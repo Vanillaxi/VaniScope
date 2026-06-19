@@ -2,19 +2,23 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
+import { SkillLauncher } from "@/components/tasks/SkillLauncher";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { getHealth } from "@/lib/api";
+import { formatDateTime, statusTone } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
+import { loadTaskHistory, type TaskHistoryItem } from "@/lib/taskHistory";
 import type { HealthResponse } from "@/lib/types";
 
 export default function Home() {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [taskId, setTaskId] = useState("");
+  const [history, setHistory] = useState<TaskHistoryItem[]>([]);
 
   useEffect(() => {
     getHealth()
@@ -28,6 +32,17 @@ export default function Home() {
       });
   }, []);
 
+  useEffect(() => {
+    const refreshHistory = () => setHistory(loadTaskHistory());
+    refreshHistory();
+    window.addEventListener("vaniscope:task-history", refreshHistory);
+    window.addEventListener("storage", refreshHistory);
+    return () => {
+      window.removeEventListener("vaniscope:task-history", refreshHistory);
+      window.removeEventListener("storage", refreshHistory);
+    };
+  }, []);
+
   const openTask = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (taskId.trim()) {
@@ -37,18 +52,14 @@ export default function Home() {
 
   return (
     <>
-      <Card className="p-6">
+      <section className="rounded-lg border border-[var(--line)] bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <div className="text-sm font-semibold uppercase text-[var(--brand)]">
-              VaniScope
+              {t.home.heroEyebrow}
             </div>
-            <h1 className="mt-2 text-3xl font-semibold">
-              {t.home.title}
-            </h1>
-            <p className="mt-3 text-[var(--muted)]">
-              {t.home.description}
-            </p>
+            <h1 className="mt-2 text-3xl font-semibold">{t.home.title}</h1>
+            <p className="mt-3 text-[var(--muted)]">{t.home.description}</p>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-[var(--muted)]">API</span>
@@ -61,18 +72,43 @@ export default function Home() {
             )}
           </div>
         </div>
-      </Card>
+      </section>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <SkillLauncher />
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="p-5">
-          <h2 className="text-lg font-semibold">{t.home.newTaskTitle}</h2>
-          <p className="mt-2 min-h-12 text-sm text-[var(--muted)]">
-            {t.home.newTaskDescription}
-          </p>
-          <Link href="/tasks/new" className="mt-5 inline-flex">
-            <Button>{t.home.open}</Button>
-          </Link>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">{t.home.recentTasks}</h2>
+            <Link href="/tasks/new">
+              <Button>+ {t.nav.newTask}</Button>
+            </Link>
+          </div>
+          {history.length ? (
+            <div className="grid gap-2">
+              {history.slice(0, 6).map((task) => (
+                <Link
+                  key={task.task_id}
+                  href={`/tasks/${encodeURIComponent(task.task_id)}`}
+                  className="flex items-center justify-between gap-3 rounded-md border border-[var(--line)] px-3 py-2 hover:bg-[var(--panel-soft)]"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold">{task.title}</div>
+                    <div className="mt-1 text-xs text-[var(--muted)]">
+                      {formatDateTime(task.created_at, language)}
+                    </div>
+                  </div>
+                  <Badge tone={statusTone(task.status)}>{task.status}</Badge>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed border-[var(--line)] p-5 text-sm text-[var(--muted)]">
+              {t.home.noRecentTasks}
+            </div>
+          )}
         </Card>
+
         <Card className="p-5">
           <h2 className="text-lg font-semibold">{t.home.taskByIdTitle}</h2>
           <form onSubmit={openTask} className="mt-4 flex flex-col gap-3">
@@ -86,15 +122,6 @@ export default function Home() {
               {t.home.viewTask}
             </Button>
           </form>
-        </Card>
-        <Card className="p-5">
-          <h2 className="text-lg font-semibold">{t.home.evalTitle}</h2>
-          <p className="mt-2 min-h-12 text-sm text-[var(--muted)]">
-            {t.home.evalDescription}
-          </p>
-          <Link href="/evals" className="mt-5 inline-flex">
-            <Button variant="secondary">{t.home.open}</Button>
-          </Link>
         </Card>
       </div>
     </>
