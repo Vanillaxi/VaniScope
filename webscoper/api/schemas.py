@@ -74,6 +74,8 @@ class TaskStatusResponse(BaseModel):
     skill_id: str | None = None
     task_type: str | None = None
     skill_status: str | None = None
+    difficulty: str | None = None
+    recommendation: str | None = None
 
 
 class TaskArtifactListResponse(BaseModel):

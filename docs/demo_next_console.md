@@ -76,6 +76,23 @@ query: 如何安装并运行 VaniScope？
 language: zh
 ```
 
+For the GitHub issue skill demo, use `GitHub Issue Demo`:
+
+```text
+task_type: github_issue_research
+skill_id: github_issue_research
+url: tests/fixtures/mock_site/github_issue_research.html
+query: Analyze whether this issue is worth doing and summarize difficulty, affected modules, and risks.
+language: en
+```
+
+The Chinese GitHub issue preset uses:
+
+```text
+query: 分析这个 issue 是否值得做，并总结难度、影响模块和风险。
+language: zh
+```
+
 Submit the form. The console should redirect to:
 
 ```text
@@ -93,6 +110,8 @@ On the task detail page, verify:
 - `final_report.md` appears when the task completes
 - `review.json`, `evidence.jsonl`, `events.jsonl`, and `tool_audit.jsonl` can be opened from the artifact viewer
 - docs research tasks show `skill_id`, `task_type`, and `skill_status`
+- GitHub issue research tasks show `skill_id`, `task_type`, `difficulty`, and
+  `recommendation`
 - docs research tasks include `skill_result.json`
 
 The artifact viewer formats JSON and JSONL for readability and truncates very large content to keep the page responsive.
@@ -133,4 +152,5 @@ Click `批准` to resume the task, or `拒绝` to stop it. The task detail page 
 - `evidence.jsonl` visible
 - `tool_audit.jsonl` visible
 - `skill_result.json` visible for the Docs Research Demo
+- `skill_result.json` visible for the GitHub Issue Demo
 - Approval decision works for the approval fixture

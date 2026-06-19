@@ -96,6 +96,24 @@ export function TaskStatusCard({ task, latestEvent }: TaskStatusCardProps) {
           </dd>
         </div>
       </dl>
+      <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div>
+          <dt className="text-xs font-semibold uppercase text-[var(--muted)]">
+            {t.status.difficulty}
+          </dt>
+          <dd className="mt-1 break-words text-sm">
+            {task.difficulty ?? t.status.unknown}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs font-semibold uppercase text-[var(--muted)]">
+            {t.status.recommendation}
+          </dt>
+          <dd className="mt-1 break-words text-sm">
+            {task.recommendation ?? t.status.unknown}
+          </dd>
+        </div>
+      </dl>
       {task.error ? (
         <div className="mt-5 rounded-md border border-[#fecdca] bg-[#fef3f2] p-3 text-sm text-[var(--danger)]">
           {task.error}

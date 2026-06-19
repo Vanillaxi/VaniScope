@@ -13,8 +13,10 @@ Runtime 现在按职责拆成 `runtime/execution`、`runtime/artifacts`、`runti
 Browser recovery 现在拆成 `browser/recovery/classifier`、`planner`、`strategies`、`executor` 和 `telemetry`；`browser/recovery/manager.py` 保持为公开 facade。
 
 `webscoper/skills/` 是 LangGraph 上层 skill 层。默认 registry 当前包含
-`docs_research`，它通过现有 Browser Runtime 和 ToolGateway 路径读取本地文档页，
-并输出带证据的 `final_report.md`、`review.json` 和 `skill_result.json`。
+`docs_research` 和 `github_issue_research`。二者都通过现有 Browser Runtime
+和 ToolGateway 路径读取本地 fixture，并输出带证据的 `final_report.md`、
+`review.json` 和 `skill_result.json`。GitHub issue skill 当前只使用 mock issue
+fixture，不访问 GitHub 或 GitHub API。
 
 ## 阶段边界
 
@@ -90,7 +92,7 @@ docs/demo_next_console.md
 webscoper/
   browser/       # Browser Runtime：Playwright session、观察、定位、效果验证、恢复、风险信号
   runtime/       # Agent Runtime：execution、artifacts、LLM、prompt、review、safety
-  skills/        # Skill 定义、registry、确定性 router、docs_research skill
+  skills/        # Skill 定义、registry、确定性 router、docs / GitHub issue skill
   api/           # FastAPI Task API、异步任务、审批、SSE 事件流、artifact 访问
   eval/          # Browser / Planner / Reviewer / Workflow regression eval harness
   workflows/     # LangGraph backend 编排模块
@@ -165,7 +167,7 @@ uv run python scripts/run_workflow_eval.py \
   --output-dir eval_results/tool_gateway_eval_local
 ```
 
-Skill eval 使用本地 docs fixture 验证 `docs_research` MVP：
+Skill eval 使用本地 fixture 验证 `docs_research` 和 `github_issue_research`：
 
 ```bash
 uv run python scripts/run_langgraph_eval.py \

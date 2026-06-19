@@ -5,7 +5,8 @@ This document is a lightweight boundary map for `webscoper/runtime/`. The runtim
 The skill layer lives outside runtime in `webscoper/skills/`. Skills are
 LangGraph task capabilities, not a separate workflow backend. They select
 instructions, plans, and skill metadata while the workflow still executes
-through Browser Runtime and ToolGateway.
+through Browser Runtime and ToolGateway. The default registry currently
+contains `docs_research` and `github_issue_research`.
 
 ## Execution-Related Modules
 
@@ -44,7 +45,7 @@ Gateway providers currently include:
 - `artifacts/report.py` builds `final_report.md`.
 - `artifacts/compaction.py` creates `compact_context.json` and `compact_summary.md`.
 - Skill-aware artifact persistence also writes `skill_result.json` for selected
-  skills such as `docs_research`.
+  skills such as `docs_research` and `github_issue_research`.
 
 ## Review And Revision Modules
 
@@ -77,10 +78,12 @@ Workflow eval lives in `webscoper/eval/workflow_eval.py` and is LangGraph-only. 
 
 The workflow eval schema supports `case_type` values of `workflow`, `recovery`, `approval`, and `tool_gateway`. Recovery cases assert expected recovery strategies and error types from `recovery.jsonl`. Approval cases assert RiskGate decisions, approval-required/task-paused events, approve/reject resume outcomes, and persisted `approvals.jsonl`, `pending.jsonl`, `events.jsonl`, and `risk_report.json` artifacts. Tool Gateway cases assert LangGraph gateway provider, decision, status, risk level, workflow backend, and audit behavior. `tests/fixtures/langgraph_main_eval_cases.json` is the main LangGraph matrix; `tests/fixtures/tool_gateway_eval_cases.json` is the gateway matrix. Eval cases are guarded to use local fixture URLs and non-real planner/reviewer modes, so pytest and eval runs do not access real network targets or real LLM providers.
 
-`tests/fixtures/langgraph_skill_eval_cases.json` covers the `docs_research`
-skill with the local `tests/fixtures/mock_site/docs_research.html` page. It
-checks `final_report.md`, `evidence.jsonl`, `review.json`, `skill_result.json`,
-and `tool_audit.jsonl` without real network or real LLM calls.
+`tests/fixtures/langgraph_skill_eval_cases.json` covers `docs_research` with
+the local docs page and `github_issue_research` with
+`tests/fixtures/mock_site/github_issue_research.html`. It checks
+`final_report.md`, `evidence.jsonl`, `review.json`, `skill_result.json`,
+`tool_audit.jsonl`, affected modules, difficulty, contribution value, and skill
+status without real network or real LLM calls.
 
 ## Control Console Boundary
 

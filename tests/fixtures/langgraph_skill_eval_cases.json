@@ -81,5 +81,97 @@
       "review_passed": true,
       "skill_status": "insufficient_info"
     }
+  },
+  {
+    "case_id": "github_issue_research_value_en",
+    "description": "GitHub issue research assesses value, difficulty, modules, and risks.",
+    "request": {
+      "url": "tests/fixtures/mock_site/github_issue_research.html",
+      "task_type": "github_issue_research",
+      "skill_id": "github_issue_research",
+      "query": "Analyze whether this issue is worth doing and summarize difficulty, affected modules, and risks.",
+      "language": "en"
+    },
+    "expected": {
+      "status": "succeeded",
+      "required_artifacts": ["final_report.md", "evidence.jsonl", "review.json", "skill_result.json", "tool_audit.jsonl"],
+      "final_report_contains": ["common/url.go", "Difficulty Estimate", "Final Recommendation"],
+      "min_evidence_count": 2,
+      "review_passed": true,
+      "expected_skill_id": "github_issue_research",
+      "skill_status": "success",
+      "require_affected_modules": true,
+      "require_difficulty": true,
+      "require_contribution_value": true
+    }
+  },
+  {
+    "case_id": "github_issue_research_value_zh",
+    "description": "GitHub issue research handles a Chinese contribution query.",
+    "request": {
+      "url": "tests/fixtures/mock_site/github_issue_research.html",
+      "task_type": "github_issue_research",
+      "skill_id": "github_issue_research",
+      "query": "分析这个 issue 是否值得做，并总结难度、影响模块和风险。",
+      "language": "zh"
+    },
+    "expected": {
+      "status": "succeeded",
+      "required_artifacts": ["final_report.md", "evidence.jsonl", "review.json", "skill_result.json", "tool_audit.jsonl"],
+      "final_report_contains": ["common/url_test.go", "Contribution Value", "Risks / Caveats"],
+      "min_evidence_count": 2,
+      "review_passed": true,
+      "expected_skill_id": "github_issue_research",
+      "skill_status": "success",
+      "require_affected_modules": true,
+      "require_difficulty": true,
+      "require_contribution_value": true
+    }
+  },
+  {
+    "case_id": "github_issue_research_missing_acceptance",
+    "description": "GitHub issue research still reports uncertainty when acceptance evidence is requested.",
+    "request": {
+      "url": "tests/fixtures/mock_site/github_issue_research.html",
+      "task_type": "github_issue_research",
+      "skill_id": "github_issue_research",
+      "query": "Check acceptance criteria and summarize affected modules.",
+      "language": "en"
+    },
+    "expected": {
+      "status": "succeeded",
+      "required_artifacts": ["final_report.md", "evidence.jsonl", "review.json", "skill_result.json", "tool_audit.jsonl"],
+      "final_report_contains": ["Acceptance criteria", "common/url.go"],
+      "min_evidence_count": 2,
+      "review_passed": true,
+      "expected_skill_id": "github_issue_research",
+      "skill_status": "success",
+      "require_affected_modules": true,
+      "require_difficulty": true,
+      "require_contribution_value": true
+    }
+  },
+  {
+    "case_id": "github_issue_research_high_risk_mock",
+    "description": "GitHub issue research surfaces risk and caveats from the mock issue page.",
+    "request": {
+      "url": "tests/fixtures/mock_site/github_issue_research.html",
+      "task_type": "github_issue_research",
+      "skill_id": "github_issue_research",
+      "query": "Summarize risks, recommendation, and contribution value for this repository issue.",
+      "language": "en"
+    },
+    "expected": {
+      "status": "succeeded",
+      "required_artifacts": ["final_report.md", "evidence.jsonl", "review.json", "skill_result.json", "tool_audit.jsonl"],
+      "final_report_contains": ["Risks / Caveats", "clone semantics", "worth_doing"],
+      "min_evidence_count": 2,
+      "review_passed": true,
+      "expected_skill_id": "github_issue_research",
+      "skill_status": "success",
+      "require_affected_modules": true,
+      "require_difficulty": true,
+      "require_contribution_value": true
+    }
   }
 ]

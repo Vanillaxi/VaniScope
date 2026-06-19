@@ -13,9 +13,11 @@ The runtime package is split by responsibility into `runtime/execution`, `runtim
 Browser recovery is split into `browser/recovery/classifier`, `planner`, `strategies`, `executor`, and `telemetry`, with `browser/recovery/manager.py` kept as the public facade.
 
 `webscoper/skills/` contains the LangGraph skill layer. The default registry
-currently ships `docs_research`, which reads a local documentation page through
-the normal Browser Runtime and ToolGateway path, then produces evidence-backed
-`final_report.md`, `review.json`, and `skill_result.json` artifacts.
+currently ships `docs_research` and `github_issue_research`. Both read local
+fixtures through the normal Browser Runtime and ToolGateway path, then produce
+evidence-backed `final_report.md`, `review.json`, and `skill_result.json`
+artifacts. The GitHub issue skill uses a mock issue fixture only and does not
+access GitHub or the GitHub API.
 
 ## Scope
 
@@ -88,7 +90,7 @@ docs/demo_next_console.md
 webscoper/
   browser/       # Browser Runtime: Playwright session, observation, targeting, effects, recovery, risk signals
   runtime/       # Agent Runtime: execution, artifacts, LLM, prompt, review, safety
-  skills/        # Skill definitions, registry, deterministic router, docs_research skill
+  skills/        # Skill definitions, registry, deterministic router, docs and GitHub issue skills
   api/           # FastAPI Task API, async tasks, approvals, SSE event stream, artifact access
   eval/          # Browser, planner, reviewer, and workflow regression eval harnesses
   workflows/     # LangGraph backend orchestration modules
@@ -163,7 +165,8 @@ uv run python scripts/run_workflow_eval.py \
   --output-dir eval_results/tool_gateway_eval_local
 ```
 
-Skill eval verifies the `docs_research` MVP with local docs fixtures only:
+Skill eval verifies `docs_research` and `github_issue_research` with local
+fixtures only:
 
 ```bash
 uv run python scripts/run_langgraph_eval.py \

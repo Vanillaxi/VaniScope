@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Mock GitHub Issue - Optimize URL parameter copying</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin: 32px auto;
+        max-width: 920px;
+        line-height: 1.5;
+        color: #1f2937;
+      }
+      header {
+        border-bottom: 1px solid #d0d7de;
+        margin-bottom: 24px;
+        padding-bottom: 16px;
+      }
+      .labels {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .label {
+        border-radius: 999px;
+        background: #ddf4ff;
+        border: 1px solid #54aeff;
+        color: #0969da;
+        padding: 2px 10px;
+        font-size: 13px;
+      }
+      section {
+        border-bottom: 1px solid #e5e7eb;
+        padding: 16px 0;
+      }
+      code {
+        background: #f6f8fa;
+        border-radius: 4px;
+        padding: 1px 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <p>Repository: apache/dubbo-go mock</p>
+      <p>Project: apache/dubbo-go mock</p>
+      <h1>Issue: Optimize URL parameter copying in common URL helpers</h1>
+      <p>Issue Number: #4821</p>
+      <div class="labels" aria-label="Labels">
+        <span class="label">good first issue</span>
+        <span class="label">performance</span>
+        <span class="label">protocol</span>
+        <span class="label">common</span>
+      </div>
+    </header>
+
+    <main>
+      <section>
+        <h2>Labels</h2>
+        <ul>
+          <li>good first issue</li>
+          <li>performance</li>
+          <li>protocol</li>
+          <li>common</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Issue Body</h2>
+        <p>
+          Several common URL helpers copy the full parameter map even when the
+          caller needs only a filtered or merged subset. The goal is to reduce
+          allocation pressure without changing public behavior.
+        </p>
+      </section>
+
+      <section>
+        <h2>Expected Behavior</h2>
+        <ul>
+          <li>URL helpers preserve clone semantics for parameter maps.</li>
+          <li>MergeURL and CloneWithFilter return the same values as before.</li>
+          <li>Benchmarks show fewer allocations for common filter paths.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Current Behavior</h2>
+        <ul>
+          <li>MergeURL copies all parameters before filtering.</li>
+          <li>CloneWithFilter repeats map allocation in hot paths.</li>
+          <li>Existing tests cover values but not allocation behavior.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Suggested Implementation</h2>
+        <ol>
+          <li>Inspect <code>common/url.go</code> and isolate parameter-copying helpers.</li>
+          <li>Use targeted copying only for keys retained by MergeURL and CloneWithFilter.</li>
+          <li>Add regression coverage in <code>common/url_test.go</code>.</li>
+          <li>Add a benchmark that compares old and new allocation behavior.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>Affected Modules</h2>
+        <ul>
+          <li>common/url.go</li>
+          <li>common/url_test.go</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Maintainer Comments</h2>
+        <ul>
+          <li>Maintainer: benchmark is required before the patch can be reviewed.</li>
+          <li>Maintainer: preserve clone semantics so callers cannot mutate shared maps.</li>
+          <li>Related issue: MergeURL and CloneWithFilter should keep current behavior.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Linked PR / Related Files</h2>
+        <ul>
+          <li>Related draft PR: optimize-url-copying-mock</li>
+          <li>Related files: common/url.go, common/url_test.go</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Acceptance Criteria</h2>
+        <ul>
+          <li>Existing URL helper tests pass.</li>
+          <li>New benchmark demonstrates reduced allocations.</li>
+          <li>Clone semantics are documented in tests.</li>
+          <li>No API or protocol behavior changes.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Risks</h2>
+        <ul>
+          <li>Changing copy order could accidentally share mutable maps.</li>
+          <li>Benchmark noise may hide small allocation improvements.</li>
+          <li>Protocol URL behavior must remain backward compatible.</li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

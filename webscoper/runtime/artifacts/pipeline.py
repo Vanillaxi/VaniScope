@@ -17,6 +17,7 @@ from webscoper.schemas.browser import PageObservation
 from webscoper.schemas.runtime import PromptBuildResult
 from webscoper.schemas.review import ReviewerMode
 from webscoper.skills.docs_research import DocsResearchSkill
+from webscoper.skills.github_issue_research import GitHubIssueResearchSkill
 
 
 def persist_prompt_context(run_dir: Path, prompt_result: PromptBuildResult) -> None:
@@ -69,8 +70,9 @@ def persist_evidence_and_final_report(
 ) -> tuple[list[EvidenceItem], str]:
     evidence_items: list[EvidenceItem] = []
     if context.evidence_store is not None:
-        context.evidence_store.write_jsonl()
         evidence_items = context.evidence_store.list_items()
+        _annotate_skill_evidence(context, evidence_items)
+        context.evidence_store.write_jsonl()
         context.transcript_store.append(
             "evidence_written",
             {
@@ -99,6 +101,21 @@ def persist_evidence_and_final_report(
                 "tool_audit.jsonl",
             ],
         )
+    elif context.task.skill_id == "github_issue_research":
+        skill_result = GitHubIssueResearchSkill().build_result(
+            context.task,
+            evidence_items,
+            artifact_names=[
+                "final_report.md",
+                "evidence.jsonl",
+                "review.json",
+                "skill_result.json",
+                "tool_audit.jsonl",
+            ],
+            final_observation=observation,
+        )
+
+    if skill_result is not None:
         (context.run_dir / "skill_result.json").write_text(
             json.dumps(
                 skill_result.model_dump(mode="json"),
@@ -129,6 +146,14 @@ def persist_evidence_and_final_report(
         },
     )
     return evidence_items, report_text
+
+
+def _annotate_skill_evidence(
+    context: WebAgentContext,
+    evidence_items: list[EvidenceItem],
+) -> None:
+    if context.task.skill_id == "github_issue_research":
+        GitHubIssueResearchSkill().annotate_evidence(evidence_items)
 
 
 def persist_review_artifacts(

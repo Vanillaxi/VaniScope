@@ -1,7 +1,7 @@
 export type PlannerMode = "deterministic" | "fake_llm" | "llm";
 export type BackendPlannerMode = "deterministic" | "fake_llm" | "real_llm";
-export type TaskType = "browser_task" | "docs_research";
-export type SkillId = "auto" | "docs_research";
+export type TaskType = "browser_task" | "docs_research" | "github_issue_research";
+export type SkillId = "auto" | "docs_research" | "github_issue_research";
 export type TaskLanguage = "auto" | "zh" | "en";
 
 export type TaskStatus =
@@ -54,6 +54,8 @@ export type TaskStatusResponse = {
   skill_id?: string | null;
   task_type?: string | null;
   skill_status?: string | null;
+  difficulty?: string | null;
+  recommendation?: string | null;
 };
 
 export type TaskArtifactListResponse = {

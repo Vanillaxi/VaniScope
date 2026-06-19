@@ -118,7 +118,11 @@ class WorkflowEvalExpected(BaseModel):
     simulate_approval_decision: Literal["approved", "rejected"] | None = None
     final_report_contains: list[str] = Field(default_factory=list)
     min_evidence_count: int | None = None
+    expected_skill_id: str | None = None
     skill_status: str | None = None
+    require_affected_modules: bool = False
+    require_difficulty: bool = False
+    require_contribution_value: bool = False
 
 
 class WorkflowEvalCase(BaseModel):

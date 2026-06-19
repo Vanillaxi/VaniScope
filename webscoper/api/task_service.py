@@ -154,6 +154,8 @@ class TaskService:
                 skill_id=skill_metadata.get("skill_id"),
                 task_type=skill_metadata.get("task_type"),
                 skill_status=skill_metadata.get("skill_status"),
+                difficulty=skill_metadata.get("difficulty"),
+                recommendation=skill_metadata.get("recommendation"),
             )
 
         run_dir = self._run_dir(task_id)
@@ -176,6 +178,8 @@ class TaskService:
             skill_id=skill_metadata.get("skill_id"),
             task_type=skill_metadata.get("task_type"),
             skill_status=skill_metadata.get("skill_status"),
+            difficulty=skill_metadata.get("difficulty"),
+            recommendation=skill_metadata.get("recommendation"),
         )
 
     def list_artifacts(self, task_id: str) -> TaskArtifactListResponse:
@@ -412,23 +416,41 @@ def _skill_metadata(run_dir: Path) -> dict[str, str | None]:
                 "skill_status": result.get("status")
                 if isinstance(result.get("status"), str)
                 else None,
+                "difficulty": result.get("difficulty")
+                if isinstance(result.get("difficulty"), str)
+                else None,
+                "recommendation": result.get("recommendation")
+                if isinstance(result.get("recommendation"), str)
+                else None,
             }
 
     workflow_path = run_dir / "workflow_state.json"
     if not workflow_path.exists():
-        return {"skill_id": None, "task_type": None, "skill_status": None}
+        return _empty_skill_metadata()
     try:
         workflow_state = json.loads(workflow_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
-        return {"skill_id": None, "task_type": None, "skill_status": None}
+        return _empty_skill_metadata()
     if not isinstance(workflow_state, dict):
-        return {"skill_id": None, "task_type": None, "skill_status": None}
+        return _empty_skill_metadata()
     skill_id = workflow_state.get("skill_id")
     task_type = workflow_state.get("task_type")
     return {
         "skill_id": skill_id if isinstance(skill_id, str) else None,
         "task_type": task_type if isinstance(task_type, str) else None,
         "skill_status": None,
+        "difficulty": None,
+        "recommendation": None,
+    }
+
+
+def _empty_skill_metadata() -> dict[str, str | None]:
+    return {
+        "skill_id": None,
+        "task_type": None,
+        "skill_status": None,
+        "difficulty": None,
+        "recommendation": None,
     }
 
 

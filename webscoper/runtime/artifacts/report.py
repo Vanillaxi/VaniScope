@@ -4,6 +4,7 @@ from webscoper.schemas.artifact import EvidenceItem
 from webscoper.schemas.browser import PageObservation
 from webscoper.schemas.task import TaskSpec
 from webscoper.skills.docs_research import DocsResearchSkill
+from webscoper.skills.github_issue_research import GitHubIssueResearchSkill
 
 
 class FinalReportBuilder:
@@ -15,6 +16,12 @@ class FinalReportBuilder:
     ) -> str:
         if task_spec.skill_id == "docs_research":
             return DocsResearchSkill().build_report(
+                task_spec,
+                evidence_items,
+                final_observation=final_observation,
+            )
+        if task_spec.skill_id == "github_issue_research":
+            return GitHubIssueResearchSkill().build_report(
                 task_spec,
                 evidence_items,
                 final_observation=final_observation,

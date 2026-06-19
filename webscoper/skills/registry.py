@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from webscoper.skills.base import Skill
 from webscoper.skills.docs_research import DocsResearchSkill
+from webscoper.skills.github_issue_research import GitHubIssueResearchSkill
 
 
 class SkillRegistry:
@@ -36,4 +37,5 @@ class SkillRegistry:
 def create_default_skill_registry() -> SkillRegistry:
     registry = SkillRegistry()
     registry.register(DocsResearchSkill())
+    registry.register(GitHubIssueResearchSkill())
     return registry

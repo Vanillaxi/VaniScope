@@ -36,6 +36,20 @@ class SkillRouter:
                 routed_task = task.model_copy(update={"skill_id": skill.definition.skill_id})
                 return SkillRoute(skill=skill, task=routed_task, reason="task_type")
 
+        if _looks_like_github_issue_research(task):
+            skill = self.registry.get("github_issue_research")
+            routed_task = task.model_copy(
+                update={
+                    "skill_id": "github_issue_research",
+                    "task_type": "github_issue_research",
+                }
+            )
+            return SkillRoute(
+                skill=skill,
+                task=routed_task,
+                reason="github_issue_keywords",
+            )
+
         if task.target_url and (task.query or task.research_goal):
             skill = self.registry.get("docs_research")
             routed_task = task.model_copy(
@@ -52,3 +66,27 @@ def _preferred_task_type(task: TaskSpec, skill: Skill) -> str:
     if skill.definition.supported_task_types:
         return skill.definition.supported_task_types[0]
     return task.task_type
+
+
+def _looks_like_github_issue_research(task: TaskSpec) -> bool:
+    haystack = " ".join(
+        value
+        for value in (
+            task.target_url,
+            task.query or "",
+            task.research_goal or "",
+            task.raw_input,
+        )
+        if value
+    ).lower()
+    keywords = (
+        "github_issue_research",
+        "github issue",
+        "github pr",
+        "pull request",
+        "issue research",
+        "contribution",
+        "repository",
+        "affected modules",
+    )
+    return any(keyword in haystack for keyword in keywords)

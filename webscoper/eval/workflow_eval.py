@@ -226,6 +226,47 @@ def evaluate_workflow_result(
                 f"langgraph.skill_status expected {expected.skill_status}, got {actual}"
             )
 
+    if expected.expected_skill_id is not None:
+        skill_result = result.metadata.get("skill_result")
+        actual = skill_result.get("skill_id") if isinstance(skill_result, dict) else None
+        if actual != expected.expected_skill_id:
+            differences.append(
+                f"langgraph.skill_id expected {expected.expected_skill_id}, got {actual}"
+            )
+
+    if expected.require_affected_modules:
+        skill_result = result.metadata.get("skill_result")
+        modules = (
+            skill_result.get("affected_modules")
+            if isinstance(skill_result, dict)
+            else None
+        )
+        if not isinstance(modules, list) or not modules:
+            differences.append("langgraph.skill_result affected_modules is empty")
+
+    if expected.require_difficulty:
+        skill_result = result.metadata.get("skill_result")
+        difficulty = (
+            skill_result.get("difficulty") if isinstance(skill_result, dict) else None
+        )
+        if difficulty not in {"low", "medium", "high"}:
+            differences.append(
+                f"langgraph.skill_result difficulty missing or invalid: {difficulty}"
+            )
+
+    if expected.require_contribution_value:
+        skill_result = result.metadata.get("skill_result")
+        value = (
+            skill_result.get("contribution_value")
+            if isinstance(skill_result, dict)
+            else None
+        )
+        if value not in {"low", "medium", "high"}:
+            differences.append(
+                "langgraph.skill_result contribution_value missing or invalid: "
+                f"{value}"
+            )
+
     missing_events = [
         kind
         for kind in sorted(

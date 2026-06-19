@@ -17,5 +17,5 @@ def test_langgraph_skill_eval_fixture_cases_pass(tmp_path: Path) -> None:
 
     summary = WorkflowRegressionEvalRunner(tmp_path).run_cases(cases)
 
-    assert summary.total == 4
+    assert summary.total == 8
     assert summary.failed == 0

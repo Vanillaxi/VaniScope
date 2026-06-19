@@ -67,6 +67,64 @@ class ReportReviewer:
                     location="report",
                 )
 
+        if task_spec is not None and task_spec.skill_id == "github_issue_research":
+            if "## Source URL" not in report_markdown:
+                builder.add(
+                    severity="error",
+                    issue_type="missing_source_url_section",
+                    message="GitHub issue research report is missing the ## Source URL section.",
+                    location="report",
+                )
+            if not _has_source_url(report_markdown, evidence_items, task_spec.target_url):
+                builder.add(
+                    severity="error",
+                    issue_type="missing_source_url",
+                    message="GitHub issue research report does not include the source URL.",
+                    location="## Source URL",
+                )
+            for heading, issue_type in {
+                "Affected Modules": "missing_affected_modules",
+                "Difficulty Estimate": "missing_difficulty",
+                "Contribution Value": "missing_contribution_value",
+                "Final Recommendation": "missing_recommendation",
+            }.items():
+                if f"## {heading}" not in report_markdown:
+                    builder.add(
+                        severity="error",
+                        issue_type=issue_type,
+                        message=f"GitHub issue research report is missing ## {heading}.",
+                        location="report",
+                    )
+            if not _section_has_content(report_markdown, "Affected Modules"):
+                builder.add(
+                    severity="error",
+                    issue_type="empty_affected_modules",
+                    message="Affected modules section is empty.",
+                    location="## Affected Modules",
+                )
+            if not re.search(r"\b(low|medium|high)\b", _section(report_markdown, "Difficulty Estimate"), re.I):
+                builder.add(
+                    severity="error",
+                    issue_type="difficulty_not_classified",
+                    message="Difficulty estimate must include low, medium, or high.",
+                    location="## Difficulty Estimate",
+                )
+            if not re.search(r"\b(low|medium|high)\b", _section(report_markdown, "Contribution Value"), re.I):
+                builder.add(
+                    severity="error",
+                    issue_type="contribution_value_not_classified",
+                    message="Contribution value must include low, medium, or high.",
+                    location="## Contribution Value",
+                )
+            query = task_spec.query or task_spec.research_goal
+            if query and not _contains_query_terms(query, report_markdown, evidence_items):
+                builder.add(
+                    severity="warning",
+                    issue_type="query_not_answered",
+                    message=f"Report does not appear to answer query: {query}.",
+                    location="report",
+                )
+
         for evidence_id in referenced_ids:
             if evidence_id not in evidence_ids:
                 builder.add(
@@ -286,6 +344,13 @@ def _contains_query_terms(
         (item.text or "").lower() for item in evidence_items
     )
     return any(term in text for term in terms)
+
+
+def _section_has_content(markdown: str, heading: str) -> bool:
+    section = _section(markdown, heading)
+    if not section:
+        return False
+    return any(line.strip().startswith("- ") for line in section.splitlines())
 
 
 def _query_terms(query: str) -> set[str]:

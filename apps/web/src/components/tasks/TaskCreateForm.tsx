@@ -62,6 +62,29 @@ export function TaskCreateForm() {
     setRiskMode("read_only");
   };
 
+  const fillGitHubIssueDemoCase = (language: "en" | "zh" = "en") => {
+    setUrl("tests/fixtures/mock_site/github_issue_research.html");
+    setClick("");
+    setExpect(
+      language === "zh"
+        ? "难度、影响模块、风险和推荐结论"
+        : "difficulty, affected modules, risks, and recommendation",
+    );
+    setTaskType("github_issue_research");
+    setSkillId("github_issue_research");
+    setQuery(
+      language === "zh"
+        ? "分析这个 issue 是否值得做，并总结难度、影响模块和风险。"
+        : "Analyze whether this issue is worth doing and summarize difficulty, affected modules, and risks.",
+    );
+    setResearchGoal("");
+    setTaskLanguage(language);
+    setPlanner("deterministic");
+    setWorkspace("tests/fixtures/workspace");
+    setReminder(t.taskCreate.githubDemoReminder);
+    setRiskMode("read_only");
+  };
+
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitting(true);
@@ -127,6 +150,9 @@ export function TaskCreateForm() {
             >
               <option value="browser_task">{t.taskCreate.browserTask}</option>
               <option value="docs_research">{t.taskCreate.docsResearch}</option>
+              <option value="github_issue_research">
+                {t.taskCreate.githubIssueResearch}
+              </option>
             </select>
           </label>
           <label className="flex flex-col gap-1.5 text-sm font-medium text-[#344054]">
@@ -138,6 +164,9 @@ export function TaskCreateForm() {
             >
               <option value="auto">{t.taskCreate.autoSkill}</option>
               <option value="docs_research">{t.taskCreate.docsResearch}</option>
+              <option value="github_issue_research">
+                {t.taskCreate.githubIssueResearch}
+              </option>
             </select>
           </label>
           <Input
@@ -211,6 +240,20 @@ export function TaskCreateForm() {
           </Button>
           <Button type="button" variant="secondary" onClick={() => fillDocsDemoCase("zh")}>
             {t.taskCreate.docsDemoZh}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => fillGitHubIssueDemoCase("en")}
+          >
+            {t.taskCreate.githubDemo}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => fillGitHubIssueDemoCase("zh")}
+          >
+            {t.taskCreate.githubDemoZh}
           </Button>
           <Button type="submit" disabled={submitting}>
             {submitting ? t.taskCreate.creating : t.taskCreate.create}
