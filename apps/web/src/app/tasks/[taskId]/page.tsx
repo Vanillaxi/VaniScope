@@ -7,6 +7,7 @@ import { ArtifactViewer } from "@/components/tasks/ArtifactViewer";
 import { EventStreamPanel } from "@/components/tasks/EventStreamPanel";
 import { TaskStatusCard } from "@/components/tasks/TaskStatusCard";
 import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { getTask, listArtifacts } from "@/lib/api";
 import type { TaskArtifactListResponse, TaskEvent, TaskStatusResponse } from "@/lib/types";
 
@@ -52,6 +53,7 @@ export default function TaskPage({ params }: TaskPageProps) {
   }, [refresh]);
 
   const latestEvent = useMemo(() => events.at(-1), [events]);
+  const hasFinalReport = artifacts.includes("final_report.md");
 
   if (error) {
     return (
@@ -75,13 +77,26 @@ export default function TaskPage({ params }: TaskPageProps) {
         <div className="flex flex-col gap-5">
           <EventStreamPanel taskId={taskId} onEventsChange={setEvents} />
           <Card className="p-5">
-            <h2 className="mb-4 text-lg font-semibold">任务产物</h2>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">任务产物</h2>
+              <Button variant="secondary" onClick={() => void refresh()}>
+                刷新产物
+              </Button>
+            </div>
             <ArtifactList
               artifacts={artifacts}
               selected={selectedArtifact}
               onSelect={setSelectedArtifact}
             />
           </Card>
+          {hasFinalReport ? (
+            <ArtifactViewer
+              taskId={taskId}
+              artifactName="final_report.md"
+              title="Final report 预览"
+              compact
+            />
+          ) : null}
           <ArtifactViewer taskId={taskId} artifactName={selectedArtifact} />
         </div>
         <ApprovalPanel taskId={taskId} onDecision={refresh} />

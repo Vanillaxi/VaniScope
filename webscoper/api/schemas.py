@@ -60,6 +60,10 @@ class TaskStatusResponse(BaseModel):
     run_dir: str | None = None
     artifacts: list[str] = Field(default_factory=list)
     error: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    current_step: int | None = None
+    current_phase: str | None = None
 
 
 class TaskArtifactListResponse(BaseModel):

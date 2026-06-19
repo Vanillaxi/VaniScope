@@ -37,9 +37,9 @@ Default pytest keeps workflow coverage to focused smoke cases. Run the explicit 
 
 ## Control Console
 
-The Next.js 16 control console lives in `apps/web` and talks only to the FastAPI Task API. It can create LangGraph browser tasks, stream task events, inspect artifacts, handle approvals, and show the local eval command helper.
+The Next.js 16 control console lives in `apps/web` and talks only to the FastAPI Task API. It can create and complete local LangGraph browser tasks, stream task events over SSE, inspect artifacts, handle approvals, view evidence/review/report outputs, and show the local eval command helper.
 
-Next.js 16 控制台位于 `apps/web`，只对接 FastAPI Task API。它支持创建 LangGraph 浏览器任务、查看实时事件、检查 artifacts、处理审批，并提供本地 eval 命令辅助页。
+Next.js 16 控制台位于 `apps/web`，只对接 FastAPI Task API。它支持完整跑通本地 LangGraph 浏览器任务，通过 SSE 查看实时事件，检查 artifacts，处理审批，查看 evidence / review / report 输出，并提供本地 eval 命令辅助页。
 
 Start the API:
 
@@ -70,6 +70,12 @@ NEXT_PUBLIC_VANISCOPE_API_BASE_URL=http://localhost:8000
 Copy `apps/web/.env.example` to a local `.env` if you need a different API base URL.
 
 如果 API 地址不同，可以基于 `apps/web/.env.example` 创建本地 `.env`。
+
+Full-stack demo / 完整链路 demo:
+
+```text
+docs/demo_next_console.md
+```
 
 ## Project Layout
 

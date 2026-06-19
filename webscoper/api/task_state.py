@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -14,6 +15,10 @@ class TaskState:
     thread_id: str | None = None
     artifacts: list[str] = field(default_factory=list)
     error: str | None = None
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    updated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    current_step: int | None = None
+    current_phase: str | None = None
 
 
 def status_from_context_state(state: str) -> str:

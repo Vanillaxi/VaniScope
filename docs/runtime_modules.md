@@ -72,7 +72,9 @@ The workflow eval schema supports `case_type` values of `workflow`, `recovery`, 
 
 `apps/web` contains the Next.js 16 control console for the LangGraph-based Browser Agent Runtime. The console is intentionally a thin FastAPI client: it creates tasks through `/tasks/async`, reads task status from `/tasks/{task_id}`, streams `/tasks/{task_id}/events`, loads allowlisted artifacts through the artifact endpoints, and submits approval decisions through the approval endpoints.
 
-The console does not import Python runtime internals, does not store data, and does not add authentication. Browser access to the local API is enabled through FastAPI CORS for `http://localhost:3000` by default, with `VANISCOPE_CORS_ORIGINS` available for local overrides.
+The console can complete the local LangGraph demo path end to end: create a fixture-backed task, observe execution over SSE, open final report / review / evidence / audit artifacts, and resolve approval-required pauses from the UI. It does not import Python runtime internals, does not store data, and does not add authentication. Browser access to the local API is enabled through FastAPI CORS for `http://localhost:3000` by default, with `VANISCOPE_CORS_ORIGINS` available for local overrides.
+
+`docs/demo_next_console.md` documents the manual full-stack smoke path. The project remains LangGraph-only.
 
 ## Browser Recovery Boundary
 

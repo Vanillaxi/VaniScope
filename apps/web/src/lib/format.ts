@@ -39,7 +39,13 @@ export function formatArtifactContent(name: string, content: string) {
     return content
       .split("\n")
       .filter(Boolean)
-      .map((line) => JSON.stringify(JSON.parse(line), null, 2))
+      .map((line) => {
+        try {
+          return JSON.stringify(JSON.parse(line), null, 2);
+        } catch {
+          return line;
+        }
+      })
       .join("\n\n");
   }
   return content;

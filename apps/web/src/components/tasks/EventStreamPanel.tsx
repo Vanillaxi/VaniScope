@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { getArtifact } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
@@ -16,6 +17,7 @@ export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelPro
   const [events, setEvents] = useState<TaskEvent[]>([]);
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [connectionState, setConnectionState] = useState("connecting");
+  const [streamWarning, setStreamWarning] = useState<string | null>(null);
   const connectionStateRef = useRef(connectionState);
 
   useEffect(() => {
@@ -45,7 +47,15 @@ export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelPro
         artifact.content
           .split("\n")
           .filter(Boolean)
-          .map((line) => JSON.parse(line) as TaskEvent)
+          .map((line) => {
+            try {
+              return JSON.parse(line) as TaskEvent;
+            } catch {
+              setStreamWarning("events.jsonl 中存在无法解析的事件行，已跳过。");
+              return null;
+            }
+          })
+          .filter((event): event is TaskEvent => event !== null)
           .forEach(pushEvent);
         setConnectionState("polling");
       } catch {
@@ -60,6 +70,7 @@ export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelPro
           setConnectionState("live");
           pushEvent(event);
         },
+        setStreamWarning,
         () => {
           setConnectionState("polling");
           void loadFallback();
@@ -87,9 +98,19 @@ export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelPro
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">事件流</h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">{connectionStateLabel(connectionState)}</p>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            {connectionStateLabel(connectionState)}
+          </p>
         </div>
+        <Button variant="secondary" onClick={() => void loadEventsSnapshot(taskId, setEvents)}>
+          手动刷新
+        </Button>
       </div>
+      {streamWarning ? (
+        <div className="mt-4 rounded-md border border-[#fedf89] bg-[#fffaeb] p-3 text-sm text-[#93370d]">
+          {streamWarning}
+        </div>
+      ) : null}
       <div className="mt-4 max-h-[520px] overflow-auto rounded-md border border-[var(--line)]">
         {renderedEvents.length === 0 ? (
           <div className="p-4 text-sm text-[var(--muted)]">暂无事件。</div>
@@ -129,6 +150,25 @@ export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelPro
       </div>
     </Card>
   );
+}
+
+async function loadEventsSnapshot(
+  taskId: string,
+  setEvents: (events: TaskEvent[]) => void,
+) {
+  const artifact = await getArtifact(taskId, "events.jsonl");
+  const events = artifact.content
+    .split("\n")
+    .filter(Boolean)
+    .flatMap((line) => {
+      try {
+        return [JSON.parse(line) as TaskEvent];
+      } catch {
+        return [];
+      }
+    })
+    .slice(-80);
+  setEvents(events);
 }
 
 function connectionStateLabel(state: string) {

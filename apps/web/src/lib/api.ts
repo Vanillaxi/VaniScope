@@ -27,20 +27,42 @@ function compactPayload(payload: TaskCreateApiRequest) {
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch (reason) {
+    throw new Error(
+      `无法连接 VaniScope API (${API_BASE_URL})：${
+        reason instanceof Error ? reason.message : String(reason)
+      }`,
+    );
+  }
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(body || `Request failed with ${response.status}`);
+    throw new Error(formatApiError(response.status, body));
   }
 
   return response.json() as Promise<T>;
+}
+
+function formatApiError(status: number, body: string) {
+  if (!body) return `请求失败：HTTP ${status}`;
+  try {
+    const parsed = JSON.parse(body) as { detail?: unknown; message?: unknown };
+    const detail = parsed.detail ?? parsed.message;
+    if (typeof detail === "string") return `请求失败：HTTP ${status} - ${detail}`;
+    if (detail) return `请求失败：HTTP ${status} - ${JSON.stringify(detail)}`;
+  } catch {
+    return `请求失败：HTTP ${status} - ${body}`;
+  }
+  return `请求失败：HTTP ${status} - ${body}`;
 }
 
 export function getHealth() {

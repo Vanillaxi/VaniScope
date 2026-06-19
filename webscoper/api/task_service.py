@@ -130,12 +130,17 @@ class TaskService:
         if task_id in self._task_states:
             state = self._task_states[task_id]
             state.artifacts = list_existing_artifacts(state.run_dir)
+            metadata = self._task_event_metadata(task_id, state.run_dir)
             return TaskStatusResponse(
                 task_id=task_id,
                 status=state.status,
                 run_dir=str(state.run_dir),
                 artifacts=state.artifacts,
                 error=state.error,
+                created_at=metadata.get("created_at") or state.created_at,
+                updated_at=metadata.get("updated_at") or state.updated_at,
+                current_step=metadata.get("current_step") or state.current_step,
+                current_phase=metadata.get("current_phase") or state.current_phase,
             )
 
         run_dir = self._run_dir(task_id)
@@ -143,12 +148,17 @@ class TaskService:
             return TaskStatusResponse(task_id=task_id, status="not_found")
 
         status, error = status_from_transcript(run_dir)
+        metadata = self._task_event_metadata(task_id, run_dir)
         return TaskStatusResponse(
             task_id=task_id,
             status=status,
             run_dir=str(run_dir),
             artifacts=list_existing_artifacts(run_dir),
             error=error,
+            created_at=metadata.get("created_at"),
+            updated_at=metadata.get("updated_at"),
+            current_step=metadata.get("current_step"),
+            current_phase=metadata.get("current_phase"),
         )
 
     def list_artifacts(self, task_id: str) -> TaskArtifactListResponse:
@@ -239,6 +249,13 @@ class TaskService:
                     payload=payload or {},
                 )
             )
+            state = self._task_states.get(task_id)
+            if state is not None:
+                state.updated_at = event.created_at
+                state.current_phase = _event_phase(event)
+                step = _event_step(event)
+                if step is not None:
+                    state.current_step = step
             self.event_bus.publish(event)
             self.event_store.write_jsonl(task_id, self._run_dir(task_id) / "events.jsonl")
         except Exception:
@@ -296,6 +313,7 @@ class TaskService:
             self._task_states[task_id] = state
         state.status = status
         state.error = error
+        state.updated_at = datetime.now(UTC).isoformat()
         state.artifacts = list_existing_artifacts(state.run_dir)
 
     def _write_task_artifacts(self, task_id: str) -> None:
@@ -321,8 +339,58 @@ class TaskService:
             raise FileNotFoundError(f"Task not found: {task_id}")
         return run_dir
 
+    def _task_event_metadata(self, task_id: str, run_dir: Path) -> dict[str, Any]:
+        events = self.event_store.list_events(task_id)
+        if not events:
+            events_path = run_dir / "events.jsonl"
+            if events_path.exists():
+                events = _load_events_from_jsonl(events_path)
+
+        metadata: dict[str, Any] = {}
+        if not events:
+            return metadata
+
+        metadata["created_at"] = events[0].created_at or None
+        metadata["updated_at"] = events[-1].created_at or None
+        metadata["current_phase"] = _event_phase(events[-1])
+        for event in reversed(events):
+            step = _event_step(event)
+            if step is not None:
+                metadata["current_step"] = step
+                break
+        return metadata
+
     def _list_existing_artifacts(self, run_dir: Path) -> list[str]:
         return list_existing_artifacts(run_dir)
 
     def _status_from_transcript(self, run_dir: Path) -> tuple[str, str | None]:
         return status_from_transcript(run_dir)
+
+
+def _load_events_from_jsonl(path: Path) -> list[TaskEvent]:
+    events: list[TaskEvent] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            events.append(TaskEvent.model_validate_json(line))
+        except Exception:
+            continue
+    return events
+
+
+def _event_phase(event: TaskEvent) -> str:
+    phase = event.payload.get("phase")
+    if isinstance(phase, str) and phase:
+        return phase
+    return event.kind
+
+
+def _event_step(event: TaskEvent) -> int | None:
+    for key in ("current_step", "step", "step_index"):
+        value = event.payload.get(key)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.isdigit():
+            return int(value)
+    return None

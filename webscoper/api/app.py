@@ -104,6 +104,11 @@ async def stream_task_events(task_id: str) -> StreamingResponse:
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 # 查看任务产物列表

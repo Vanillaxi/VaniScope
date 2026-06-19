@@ -39,6 +39,10 @@ export type TaskStatusResponse = {
   run_dir?: string | null;
   artifacts: string[];
   error?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  current_step?: number | null;
+  current_phase?: string | null;
 };
 
 export type TaskArtifactListResponse = {

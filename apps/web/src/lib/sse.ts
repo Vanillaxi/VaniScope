@@ -4,15 +4,14 @@ import type { TaskEvent } from "@/lib/types";
 export function openTaskEventSource(
   taskId: string,
   onEvent: (event: TaskEvent) => void,
+  onInvalidEvent: (message: string) => void,
   onError: (error: Event) => void,
 ) {
   const source = new EventSource(
     `${API_BASE_URL}/tasks/${encodeURIComponent(taskId)}/events`,
   );
 
-  source.onmessage = (message) => {
-    onEvent(JSON.parse(message.data) as TaskEvent);
-  };
+  source.onmessage = (message) => handleMessage(message, onEvent, onInvalidEvent);
 
   const knownEvents = [
     "task_created",
@@ -61,10 +60,22 @@ export function openTaskEventSource(
 
   for (const eventName of knownEvents) {
     source.addEventListener(eventName, (message) => {
-      onEvent(JSON.parse((message as MessageEvent).data) as TaskEvent);
+      handleMessage(message as MessageEvent, onEvent, onInvalidEvent);
     });
   }
 
   source.onerror = onError;
   return source;
+}
+
+function handleMessage(
+  message: MessageEvent,
+  onEvent: (event: TaskEvent) => void,
+  onInvalidEvent: (message: string) => void,
+) {
+  try {
+    onEvent(JSON.parse(message.data) as TaskEvent);
+  } catch {
+    onInvalidEvent("收到无法解析的 SSE 事件，已跳过。");
+  }
 }

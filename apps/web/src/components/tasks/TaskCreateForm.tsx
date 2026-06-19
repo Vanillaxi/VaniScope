@@ -21,6 +21,16 @@ export function TaskCreateForm() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const fillDemoCase = () => {
+    setUrl("tests/fixtures/mock_site/basic.html");
+    setClick("Quickstart");
+    setExpect("pip install playwright");
+    setPlanner("deterministic");
+    setWorkspace("tests/fixtures/workspace");
+    setReminder("This is a local full-stack console demo.");
+    setRiskMode("read_only");
+  };
+
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitting(true);
@@ -50,6 +60,9 @@ export function TaskCreateForm() {
           <h1 className="text-2xl font-semibold">新建任务</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
             通过 FastAPI Task API 提交 LangGraph 浏览器任务。
+          </p>
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            Demo 默认使用仓库内 mock site 路径，不访问真实网页。
           </p>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
@@ -109,7 +122,10 @@ export function TaskCreateForm() {
             {error}
           </div>
         ) : null}
-        <div className="flex justify-end">
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={fillDemoCase}>
+            填入 demo case
+          </Button>
           <Button type="submit" disabled={submitting}>
             {submitting ? "创建中..." : "创建任务"}
           </Button>

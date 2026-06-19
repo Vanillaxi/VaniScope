@@ -40,9 +40,9 @@ uv run pytest
 
 ## 控制台
 
-Next.js 16 控制台位于 `apps/web`，只对接 FastAPI Task API。它支持创建 LangGraph browser task、查看实时事件、查看 artifacts、处理审批，以及打开本地 eval 命令辅助页面。
+Next.js 16 控制台位于 `apps/web`，只对接 FastAPI Task API。它支持完整跑通本地 LangGraph browser task，通过 SSE 查看实时事件，查看 artifacts，处理审批，查看 evidence / review / report 输出，以及打开本地 eval 命令辅助页面。
 
-The Next.js 16 control console lives in `apps/web` and talks only to the FastAPI Task API. It can create LangGraph browser tasks, stream task events, inspect artifacts, handle approvals, and show the local eval command helper.
+The Next.js 16 control console lives in `apps/web` and talks only to the FastAPI Task API. It can create and complete local LangGraph browser tasks, stream task events over SSE, inspect artifacts, handle approvals, view evidence/review/report outputs, and show the local eval command helper.
 
 启动 API：
 
@@ -73,6 +73,12 @@ NEXT_PUBLIC_VANISCOPE_API_BASE_URL=http://localhost:8000
 如果 API 地址不同，可以基于 `apps/web/.env.example` 创建本地 `.env`。
 
 Copy `apps/web/.env.example` to a local `.env` if you need a different API base URL.
+
+完整链路 demo / Full-stack demo:
+
+```text
+docs/demo_next_console.md
+```
 
 ## 目录结构
 

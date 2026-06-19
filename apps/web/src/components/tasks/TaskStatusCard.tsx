@@ -11,6 +11,7 @@ type TaskStatusCardProps = {
 export function TaskStatusCard({ task, latestEvent }: TaskStatusCardProps) {
   const phase =
     latestEvent?.payload?.phase?.toString() ??
+    task.current_phase ??
     latestEvent?.kind ??
     (task.status === "not_found" ? "缺失" : "等待中");
 
@@ -34,19 +35,35 @@ export function TaskStatusCard({ task, latestEvent }: TaskStatusCardProps) {
           <dt className="text-xs font-semibold uppercase text-[var(--muted)]">
             更新时间
           </dt>
-          <dd className="mt-1 text-sm">{formatDateTime(latestEvent?.created_at)}</dd>
+          <dd className="mt-1 text-sm">
+            {formatDateTime(task.updated_at ?? latestEvent?.created_at)}
+          </dd>
         </div>
         <div>
           <dt className="text-xs font-semibold uppercase text-[var(--muted)]">
-            Artifacts
+            当前步骤
           </dt>
-          <dd className="mt-1 text-sm">{task.artifacts.length}</dd>
+          <dd className="mt-1 text-sm">{task.current_step ?? "未知"}</dd>
         </div>
         <div>
           <dt className="text-xs font-semibold uppercase text-[var(--muted)]">
             运行目录
           </dt>
           <dd className="mt-1 break-words text-sm">{task.run_dir ?? "未知"}</dd>
+        </div>
+      </dl>
+      <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div>
+          <dt className="text-xs font-semibold uppercase text-[var(--muted)]">
+            创建时间
+          </dt>
+          <dd className="mt-1 text-sm">{formatDateTime(task.created_at)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-semibold uppercase text-[var(--muted)]">
+            产物数量
+          </dt>
+          <dd className="mt-1 text-sm">{task.artifacts.length}</dd>
         </div>
       </dl>
       {task.error ? (
