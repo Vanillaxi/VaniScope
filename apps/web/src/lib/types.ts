@@ -126,6 +126,17 @@ export type RuntimeArtifactRef = {
   path?: string | null;
 };
 
+export type ArtifactPresentation = {
+  artifact_name: string;
+  artifact_type: string;
+  display_title: string;
+  user_facing: boolean;
+  developer_only: boolean;
+  default_view: string;
+  description?: string | null;
+  priority: number;
+};
+
 export type RuntimeTimelineItem = {
   id: string;
   timestamp?: string | null;
@@ -180,7 +191,14 @@ export type RuntimeInspectorResponse = {
   summary: RuntimeInspectorSummary;
   timeline_items: RuntimeTimelineItem[];
   evidence_links: RuntimeEvidenceLink[];
+  task_summary: Record<string, unknown>;
+  result_summary: Record<string, unknown>;
+  report_summary: Record<string, unknown>;
+  evidence_summary: Record<string, unknown>;
   review_summary: Record<string, unknown>;
+  tool_summary: Record<string, unknown>;
   llm_summary: Record<string, unknown>;
+  recovery_summary: Record<string, unknown>;
   approval_summary: Record<string, unknown>;
+  artifact_presentations: ArtifactPresentation[];
 };

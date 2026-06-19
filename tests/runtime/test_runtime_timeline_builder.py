@@ -111,6 +111,15 @@ def test_runtime_timeline_builder_merges_and_sorts_artifacts(tmp_path) -> None:
     assert inspector.summary.recovery_count == 1
     assert inspector.summary.evidence_count == 1
     assert inspector.evidence_links[0].report_sections == ["Report"]
+    assert inspector.report_summary["title"] == "Report"
+    assert inspector.evidence_summary["total_count"] == 1
+    assert inspector.tool_summary["total_calls"] == 1
+    assert inspector.llm_summary["estimated_tokens"] == 0
+    assert inspector.recovery_summary["recovery_attempts"] == 1
+    assert any(
+        item.artifact_name == "events.jsonl" and item.developer_only
+        for item in inspector.artifact_presentations
+    )
 
 
 def _write_jsonl(path, rows: list[dict]) -> None:

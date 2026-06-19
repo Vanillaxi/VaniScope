@@ -12,6 +12,17 @@ class RuntimeArtifactRef(BaseModel):
     path: str | None = None
 
 
+class ArtifactPresentation(BaseModel):
+    artifact_name: str
+    artifact_type: str
+    display_title: str
+    user_facing: bool = True
+    developer_only: bool = False
+    default_view: str = "raw"
+    description: str | None = None
+    priority: int = 500
+
+
 class RuntimeEvidenceLink(BaseModel):
     evidence_id: str
     source_url: str | None = None
@@ -72,6 +83,13 @@ class RuntimeInspectorResponse(BaseModel):
     summary: RuntimeInspectorSummary
     timeline_items: list[RuntimeTimelineItem] = Field(default_factory=list)
     evidence_links: list[RuntimeEvidenceLink] = Field(default_factory=list)
+    task_summary: dict[str, Any] = Field(default_factory=dict)
+    result_summary: dict[str, Any] = Field(default_factory=dict)
+    report_summary: dict[str, Any] = Field(default_factory=dict)
+    evidence_summary: dict[str, Any] = Field(default_factory=dict)
     review_summary: dict[str, Any] = Field(default_factory=dict)
+    tool_summary: dict[str, Any] = Field(default_factory=dict)
     llm_summary: dict[str, Any] = Field(default_factory=dict)
+    recovery_summary: dict[str, Any] = Field(default_factory=dict)
     approval_summary: dict[str, Any] = Field(default_factory=dict)
+    artifact_presentations: list[ArtifactPresentation] = Field(default_factory=list)

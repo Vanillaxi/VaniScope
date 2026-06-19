@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ArtifactRenderer } from "@/components/tasks/artifacts/ArtifactRenderer";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { getArtifact } from "@/lib/api";
-import { formatArtifactContent } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 
 type ArtifactViewerProps = {
@@ -26,6 +26,7 @@ export function ArtifactViewer({
   const { t } = useI18n();
   const [content, setContent] = useState("");
   const [loadedArtifactName, setLoadedArtifactName] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"user" | "developer">("user");
   const [error, setError] = useState<{
     artifactName: string;
     message: string;
@@ -40,23 +41,13 @@ export function ArtifactViewer({
     getArtifact(taskId, artifactName)
       .then((artifact) => {
         if (cancelled) return;
-        try {
-          setContent(
-            truncateContent(
-              formatArtifactContent(artifact.artifact_name, artifact.content),
-              compact ? COMPACT_ARTIFACT_CHARS : MAX_ARTIFACT_CHARS,
-              t.artifacts.truncated,
-            ),
-          );
-        } catch {
-          setContent(
-            truncateContent(
-              artifact.content,
-              compact ? COMPACT_ARTIFACT_CHARS : MAX_ARTIFACT_CHARS,
-              t.artifacts.truncated,
-            ),
-          );
-        }
+        setContent(
+          truncateContent(
+            artifact.content,
+            compact ? COMPACT_ARTIFACT_CHARS : MAX_ARTIFACT_CHARS,
+            t.artifacts.truncated,
+          ),
+        );
         setLoadedArtifactName(artifact.artifact_name);
         setError(null);
       })
@@ -88,26 +79,56 @@ export function ArtifactViewer({
           <div className="mt-1 break-all text-sm text-[var(--muted)]">
             {artifactName === "skill_result.json"
               ? `${artifactName} · ${t.artifacts.skillResult}`
-              : artifactName ?? t.artifacts.select}
+            : artifactName ?? t.artifacts.select}
           </div>
         </div>
-        {artifactName ? (
-          <Button variant="secondary" onClick={() => void loadArtifact()}>
-            {t.artifacts.refresh}
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {artifactName ? (
+            <div className="flex rounded-md border border-[var(--line)] bg-white p-1">
+              {(["user", "developer"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setViewMode(mode)}
+                  className={`rounded px-3 py-1.5 text-xs font-semibold ${
+                    viewMode === mode
+                      ? "bg-[var(--panel-soft)] text-[var(--brand-dark)]"
+                      : "text-[#475467] hover:bg-[var(--panel-soft)]"
+                  }`}
+                >
+                  {mode === "user" ? t.artifacts.userView : t.artifacts.developerView}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {artifactName ? (
+            <Button variant="secondary" onClick={() => void loadArtifact()}>
+              {t.artifacts.refresh}
+            </Button>
+          ) : null}
+        </div>
       </div>
-      <div className="mt-4 min-h-64 rounded-md border border-[var(--line)] bg-[#101828] p-4">
+      <div className="mt-4 min-h-64">
         {artifactName && error?.artifactName === artifactName ? (
-          <div className="text-sm text-[#fecdca]">{error.message}</div>
+          <div className="rounded-md border border-[#fecdca] bg-[#fef3f2] p-4 text-sm text-[var(--danger)]">
+            {error.message}
+          </div>
         ) : artifactName && loadedArtifactName === artifactName ? (
-          <pre className="max-h-[560px] overflow-auto text-xs leading-5 text-[#f8fafc]">
-            {content}
-          </pre>
+          <ArtifactRenderer
+            taskId={taskId}
+            artifactName={artifactName}
+            content={content}
+            developerView={viewMode === "developer"}
+            compact={compact}
+          />
         ) : artifactName ? (
-          <div className="text-sm text-[#d0d5dd]">{t.artifacts.loading}</div>
+          <div className="rounded-md border border-[var(--line)] p-4 text-sm text-[var(--muted)]">
+            {t.artifacts.loading}
+          </div>
         ) : (
-          <div className="text-sm text-[#d0d5dd]">{t.artifacts.noneSelected}</div>
+          <div className="rounded-md border border-[var(--line)] p-4 text-sm text-[var(--muted)]">
+            {t.artifacts.noneSelected}
+          </div>
         )}
       </div>
     </Card>

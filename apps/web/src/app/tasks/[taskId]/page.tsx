@@ -127,23 +127,53 @@ export default function TaskPage({ params }: TaskPageProps) {
               />
             );
           }
-          if (activeTab === "artifacts") {
+          if (activeTab === "overview") {
+            return (
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+                <OverviewPanel
+                  task={task}
+                  inspector={inspector}
+                  artifacts={artifacts}
+                />
+                <ApprovalPanel taskId={taskId} onDecision={refresh} />
+              </div>
+            );
+          }
+          if (activeTab === "report") {
+            return artifacts.includes("final_report.md") ? (
+              <ArtifactViewer taskId={taskId} artifactName="final_report.md" title={t.inspector.report} />
+            ) : (
+              <EmptyState title={t.inspector.report} message={t.inspector.reportUnavailable} />
+            );
+          }
+          if (activeTab === "tools") {
+            return artifacts.includes("tool_audit.jsonl") ? (
+              <ArtifactViewer taskId={taskId} artifactName="tool_audit.jsonl" title={t.inspector.tools} />
+            ) : (
+              <EmptyState title={t.inspector.tools} message={t.inspector.toolAuditUnavailable} />
+            );
+          }
+          if (activeTab === "debug") {
             return (
               <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
                 <Card className="p-5">
                   <div className="mb-4 flex items-center justify-between gap-3">
-                    <h2 className="text-lg font-semibold">{t.taskDetail.artifacts}</h2>
+                    <h2 className="text-lg font-semibold">{t.inspector.debug}</h2>
                     <Button variant="secondary" onClick={() => void refresh()}>
                       {t.taskDetail.refreshArtifacts}
                     </Button>
                   </div>
                   <ArtifactList
-                    artifacts={artifacts}
+                    artifacts={debugArtifacts(artifacts, inspector)}
                     selected={selectedArtifact}
                     onSelect={setSelectedArtifact}
                   />
                 </Card>
-                <ArtifactViewer taskId={taskId} artifactName={selectedArtifact} />
+                <ArtifactViewer
+                  taskId={taskId}
+                  artifactName={selectedArtifact ?? debugArtifacts(artifacts, inspector)[0]}
+                  title={t.inspector.rawArtifacts}
+                />
               </div>
             );
           }
@@ -168,11 +198,98 @@ export default function TaskPage({ params }: TaskPageProps) {
               />
             );
           }
-          return <ApprovalPanel taskId={taskId} onDecision={refresh} />;
+          return null;
         }}
       </RuntimeInspectorTabs>
     </>
   );
+}
+
+function OverviewPanel({
+  task,
+  inspector,
+  artifacts,
+}: {
+  task: TaskStatusResponse | null;
+  inspector: RuntimeInspectorResponse | null;
+  artifacts: string[];
+}) {
+  const { t } = useI18n();
+  const summary = inspector?.summary;
+  const review = inspector?.review_summary ?? {};
+  const tool = inspector?.tool_summary ?? {};
+  const llm = inspector?.llm_summary ?? {};
+  const approval = inspector?.approval_summary ?? {};
+  const recovery = inspector?.recovery_summary ?? {};
+  const report = inspector?.report_summary ?? {};
+
+  return (
+    <Card className="p-5">
+      <h2 className="text-lg font-semibold">{t.inspector.overview}</h2>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <OverviewMetric label={t.status.task} value={task?.status ?? "-"} />
+        <OverviewMetric label={t.status.skillId} value={task?.skill_id ?? "-"} />
+        <OverviewMetric label={t.status.taskType} value={task?.task_type ?? "-"} />
+        <OverviewMetric label={t.inspector.evidence} value={String(summary?.evidence_count ?? 0)} />
+        <OverviewMetric label={t.inspector.tools} value={String(tool.total_calls ?? 0)} />
+        <OverviewMetric label={t.inspector.llmPrompt} value={String(llm.mode ?? "deterministic")} />
+        <OverviewMetric label={t.inspector.review} value={String(review.status ?? summary?.review_status ?? "-")} />
+        <OverviewMetric label={t.inspector.unsupportedClaims} value={String(review.unsupported_claim_count ?? 0)} />
+        <OverviewMetric label={t.inspector.approval} value={String(approval.pending_count ?? 0)} />
+        <OverviewMetric label={t.inspector.recovery} value={String(recovery.recovery_attempts ?? 0)} />
+        <OverviewMetric label={t.status.artifactCount} value={String(artifacts.length)} />
+        <OverviewMetric label={t.inspector.realCalls} value={String(llm.real_call_count ?? 0)} />
+      </div>
+      {typeof report.summary === "string" && report.summary ? (
+        <div className="mt-5 rounded-md bg-[var(--panel-soft)] p-4 text-sm leading-7 text-[#344054]">
+          {report.summary}
+        </div>
+      ) : null}
+    </Card>
+  );
+}
+
+function OverviewMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-[var(--line)] bg-white p-3">
+      <div className="text-xs font-semibold uppercase text-[var(--muted)]">{label}</div>
+      <div className="mt-1 break-words text-sm font-semibold text-[#344054]">{value || "-"}</div>
+    </div>
+  );
+}
+
+function EmptyState({ title, message }: { title: string; message: string }) {
+  return (
+    <Card className="p-5">
+      <h2 className="text-lg font-semibold">{title}</h2>
+      <div className="mt-4 rounded-md border border-dashed border-[var(--line)] p-5 text-sm text-[var(--muted)]">
+        {message}
+      </div>
+    </Card>
+  );
+}
+
+function debugArtifacts(
+  artifacts: string[],
+  inspector: RuntimeInspectorResponse | null,
+) {
+  const developer = inspector?.artifact_presentations
+    ?.filter((item) => item.developer_only)
+    .map((item) => item.artifact_name);
+  const preferred = developer?.length
+    ? developer
+    : artifacts.filter((name) =>
+        [
+          "trace.jsonl",
+          "transcript.jsonl",
+          "events.jsonl",
+          "prompt_context.json",
+          "prompt_preview.md",
+          "tool_audit.jsonl",
+          "llm_calls.jsonl",
+        ].includes(name),
+      );
+  return preferred.length ? preferred : artifacts;
 }
 
 function historyTitle(skillId: string, taskId: string) {

@@ -17,34 +17,25 @@ export function LlmCallsPanel({ taskId, artifacts, llmSummary = {} }: LlmCallsPa
   const realCallCount = numberValue(llmSummary.real_call_count);
   const modes = arrayValue(llmSummary.modes);
   const providers = arrayValue(llmSummary.providers);
-  const hasPromptPreview = artifacts.includes("prompt_preview.md");
-  const hasPromptContext = artifacts.includes("prompt_context.json");
   const hasLlmCalls = artifacts.includes("llm_calls.jsonl");
 
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="flex flex-col gap-5">
-        {hasPromptPreview ? (
-          <ArtifactViewer
-            taskId={taskId}
-            artifactName="prompt_preview.md"
-            title={t.inspector.promptPreview}
-          />
-        ) : null}
-        {hasPromptContext ? (
-          <ArtifactViewer
-            taskId={taskId}
-            artifactName="prompt_context.json"
-            title={t.inspector.promptContext}
-          />
-        ) : null}
         {hasLlmCalls ? (
           <ArtifactViewer
             taskId={taskId}
             artifactName="llm_calls.jsonl"
             title={t.artifacts.llmCalls}
           />
-        ) : null}
+        ) : (
+          <Card className="p-5">
+            <h2 className="text-lg font-semibold">{t.inspector.llmPrompt}</h2>
+            <div className="mt-4 rounded-md border border-dashed border-[var(--line)] p-5 text-sm text-[var(--muted)]">
+              {t.inspector.noLlmCallsDetail}
+            </div>
+          </Card>
+        )}
       </div>
       <Card className="p-5">
         <h2 className="text-lg font-semibold">{t.inspector.llmPrompt}</h2>
@@ -63,6 +54,9 @@ export function LlmCallsPanel({ taskId, artifacts, llmSummary = {} }: LlmCallsPa
             <Badge tone="info">{t.inspector.noLlmCalls}</Badge>
           </div>
         ) : null}
+        <div className="mt-4 rounded-md bg-[var(--panel-soft)] p-3 text-sm leading-6 text-[#475467]">
+          {t.inspector.promptDebugHint}
+        </div>
       </Card>
     </div>
   );

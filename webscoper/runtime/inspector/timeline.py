@@ -8,6 +8,7 @@ from webscoper.runtime.inspector.links import (
     evidence_ids_from_payload,
 )
 from webscoper.runtime.inspector.loader import RunArtifactLoader
+from webscoper.runtime.inspector.presentation import artifact_presentations
 from webscoper.runtime.inspector.schemas import (
     RuntimeArtifactRef,
     RuntimeInspectorResponse,
@@ -34,6 +35,7 @@ class RuntimeTimelineBuilder:
 
     def build_inspector_response(self, status: str | None = None) -> RuntimeInspectorResponse:
         artifacts = self._load_artifacts()
+        artifact_names = self.loader.list_artifacts()
         items = self.build_items(artifacts)
         summary = self.build_summary(artifacts, items, status=status or self.status)
         linker = RuntimeArtifactLinker(
@@ -48,13 +50,27 @@ class RuntimeTimelineBuilder:
         return RuntimeInspectorResponse(
             task_id=self.loader.task_id,
             status=status or self.status,
-            artifacts=self.loader.list_artifacts(),
+            artifacts=artifact_names,
             summary=summary,
             timeline_items=items,
             evidence_links=linker.evidence_links(),
+            task_summary=_task_summary(self.loader.task_id, status or self.status, summary),
+            result_summary=_result_summary(
+                status or self.status,
+                artifacts["final_report"],
+                artifacts["review"],
+                artifacts["recovery"],
+                artifacts["approvals"],
+                artifacts["pending"],
+            ),
+            report_summary=_report_summary(artifacts["final_report"]),
+            evidence_summary=_evidence_summary(artifacts["evidence"]),
             review_summary=_review_summary(artifacts["review"]),
+            tool_summary=_tool_summary_rows(artifacts["tool_audit"]),
             llm_summary=_llm_summary(artifacts["llm_calls"], artifacts["prompt_context"]),
-            approval_summary=_approval_summary(artifacts["approvals"]),
+            recovery_summary=_recovery_summary(artifacts["recovery"]),
+            approval_summary=_approval_summary(artifacts["approvals"], artifacts["pending"]),
+            artifact_presentations=artifact_presentations(artifact_names),
         )
 
     def build_items(self, artifacts: dict[str, Any]) -> list[RuntimeTimelineItem]:
@@ -182,6 +198,7 @@ class RuntimeTimelineBuilder:
             "llm_calls": self.loader.read_jsonl("llm_calls.jsonl"),
             "recovery": self.loader.read_jsonl("recovery.jsonl"),
             "approvals": self.loader.read_jsonl("approvals.jsonl"),
+            "pending": self.loader.read_jsonl("pending.jsonl"),
             "evidence": self.loader.read_jsonl("evidence.jsonl"),
             "review": self.loader.read_json("review.json"),
             "prompt_context": self.loader.read_json("prompt_context.json"),
@@ -456,21 +473,20 @@ def _review_status(review: dict[str, Any]) -> str | None:
 
 def _review_summary(review: dict[str, Any]) -> dict[str, Any]:
     if not review:
-        return {"available": False}
+        return {"available": False, "passed": None, "score": None}
     issues = review.get("issues") if isinstance(review.get("issues"), list) else []
-    unsupported = (
-        review.get("unsupported_claims")
-        if isinstance(review.get("unsupported_claims"), list)
-        else []
-    )
+    unsupported = _unsupported_claims(review)
     return {
         "available": True,
+        "passed": review.get("passed") if isinstance(review.get("passed"), bool) else None,
         "status": _review_status(review),
         "score": review.get("score"),
         "issue_count": len(issues),
         "unsupported_claim_count": len(unsupported),
         "issues": issues,
         "unsupported_claims": unsupported,
+        "recommendation": _string_or_none(review.get("summary")),
+        "summary": _string_or_none(review.get("summary")),
     }
 
 
@@ -482,28 +498,210 @@ def _llm_summary(llm_calls: list[dict[str, Any]], prompt_context: dict[str, Any]
     )
     modes = sorted(set(str(call.get("mode")) for call in llm_calls if call.get("mode")))
     providers = sorted(set(str(call.get("provider")) for call in llm_calls if call.get("provider")))
+    models = sorted(set(str(call.get("model")) for call in llm_calls if call.get("model")))
+    prompt_tokens = sum(_int_value(call.get("prompt_tokens_estimated")) for call in llm_calls)
+    completion_tokens = sum(
+        _int_value(call.get("completion_tokens_estimated")) for call in llm_calls
+    )
+    real_call_count = sum(
+        1
+        for call in llm_calls
+        if str(call.get("mode") or "").lower() in {"real", "openai_compatible", "real_llm"}
+    )
     return {
         "call_count": len(llm_calls),
-        "real_call_count": sum(
-            1
-            for call in llm_calls
-            if str(call.get("mode") or "").lower() in {"real", "openai_compatible"}
-        ),
+        "real_call_count": real_call_count,
+        "real_llm_used": real_call_count > 0,
         "modes": modes,
+        "mode": ", ".join(modes) if modes else "deterministic",
         "providers": providers,
+        "provider": ", ".join(providers) if providers else "none",
+        "models": models,
+        "model": ", ".join(models) if models else None,
+        "estimated_tokens": prompt_tokens + completion_tokens,
+        "prompt_tokens_estimated": prompt_tokens,
+        "completion_tokens_estimated": completion_tokens,
         "budget_decisions": dict(budget_decisions),
         "has_prompt_context": bool(prompt_context),
         "prompt_skill_id": _prompt_skill_id(prompt_context),
     }
 
 
-def _approval_summary(approvals: list[dict[str, Any]]) -> dict[str, Any]:
+def _approval_summary(
+    approvals: list[dict[str, Any]],
+    pending: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     statuses = Counter(str(item.get("status")) for item in approvals if item.get("status"))
+    pending_count = statuses.get("pending", 0) + len(pending or [])
     return {
         "count": len(approvals),
         "statuses": dict(statuses),
-        "pending_count": statuses.get("pending", 0),
+        "pending_count": pending_count,
+        "approved_count": statuses.get("approved", 0),
+        "rejected_count": statuses.get("rejected", 0),
+        "blocked_count": statuses.get("blocked", 0),
     }
+
+
+def _task_summary(
+    task_id: str,
+    status: str | None,
+    summary: RuntimeInspectorSummary,
+) -> dict[str, Any]:
+    return {
+        "task_id": task_id,
+        "status": status,
+        "artifact_count": summary.artifact_count,
+        "timeline_count": summary.timeline_count,
+        "categories": summary.categories,
+    }
+
+
+def _result_summary(
+    status: str | None,
+    final_report: str,
+    review: dict[str, Any],
+    recovery: list[dict[str, Any]],
+    approvals: list[dict[str, Any]],
+    pending: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "status": status,
+        "has_report": bool(final_report.strip()),
+        "review_status": _review_status(review),
+        "review_passed": review.get("passed") if isinstance(review.get("passed"), bool) else None,
+        "recovery_attempts": len(recovery),
+        "approval_count": len(approvals),
+        "pending_approval_count": len(pending)
+        + sum(1 for item in approvals if item.get("status") == "pending"),
+    }
+
+
+def _report_summary(report_text: str) -> dict[str, Any]:
+    if not report_text.strip():
+        return {"available": False, "title": None, "summary": None, "sections": [], "source_urls": []}
+    lines = report_text.splitlines()
+    title = None
+    sections: list[str] = []
+    paragraphs: list[str] = []
+    current: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            heading = stripped.lstrip("#").strip()
+            if heading:
+                sections.append(heading)
+                if title is None:
+                    title = heading
+            continue
+        if not stripped:
+            if current:
+                paragraphs.append(" ".join(current))
+                current = []
+            continue
+        if not stripped.startswith(("```", "-", "*", "|")):
+            current.append(stripped)
+    if current:
+        paragraphs.append(" ".join(current))
+    return {
+        "available": True,
+        "title": title or "Final report",
+        "summary": _preview(paragraphs[0] if paragraphs else report_text, 480),
+        "sections": sections,
+        "source_urls": _source_urls(report_text),
+    }
+
+
+def _evidence_summary(evidence: list[dict[str, Any]]) -> dict[str, Any]:
+    source_urls = sorted(
+        {str(item.get("source_url")) for item in evidence if item.get("source_url")}
+    )
+    page_titles = sorted(
+        {str(item.get("page_title")) for item in evidence if item.get("page_title")}
+    )
+    evidence_ids = [
+        str(item.get("evidence_id")) for item in evidence if item.get("evidence_id")
+    ]
+    return {
+        "count": len(evidence),
+        "total_count": len(evidence),
+        "source_urls": source_urls,
+        "page_titles": page_titles,
+        "evidence_ids": evidence_ids,
+        "top_snippets": [
+            {
+                "evidence_id": item.get("evidence_id"),
+                "source_url": item.get("source_url"),
+                "page_title": item.get("page_title"),
+                "text_preview": _preview(item.get("text"), 220),
+            }
+            for item in evidence[:5]
+        ],
+    }
+
+
+def _tool_summary_rows(tool_audit: list[dict[str, Any]]) -> dict[str, Any]:
+    tools = Counter(str(item.get("tool_name")) for item in tool_audit if item.get("tool_name"))
+    statuses = Counter(str(item.get("status")) for item in tool_audit if item.get("status"))
+    decisions = Counter(str(item.get("decision")) for item in tool_audit if item.get("decision"))
+    return {
+        "total_calls": len(tool_audit),
+        "tools_used": dict(tools),
+        "failed_calls": sum(
+            1
+            for item in tool_audit
+            if str(item.get("status") or "").lower() in {"failed", "error"}
+            or bool(item.get("error_type"))
+        ),
+        "blocked_calls": decisions.get("blocked", 0) + statuses.get("blocked", 0),
+        "approval_required_calls": decisions.get("approval_required", 0),
+        "statuses": dict(statuses),
+        "decisions": dict(decisions),
+    }
+
+
+def _recovery_summary(recovery: list[dict[str, Any]]) -> dict[str, Any]:
+    kinds = Counter(
+        str(item.get("kind") or item.get("event_type"))
+        for item in recovery
+        if item.get("kind") or item.get("event_type")
+    )
+    statuses = Counter(
+        str(item.get("status") or item.get("outcome"))
+        for item in recovery
+        if item.get("status") or item.get("outcome")
+    )
+    return {
+        "attempt_count": len(recovery),
+        "recovery_attempts": len(recovery),
+        "recovery_kinds": dict(kinds),
+        "success_count": statuses.get("success", 0) + statuses.get("succeeded", 0),
+        "failed_count": statuses.get("failed", 0) + statuses.get("error", 0),
+        "statuses": dict(statuses),
+    }
+
+
+def _unsupported_claims(review: dict[str, Any]) -> list[Any]:
+    direct = review.get("unsupported_claims")
+    if isinstance(direct, list):
+        return direct
+    claim_checks = review.get("claim_checks")
+    if not isinstance(claim_checks, list):
+        return []
+    return [
+        check
+        for check in claim_checks
+        if isinstance(check, dict) and check.get("supported") is False
+    ]
+
+
+def _source_urls(value: str) -> list[str]:
+    urls: list[str] = []
+    for raw in value.replace(")", " ").replace("]", " ").split():
+        token = raw.strip(".,;:")
+        if token.startswith(("http://", "https://", "file://")) and token not in urls:
+            urls.append(token)
+    return urls[:20]
 
 
 def _prompt_skill_id(prompt_context: dict[str, Any]) -> str | None:
@@ -515,6 +713,16 @@ def _prompt_skill_id(prompt_context: dict[str, Any]) -> str | None:
 
 def _string_or_none(value: Any) -> str | None:
     return value if isinstance(value, str) and value else None
+
+
+def _int_value(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    return 0
 
 
 def _preview(value: Any, limit: int = 240) -> str | None:
