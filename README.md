@@ -4,7 +4,7 @@
 
 VaniScope / Web-Scoper is a LangGraph-based browser-agent runtime for local and fixture-based web task execution. It includes browser observation and click intent, deterministic and LLM-backed planning modes, evidence/report artifacts, reviewer and revise-loop support, FastAPI task APIs, risk-gated approval pause/resume, context compaction, a LangGraph workflow backend, regression evals for workflow behavior, and a Next.js 16 control console.
 
-The runtime package is split by responsibility into `runtime/execution`, `runtime/artifacts`, `runtime/llm`, `runtime/prompt`, `runtime/review`, and `runtime/safety`. Runtime root-level compatibility re-exports have been removed; project code imports the concrete package paths directly.
+The runtime package is split by responsibility into `runtime/execution`, `runtime/artifacts`, `runtime/inspector`, `runtime/llm`, `runtime/prompt`, `runtime/review`, and `runtime/safety`. Runtime root-level compatibility re-exports have been removed; project code imports the concrete package paths directly.
 
 `webscoper/workflows/langgraph_adapter.py` remains the public LangGraph workflow entry point. Its orchestration internals live under `webscoper/workflows/langgraph_backend/`. LangGraph is the only task orchestration layer.
 
@@ -51,6 +51,10 @@ The console is now organized as a ChatGPT-style task workspace: the sidebar has
 history stored in browser `localStorage`. Skill selection lives in the sidebar
 and home-page skill cards instead of a large mixed form; `/tasks/new?skill=...`
 renders fields specific to Browser Task, Docs Research, or GitHub Issue Research.
+Task detail pages include a Runtime Inspector with Timeline, Artifacts,
+Evidence, LLM / Prompt, Review, and Approval tabs. The inspector is backed by
+`/tasks/{task_id}/timeline` and `/tasks/{task_id}/inspector`, which dynamically
+aggregate run artifacts without a database.
 
 Next.js 16 控制台位于 `apps/web`，只对接 FastAPI Task API。它支持完整跑通本地 LangGraph 浏览器任务，通过 SSE 查看实时事件，检查 artifacts，处理审批，查看 evidence / review / report 输出，并提供本地 eval 命令辅助页。
 
@@ -95,7 +99,7 @@ docs/demo_next_console.md
 ```text
 webscoper/
   browser/       # Browser Runtime: Playwright session, observation, targeting, effects, recovery, risk signals
-  runtime/       # Agent Runtime: execution, artifacts, LLM, prompt, review, safety
+  runtime/       # Agent Runtime: execution, artifacts, inspector, LLM, prompt, review, safety
   skills/        # Skill definitions, registry, deterministic router, docs and GitHub issue skills
   api/           # FastAPI Task API, async tasks, approvals, SSE event stream, artifact access
   eval/          # Browser, planner, reviewer, and workflow regression eval harnesses
@@ -122,6 +126,7 @@ configs/
 
 docs/
   runtime_modules.md
+  runtime_inspector.md
   skills.md
 
 runs/

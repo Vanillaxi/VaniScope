@@ -21,6 +21,8 @@ from webscoper.api.resume import (
 from webscoper.api.runner_factory import build_api_task, build_handler
 from webscoper.api.schemas import (
     ApprovalDecisionResponse,
+    RuntimeInspectorResponse,
+    RuntimeTimelineResponse,
     TaskArtifactContentResponse,
     TaskArtifactListResponse,
     TaskCreateRequest,
@@ -33,6 +35,7 @@ from webscoper.api.task_state import (
     status_from_transcript,
 )
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
+from webscoper.runtime.inspector import RunArtifactLoader, RuntimeTimelineBuilder
 from webscoper.runtime.safety.approvals import ApprovalStore
 from webscoper.runtime.execution.events import (
     InMemoryTaskEventBus,
@@ -192,6 +195,22 @@ class TaskService:
         artifact_name: str,
     ) -> TaskArtifactContentResponse:
         return read_task_artifact(self, task_id, artifact_name)
+
+    def get_timeline(self, task_id: str) -> RuntimeTimelineResponse:
+        status = self.get_task_status(task_id)
+        if status.status == "not_found":
+            raise FileNotFoundError(f"Task not found: {task_id}")
+        loader = RunArtifactLoader(self.runs_dir, task_id)
+        return RuntimeTimelineBuilder(loader, status=status.status).build_timeline_response()
+
+    def get_inspector(self, task_id: str) -> RuntimeInspectorResponse:
+        status = self.get_task_status(task_id)
+        if status.status == "not_found":
+            raise FileNotFoundError(f"Task not found: {task_id}")
+        loader = RunArtifactLoader(self.runs_dir, task_id)
+        return RuntimeTimelineBuilder(loader, status=status.status).build_inspector_response(
+            status=status.status,
+        )
 
     def get_events(self, task_id: str) -> list[TaskEvent]:
         return self.event_store.list_events(task_id)

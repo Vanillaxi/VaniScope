@@ -6,6 +6,14 @@ from pydantic import BaseModel, Field
 
 from webscoper.schemas.runtime import ApprovalRequest, TaskResumeResult
 from webscoper.schemas.workflow import LangGraphResumeResult, WorkflowBackend
+from webscoper.runtime.inspector.schemas import (
+    RuntimeArtifactRef,
+    RuntimeEvidenceLink,
+    RuntimeInspectorResponse,
+    RuntimeInspectorSummary,
+    RuntimeTimelineItem,
+    RuntimeTimelineResponse,
+)
 
 
 PlannerMode = Literal["deterministic", "fake_llm", "real_llm"]

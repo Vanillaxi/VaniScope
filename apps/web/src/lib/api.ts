@@ -5,6 +5,8 @@ import type {
   BackendPlannerMode,
   HealthResponse,
   PlannerMode,
+  RuntimeInspectorResponse,
+  RuntimeTimelineResponse,
   TaskArtifactContentResponse,
   TaskArtifactListResponse,
   TaskCreateApiRequest,
@@ -85,6 +87,20 @@ export function getTask(taskId: string) {
   return requestJson<TaskStatusResponse>(`/tasks/${encodeURIComponent(taskId)}`, {
     cache: "no-store",
   });
+}
+
+export function getTaskTimeline(taskId: string) {
+  return requestJson<RuntimeTimelineResponse>(
+    `/tasks/${encodeURIComponent(taskId)}/timeline`,
+    { cache: "no-store" },
+  );
+}
+
+export function getTaskInspector(taskId: string) {
+  return requestJson<RuntimeInspectorResponse>(
+    `/tasks/${encodeURIComponent(taskId)}/inspector`,
+    { cache: "no-store" },
+  );
 }
 
 export function listArtifacts(taskId: string) {

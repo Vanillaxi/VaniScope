@@ -10,6 +10,8 @@ from fastapi.responses import StreamingResponse
 from webscoper.api.schemas import (
     ApprovalDecisionRequest,
     ApprovalDecisionResponse,
+    RuntimeInspectorResponse,
+    RuntimeTimelineResponse,
     TaskArtifactContentResponse,
     TaskArtifactListResponse,
     TaskCreateRequest,
@@ -58,6 +60,26 @@ async def create_task_async(request: TaskCreateRequest) -> TaskCreateResponse:
 @app.get("/tasks/{task_id}", response_model=TaskStatusResponse)
 def get_task(task_id: str) -> TaskStatusResponse:
     return task_service.get_task_status(task_id)
+
+
+@app.get("/tasks/{task_id}/timeline", response_model=RuntimeTimelineResponse)
+def get_task_timeline(task_id: str) -> RuntimeTimelineResponse:
+    try:
+        return task_service.get_timeline(task_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/tasks/{task_id}/inspector", response_model=RuntimeInspectorResponse)
+def get_task_inspector(task_id: str) -> RuntimeInspectorResponse:
+    try:
+        return task_service.get_inspector(task_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 # SSE流式事件
 @app.get("/tasks/{task_id}/events")

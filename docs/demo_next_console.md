@@ -123,8 +123,13 @@ On the task detail page, verify:
 
 - task status is visible
 - current phase / step is visible when events provide it
-- SSE events appear in `事件流`
-- `任务产物` lists generated artifacts
+- Runtime Inspector tabs are visible: Timeline, Artifacts, Evidence, LLM / Prompt, Review, Approval
+- Timeline combines workflow, browser, tool, evidence, review, report, approval, recovery, and LLM audit items when present
+- Artifacts lists generated artifacts
+- Evidence shows `evidence.jsonl` entries and report/review links when available
+- LLM / Prompt shows `prompt_preview.md`, `prompt_context.json`, and `llm_calls.jsonl` when present
+- LLM / Prompt clearly says there are no real LLM calls for deterministic tasks
+- Review shows `review.json` and issue/unsupported-claim summaries
 - `final_report.md` appears when the task completes
 - `review.json`, `evidence.jsonl`, `events.jsonl`, and `tool_audit.jsonl` can be opened from the artifact viewer
 - docs research tasks show `skill_id`, `task_type`, and `skill_status`
@@ -135,6 +140,13 @@ On the task detail page, verify:
 - `llm_calls.jsonl` appears when fake/mock/real LLM planning is used
 
 The artifact viewer formats JSON and JSONL for readability and truncates very large content to keep the page responsive.
+
+The inspector endpoints should also return data:
+
+```text
+GET /tasks/{task_id}/timeline
+GET /tasks/{task_id}/inspector
+```
 
 ## 5. Approval Demo
 
@@ -167,12 +179,19 @@ Click `批准` to resume the task, or `拒绝` to stop it. The task detail page 
 - Sidebar Recent Tasks OK after task creation
 - Create task OK
 - Task detail page OK
-- SSE events visible
-- Artifacts visible
+- Timeline tab visible
+- Timeline has items
+- Artifacts tab visible
+- Evidence tab visible
+- LLM / Prompt tab visible
+- Review tab visible
+- Approval tab visible
 - `final_report.md` visible
 - `review.json` visible
 - `evidence.jsonl` visible
 - `tool_audit.jsonl` visible
+- `/tasks/{task_id}/timeline` returns timeline items
+- `/tasks/{task_id}/inspector` returns summaries
 - `skill_result.json` visible for the Docs Research Demo
 - `skill_result.json` visible for the GitHub Issue Demo
 - Approval decision works for the approval fixture

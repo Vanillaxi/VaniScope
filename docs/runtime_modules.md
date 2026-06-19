@@ -1,6 +1,6 @@
 # Runtime Module Map
 
-This document is a lightweight boundary map for `webscoper/runtime/`. The runtime package is split by responsibility into execution, artifacts, LLM, prompt, review, and safety subpackages. Project code imports these package paths directly.
+This document is a lightweight boundary map for `webscoper/runtime/`. The runtime package is split by responsibility into execution, artifacts, inspector, LLM, prompt, review, and safety subpackages. Project code imports these package paths directly.
 
 The skill layer lives outside runtime in `webscoper/skills/`. Skills are
 LangGraph task capabilities, not a separate workflow backend. They select
@@ -52,6 +52,24 @@ Gateway providers currently include:
 - Skill-aware artifact persistence also writes `skill_result.json` for selected
   skills such as `docs_research` and `github_issue_research`.
 
+## Runtime Inspector Modules
+
+- `inspector/loader.py` reads run artifacts from a selected task run directory,
+  treats missing files as empty inputs, truncates large text artifacts, and
+  rejects path traversal.
+- `inspector/timeline.py` merges `events.jsonl`, `trace.jsonl`,
+  `tool_audit.jsonl`, `llm_calls.jsonl`, `recovery.jsonl`, `approvals.jsonl`,
+  `evidence.jsonl`, `review.json`, and `final_report.md` into deterministic
+  timeline and inspector responses.
+- `inspector/links.py` builds lightweight evidence/report/review/tool/LLM
+  reference maps.
+- `inspector/schemas.py` defines timeline items, artifact refs, evidence links,
+  summaries, and API response models.
+
+FastAPI exposes this aggregation through `/tasks/{task_id}/timeline` and
+`/tasks/{task_id}/inspector`. The endpoints dynamically read artifacts and do
+not mutate runtime state or require a database.
+
 ## Review And Revision Modules
 
 - `review/reviewer.py` performs deterministic report review and summary markdown generation.
@@ -96,7 +114,7 @@ status without real network or real LLM calls.
 
 `apps/web` contains the Next.js 16 control console for the LangGraph-based Browser Agent Runtime. The console is intentionally a thin FastAPI client: it creates tasks through `/tasks/async`, reads task status from `/tasks/{task_id}`, streams `/tasks/{task_id}/events`, loads allowlisted artifacts through the artifact endpoints, and submits approval decisions through the approval endpoints.
 
-The console can complete the local LangGraph demo path end to end: create a fixture-backed task, observe execution over SSE, open final report / review / evidence / audit artifacts, and resolve approval-required pauses from the UI. Its layout is ChatGPT-style: sidebar skill shortcuts, local recent task history, dynamic skill forms, and task detail panes for events, artifacts, approval, report, and review. It does not import Python runtime internals, does not use a database, stores recent task history only in browser `localStorage`, and does not add authentication. Browser access to the local API is enabled through FastAPI CORS for `http://localhost:3000` by default, with `VANISCOPE_CORS_ORIGINS` available for local overrides.
+The console can complete the local LangGraph demo path end to end: create a fixture-backed task, inspect the Runtime Inspector timeline, open final report / review / evidence / audit artifacts, and resolve approval-required pauses from the UI. Its layout is ChatGPT-style: sidebar skill shortcuts, local recent task history, dynamic skill forms, and task detail tabs for Timeline, Artifacts, Evidence, LLM / Prompt, Review, and Approval. It does not import Python runtime internals, does not use a database, stores recent task history only in browser `localStorage`, and does not add authentication. Browser access to the local API is enabled through FastAPI CORS for `http://localhost:3000` by default, with `VANISCOPE_CORS_ORIGINS` available for local overrides.
 
 `docs/demo_next_console.md` documents the manual full-stack smoke path. The project remains LangGraph-only.
 

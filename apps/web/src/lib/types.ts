@@ -118,3 +118,69 @@ export type HealthResponse = {
   status: string;
   service: string;
 };
+
+export type RuntimeArtifactRef = {
+  artifact_name: string;
+  ref_id?: string | null;
+  line?: number | null;
+  path?: string | null;
+};
+
+export type RuntimeTimelineItem = {
+  id: string;
+  timestamp?: string | null;
+  kind: string;
+  category: string;
+  title: string;
+  summary?: string | null;
+  status?: string | null;
+  step_id?: string | null;
+  tool_name?: string | null;
+  evidence_ids: string[];
+  artifact_refs: RuntimeArtifactRef[];
+  raw_ref?: RuntimeArtifactRef | null;
+  raw: Record<string, unknown>;
+};
+
+export type RuntimeInspectorSummary = {
+  task_id: string;
+  status?: string | null;
+  artifact_count: number;
+  timeline_count: number;
+  evidence_count: number;
+  llm_call_count: number;
+  real_llm_call_count: number;
+  approval_count: number;
+  recovery_count: number;
+  review_status?: string | null;
+  budget_decisions: Record<string, number>;
+  categories: Record<string, number>;
+};
+
+export type RuntimeEvidenceLink = {
+  evidence_id: string;
+  source_url?: string | null;
+  page_title?: string | null;
+  text_preview?: string | null;
+  report_sections: string[];
+  review_issue_ids: string[];
+  raw: Record<string, unknown>;
+};
+
+export type RuntimeTimelineResponse = {
+  task_id: string;
+  summary: RuntimeInspectorSummary;
+  timeline_items: RuntimeTimelineItem[];
+};
+
+export type RuntimeInspectorResponse = {
+  task_id: string;
+  status?: string | null;
+  artifacts: string[];
+  summary: RuntimeInspectorSummary;
+  timeline_items: RuntimeTimelineItem[];
+  evidence_links: RuntimeEvidenceLink[];
+  review_summary: Record<string, unknown>;
+  llm_summary: Record<string, unknown>;
+  approval_summary: Record<string, unknown>;
+};

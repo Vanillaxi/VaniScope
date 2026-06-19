@@ -4,15 +4,23 @@ import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { ApprovalPanel } from "@/components/tasks/ApprovalPanel";
 import { ArtifactList } from "@/components/tasks/ArtifactList";
 import { ArtifactViewer } from "@/components/tasks/ArtifactViewer";
-import { EventStreamPanel } from "@/components/tasks/EventStreamPanel";
+import { EvidencePanel } from "@/components/tasks/EvidencePanel";
+import { LlmCallsPanel } from "@/components/tasks/LlmCallsPanel";
+import { ReviewPanel } from "@/components/tasks/ReviewPanel";
+import { RuntimeInspectorTabs } from "@/components/tasks/RuntimeInspectorTabs";
 import { TaskStatusCard } from "@/components/tasks/TaskStatusCard";
+import { TimelinePanel } from "@/components/tasks/TimelinePanel";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { getTask, listArtifacts } from "@/lib/api";
+import { getTask, getTaskInspector, listArtifacts } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { skillIdFromTask } from "@/lib/skills";
 import { updateTaskHistoryOpened } from "@/lib/taskHistory";
-import type { TaskArtifactListResponse, TaskEvent, TaskStatusResponse } from "@/lib/types";
+import type {
+  RuntimeInspectorResponse,
+  TaskArtifactListResponse,
+  TaskStatusResponse,
+} from "@/lib/types";
 
 type TaskPageProps = {
   params: Promise<{
@@ -26,21 +34,24 @@ export default function TaskPage({ params }: TaskPageProps) {
   const [task, setTask] = useState<TaskStatusResponse | null>(null);
   const [artifacts, setArtifacts] = useState<string[]>([]);
   const [selectedArtifact, setSelectedArtifact] = useState<string | null>(null);
-  const [events, setEvents] = useState<TaskEvent[]>([]);
+  const [inspector, setInspector] = useState<RuntimeInspectorResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       setError(null);
-      const [taskResult, artifactResult]: [
+      const [taskResult, artifactResult, inspectorResult]: [
         TaskStatusResponse,
         TaskArtifactListResponse,
+        RuntimeInspectorResponse | null,
       ] = await Promise.all([
         getTask(taskId),
         listArtifacts(taskId).catch(() => ({ task_id: taskId, artifacts: [] })),
+        getTaskInspector(taskId).catch(() => null),
       ]);
       setTask(taskResult);
       setArtifacts(artifactResult.artifacts);
+      setInspector(inspectorResult);
       setSelectedArtifact((current) => current ?? artifactResult.artifacts[0] ?? null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -69,8 +80,10 @@ export default function TaskPage({ params }: TaskPageProps) {
     });
   }, [task, taskId]);
 
-  const latestEvent = useMemo(() => events.at(-1), [events]);
-  const hasFinalReport = artifacts.includes("final_report.md");
+  const latestTimelineItem = useMemo(
+    () => inspector?.timeline_items.at(-1),
+    [inspector?.timeline_items],
+  );
 
   if (error) {
     return (
@@ -86,40 +99,78 @@ export default function TaskPage({ params }: TaskPageProps) {
   return (
     <>
       {task ? (
-        <TaskStatusCard task={task} latestEvent={latestEvent} />
+        <TaskStatusCard
+          task={task}
+          latestEvent={
+            latestTimelineItem
+              ? {
+                  event_id: latestTimelineItem.id,
+                  task_id: taskId,
+                  kind: latestTimelineItem.kind,
+                  message: latestTimelineItem.title,
+                  created_at: latestTimelineItem.timestamp ?? "",
+                  payload: latestTimelineItem.raw,
+                }
+              : undefined
+          }
+        />
       ) : (
         <Card className="p-5 text-sm text-[var(--muted)]">{t.taskDetail.loading}</Card>
       )}
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="flex flex-col gap-5">
-          <EventStreamPanel taskId={taskId} onEventsChange={setEvents} />
-          <Card className="p-5">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold">{t.taskDetail.artifacts}</h2>
-              <Button variant="secondary" onClick={() => void refresh()}>
-                {t.taskDetail.refreshArtifacts}
-              </Button>
-            </div>
-            <ArtifactList
-              artifacts={artifacts}
-              selected={selectedArtifact}
-              onSelect={setSelectedArtifact}
-            />
-          </Card>
-          <ArtifactViewer taskId={taskId} artifactName={selectedArtifact} />
-        </div>
-        <aside className="flex flex-col gap-5">
-          <ApprovalPanel taskId={taskId} onDecision={refresh} />
-          {hasFinalReport ? (
-            <ArtifactViewer
-              taskId={taskId}
-              artifactName="final_report.md"
-              title={t.taskDetail.finalReportPreview}
-              compact
-            />
-          ) : null}
-        </aside>
-      </div>
+      <RuntimeInspectorTabs>
+        {(activeTab) => {
+          if (activeTab === "timeline") {
+            return (
+              <TimelinePanel
+                items={inspector?.timeline_items ?? []}
+                summary={inspector?.summary}
+              />
+            );
+          }
+          if (activeTab === "artifacts") {
+            return (
+              <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+                <Card className="p-5">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <h2 className="text-lg font-semibold">{t.taskDetail.artifacts}</h2>
+                    <Button variant="secondary" onClick={() => void refresh()}>
+                      {t.taskDetail.refreshArtifacts}
+                    </Button>
+                  </div>
+                  <ArtifactList
+                    artifacts={artifacts}
+                    selected={selectedArtifact}
+                    onSelect={setSelectedArtifact}
+                  />
+                </Card>
+                <ArtifactViewer taskId={taskId} artifactName={selectedArtifact} />
+              </div>
+            );
+          }
+          if (activeTab === "evidence") {
+            return <EvidencePanel evidence={inspector?.evidence_links ?? []} />;
+          }
+          if (activeTab === "llm") {
+            return (
+              <LlmCallsPanel
+                taskId={taskId}
+                artifacts={artifacts}
+                llmSummary={inspector?.llm_summary}
+              />
+            );
+          }
+          if (activeTab === "review") {
+            return (
+              <ReviewPanel
+                taskId={taskId}
+                artifacts={artifacts}
+                reviewSummary={inspector?.review_summary}
+              />
+            );
+          }
+          return <ApprovalPanel taskId={taskId} onDecision={refresh} />;
+        }}
+      </RuntimeInspectorTabs>
     </>
   );
 }
