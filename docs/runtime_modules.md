@@ -68,6 +68,12 @@ Workflow eval lives in `webscoper/eval/workflow_eval.py` and is LangGraph-only. 
 
 The workflow eval schema supports `case_type` values of `workflow`, `recovery`, `approval`, and `tool_gateway`. Recovery cases assert expected recovery strategies and error types from `recovery.jsonl`. Approval cases assert RiskGate decisions, approval-required/task-paused events, approve/reject resume outcomes, and persisted `approvals.jsonl`, `pending.jsonl`, `events.jsonl`, and `risk_report.json` artifacts. Tool Gateway cases assert LangGraph gateway provider, decision, status, risk level, workflow backend, and audit behavior. `tests/fixtures/langgraph_main_eval_cases.json` is the main LangGraph matrix; `tests/fixtures/tool_gateway_eval_cases.json` is the gateway matrix. Eval cases are guarded to use local fixture URLs and non-real planner/reviewer modes, so pytest and eval runs do not access real network targets or real LLM providers.
 
+## Control Console Boundary
+
+`apps/web` contains the Next.js 16 control console for the LangGraph-based Browser Agent Runtime. The console is intentionally a thin FastAPI client: it creates tasks through `/tasks/async`, reads task status from `/tasks/{task_id}`, streams `/tasks/{task_id}/events`, loads allowlisted artifacts through the artifact endpoints, and submits approval decisions through the approval endpoints.
+
+The console does not import Python runtime internals, does not store data, and does not add authentication. Browser access to the local API is enabled through FastAPI CORS for `http://localhost:3000` by default, with `VANISCOPE_CORS_ORIGINS` available for local overrides.
+
 ## Browser Recovery Boundary
 
 `webscoper/browser/recovery/` is split by recovery responsibility:

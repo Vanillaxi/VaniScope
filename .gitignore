@@ -1,6 +1,7 @@
 .venv/
 __pycache__/
 *.pyc
+*.tsbuildinfo
 .env
 configs/llm.toml
 configs/llm.local.toml
@@ -19,3 +20,7 @@ eval_results/workflow_eval_*/
 !eval_results/.gitkeep
 .pytest_cache/
 .DS_Store
+apps/web/.env
+apps/web/.env.local
+apps/web/.next/
+apps/web/node_modules/

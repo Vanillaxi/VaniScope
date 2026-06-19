@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-VaniScope / Web-Scoper 是一个基于 LangGraph 的浏览器 Agent Runtime，用于本地和 fixture 驱动的网页任务执行。当前包含浏览器观察与 click intent、确定性和 LLM planner 模式、证据与报告 artifact、Reviewer 与 revise loop、FastAPI Task API、Risk Gate 审批暂停/恢复、Context Compaction、LangGraph workflow backend，以及 workflow 行为回归评测。
+VaniScope / Web-Scoper 是一个基于 LangGraph 的浏览器 Agent Runtime，用于本地和 fixture 驱动的网页任务执行。当前包含浏览器观察与 click intent、确定性和 LLM planner 模式、证据与报告 artifact、Reviewer 与 revise loop、FastAPI Task API、Risk Gate 审批暂停/恢复、Context Compaction、LangGraph workflow backend、workflow 行为回归评测，以及 Next.js 16 控制台。
 
 Runtime 现在按职责拆成 `runtime/execution`、`runtime/artifacts`、`runtime/llm`、`runtime/prompt`、`runtime/review` 和 `runtime/safety`。runtime 根目录的旧兼容 re-export 已移除，项目代码直接导入具体子包路径。
 
@@ -38,6 +38,42 @@ uv run pytest
 
 默认 pytest 保留 workflow 的少量 smoke case。需要完整 recovery / approval 回归矩阵时，运行下面的显式 workflow eval 命令。
 
+## 控制台
+
+Next.js 16 控制台位于 `apps/web`，只对接 FastAPI Task API。它支持创建 LangGraph browser task、查看实时事件、查看 artifacts、处理审批，以及打开本地 eval 命令辅助页面。
+
+The Next.js 16 control console lives in `apps/web` and talks only to the FastAPI Task API. It can create LangGraph browser tasks, stream task events, inspect artifacts, handle approvals, and show the local eval command helper.
+
+启动 API：
+
+Start the API:
+
+```bash
+uv run python scripts/run_api.py
+```
+
+配置并启动前端：
+
+Configure and start the console:
+
+```bash
+cd apps/web
+pnpm install
+pnpm dev
+```
+
+访问 `http://localhost:3000`。控制台读取：
+
+Open `http://localhost:3000`. The console reads:
+
+```bash
+NEXT_PUBLIC_VANISCOPE_API_BASE_URL=http://localhost:8000
+```
+
+如果 API 地址不同，可以基于 `apps/web/.env.example` 创建本地 `.env`。
+
+Copy `apps/web/.env.example` to a local `.env` if you need a different API base URL.
+
 ## 目录结构
 
 ```text
@@ -49,6 +85,9 @@ webscoper/
   workflows/     # LangGraph backend 编排模块
   tools/         # Tool registry、browser tools 与 ToolGateway providers
   schemas/       # 共享 Pydantic schema
+
+apps/
+  web/           # 对接 FastAPI Task API 的 Next.js 16 控制台
 
 scripts/
   run_task.py

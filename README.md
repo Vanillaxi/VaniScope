@@ -2,7 +2,7 @@
 
 [中文说明](README_CN.md)
 
-VaniScope / Web-Scoper is a LangGraph-based browser-agent runtime for local and fixture-based web task execution. It includes browser observation and click intent, deterministic and LLM-backed planning modes, evidence/report artifacts, reviewer and revise-loop support, FastAPI task APIs, risk-gated approval pause/resume, context compaction, a LangGraph workflow backend, and regression evals for workflow behavior.
+VaniScope / Web-Scoper is a LangGraph-based browser-agent runtime for local and fixture-based web task execution. It includes browser observation and click intent, deterministic and LLM-backed planning modes, evidence/report artifacts, reviewer and revise-loop support, FastAPI task APIs, risk-gated approval pause/resume, context compaction, a LangGraph workflow backend, regression evals for workflow behavior, and a Next.js 16 control console.
 
 The runtime package is split by responsibility into `runtime/execution`, `runtime/artifacts`, `runtime/llm`, `runtime/prompt`, `runtime/review`, and `runtime/safety`. Runtime root-level compatibility re-exports have been removed; project code imports the concrete package paths directly.
 
@@ -35,6 +35,42 @@ uv run pytest
 
 Default pytest keeps workflow coverage to focused smoke cases. Run the explicit workflow eval command below when you want the full recovery/approval regression matrix.
 
+## Control Console
+
+The Next.js 16 control console lives in `apps/web` and talks only to the FastAPI Task API. It can create LangGraph browser tasks, stream task events, inspect artifacts, handle approvals, and show the local eval command helper.
+
+Next.js 16 控制台位于 `apps/web`，只对接 FastAPI Task API。它支持创建 LangGraph 浏览器任务、查看实时事件、检查 artifacts、处理审批，并提供本地 eval 命令辅助页。
+
+Start the API:
+
+启动 API：
+
+```bash
+uv run python scripts/run_api.py
+```
+
+Configure and start the console:
+
+配置并启动前端：
+
+```bash
+cd apps/web
+pnpm install
+pnpm dev
+```
+
+Open `http://localhost:3000`. The console reads:
+
+访问 `http://localhost:3000`。控制台读取：
+
+```bash
+NEXT_PUBLIC_VANISCOPE_API_BASE_URL=http://localhost:8000
+```
+
+Copy `apps/web/.env.example` to a local `.env` if you need a different API base URL.
+
+如果 API 地址不同，可以基于 `apps/web/.env.example` 创建本地 `.env`。
+
 ## Project Layout
 
 ```text
@@ -46,6 +82,9 @@ webscoper/
   workflows/     # LangGraph backend orchestration modules
   tools/         # Tool registry, browser tool definitions, and ToolGateway providers
   schemas/       # Shared Pydantic schemas
+
+apps/
+  web/           # Next.js 16 control console for the FastAPI Task API
 
 scripts/
   run_task.py

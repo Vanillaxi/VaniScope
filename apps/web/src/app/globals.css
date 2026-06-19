@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f7f8fa;
+  --foreground: #17202a;
+  --muted: #657080;
+  --line: #d9dee7;
+  --panel: #ffffff;
+  --panel-soft: #eef2f6;
+  --brand: #0f6f78;
+  --brand-dark: #0a4e55;
+  --accent: #b75d22;
+  --danger: #b42318;
+  --success: #067647;
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}

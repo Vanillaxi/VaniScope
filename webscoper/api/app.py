@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from webscoper.api.schemas import (
@@ -23,6 +25,19 @@ from webscoper.schemas.runtime import ApprovalRequest
 
 app = FastAPI(title="VaniScope API", version="0.1.0")
 task_service = TaskService()
+
+_cors_origins = [
+    origin.strip()
+    for origin in os.getenv("VANISCOPE_CORS_ORIGINS", "http://localhost:3000").split(",")
+    if origin.strip()
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 健康检查
 @app.get("/health")
