@@ -231,6 +231,7 @@ class WebAgentExecutionHandler:
             context.snapshot(),
             agents_md_instructions=agents_md_instructions,
             runtime_reminders=self.runtime_reminders.list(),
+            skill=context.skill_context,
         )
         self.last_prompt_result = prompt_result
         _persist_prompt_context(context.run_dir, prompt_result)

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>VaniScope Docs Research Fixture</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.5;
+        margin: 32px auto;
+        max-width: 880px;
+        color: #1f2937;
+      }
+      nav {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+      code,
+      pre {
+        background: #f3f4f6;
+        border-radius: 6px;
+      }
+      pre {
+        padding: 16px;
+        overflow-x: auto;
+      }
+      button {
+        border: 1px solid #2563eb;
+        background: #2563eb;
+        color: white;
+        border-radius: 6px;
+        padding: 8px 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>VaniScope Local Documentation</h1>
+      <p>
+        VaniScope is a LangGraph-only browser agent runtime for local web research,
+        evidence capture, reports, and reviews.
+      </p>
+      <nav>
+        <a href="#installation">Installation</a>
+        <a href="#configuration">Configuration</a>
+        <a href="#troubleshooting">Troubleshooting</a>
+        <button type="button">Copy Quickstart</button>
+      </nav>
+    </header>
+
+    <main>
+      <section id="overview">
+        <h2>Overview</h2>
+        <p>
+          The runtime opens local fixture pages, observes visible text, records
+          evidence, and writes final_report.md, evidence.jsonl, review.json, and
+          tool_audit.jsonl artifacts.
+        </p>
+      </section>
+
+      <section id="installation">
+        <h2>Installation</h2>
+        <p>Install Python dependencies with uv from the repository root.</p>
+        <pre><code>uv sync</code></pre>
+        <p>Install browser binaries before running browser tests.</p>
+        <pre><code>uv run playwright install chromium</code></pre>
+        <p>Start the FastAPI service for task execution.</p>
+        <pre><code>uv run python scripts/run_api.py</code></pre>
+        <p>Start the Next.js control console in a second terminal.</p>
+        <pre><code>cd apps/web
+pnpm install
+pnpm dev</code></pre>
+      </section>
+
+      <section id="configuration">
+        <h2>Configuration</h2>
+        <p>
+          Configure the console API target with
+          <code>NEXT_PUBLIC_VANISCOPE_API_BASE_URL</code>. For local development, use
+          <code>http://localhost:8000</code>.
+        </p>
+      </section>
+
+      <section id="troubleshooting">
+        <h2>Troubleshooting</h2>
+        <p>
+          If the console cannot connect, confirm FastAPI is running and that
+          NEXT_PUBLIC_VANISCOPE_API_BASE_URL points to the API base URL.
+        </p>
+        <p>
+          If browser tests fail because Chromium is missing, run
+          <code>uv run playwright install chromium</code> again.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

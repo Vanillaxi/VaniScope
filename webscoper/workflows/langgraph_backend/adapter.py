@@ -16,6 +16,7 @@ from webscoper.schemas.workflow import (
     LangGraphResumeResult,
     WorkflowRunResult,
 )
+from webscoper.skills.base import Skill, SkillPlan
 from webscoper.workflows.langgraph_approval import LangGraphApprovalBridge
 from webscoper.workflows.langgraph_backend.artifacts import WorkflowArtifactWriter
 from webscoper.workflows.langgraph_backend.events import WorkflowEventEmitter
@@ -39,6 +40,8 @@ class LangGraphWorkflowAdapter:
         self.runtime: WebAgentRuntimeComponents | None = None
         self.prompt_result: PromptBuildResult | None = None
         self.plan: ExecutionPlan | None = None
+        self.skill: Skill | None = None
+        self.skill_plan: SkillPlan | None = None
         self.final_observation: PageObservation | None = None
         self.evidence_items: list[Any] = []
         self.report_text: str | None = None
@@ -69,6 +72,8 @@ class LangGraphWorkflowAdapter:
             "task_id": task.task_id,
             "thread_id": thread_id,
             "task_goal": task.raw_input,
+            "task_type": task.task_type,
+            "skill_id": task.skill_id,
             "request": task.model_dump(mode="json"),
             "workspace": str(self.handler.workspace)
             if self.handler.workspace is not None

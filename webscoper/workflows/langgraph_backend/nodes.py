@@ -7,11 +7,13 @@ from webscoper.runtime.execution.handler import WebAgentRuntimeComponents
 from webscoper.runtime.execution.results import merge_final_output, record_evidence
 from webscoper.runtime.execution.state import state_payload, status_from_loop_error
 from webscoper.schemas.browser import PageObservation
+from webscoper.schemas.runtime import SkillPromptContext
 from webscoper.schemas.tool import ExecutionLoopResult, ExecutionPlan
 from webscoper.schemas.task import TaskSpec
 from webscoper.schemas.tool import ToolExecutionRecord, ToolResult
 from webscoper.tools.gateway import ToolInvocationRequest, ToolInvocationResult
 from webscoper.schemas.workflow import LangGraphResumePayload
+from webscoper.skills.router import SkillRouter
 from webscoper.workflows.langgraph_backend.state_io import (
     TERMINAL_GRAPH_STATUSES,
     graph_interrupt_type,
@@ -46,6 +48,54 @@ class LangGraphWorkflowNodes:
         state["task_id"] = self.workflow.context.run_id
         state["thread_id"] = self.workflow.thread_id or self.workflow.context.run_id
         state["run_dir"] = str(self.workflow.context.run_dir)
+        return state
+
+    def route_skill(self, state: VaniScopeGraphState) -> VaniScopeGraphState:
+        return self._node("route_skill", state, self._do_route_skill)
+
+    def _do_route_skill(self, state: VaniScopeGraphState) -> VaniScopeGraphState:
+        context = self.workflow.require_context()
+        route = SkillRouter().route(context.task)
+        context.task = route.task
+        state["request"] = route.task.model_dump(mode="json")
+        state["task_type"] = route.task.task_type
+        state["skill_id"] = route.task.skill_id
+
+        if route.skill is None:
+            self.workflow.skill = None
+            self.workflow.skill_plan = None
+            context.skill_context = None
+            state["skill_context"] = None
+            state["skill_plan"] = None
+        else:
+            skill_input = route.skill.build_input(route.task)
+            skill_plan = route.skill.plan(skill_input)
+            skill_context = SkillPromptContext(
+                skill_id=route.skill.definition.skill_id,
+                name=route.skill.definition.name,
+                description=route.skill.definition.description,
+                version=route.skill.definition.version,
+                instruction=route.skill.definition.instruction.content,
+                plan=skill_plan.model_dump(mode="json"),
+            )
+            self.workflow.skill = route.skill
+            self.workflow.skill_plan = skill_plan
+            context.skill_context = skill_context
+            state["skill_context"] = skill_context.model_dump(mode="json")
+            state["skill_plan"] = skill_plan.model_dump(mode="json")
+            context.version.skill_version = (
+                f"{route.skill.definition.skill_id}@{route.skill.definition.version}"
+            )
+
+        context.transcript_store.append(
+            "skill_routed",
+            {
+                "reason": route.reason,
+                "skill_id": route.task.skill_id,
+                "task_type": route.task.task_type,
+                "skill_plan": state.get("skill_plan"),
+            },
+        )
         return state
 
     def build_prompt(self, state: VaniScopeGraphState) -> VaniScopeGraphState:

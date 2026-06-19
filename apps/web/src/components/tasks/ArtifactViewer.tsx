@@ -86,7 +86,9 @@ export function ArtifactViewer({
         <div>
           <h2 className="text-lg font-semibold">{title ?? t.artifacts.viewer}</h2>
           <div className="mt-1 break-all text-sm text-[var(--muted)]">
-            {artifactName ?? t.artifacts.select}
+            {artifactName === "skill_result.json"
+              ? `${artifactName} · ${t.artifacts.skillResult}`
+              : artifactName ?? t.artifacts.select}
           </div>
         </div>
         {artifactName ? (

@@ -1,5 +1,8 @@
 export type PlannerMode = "deterministic" | "fake_llm" | "llm";
 export type BackendPlannerMode = "deterministic" | "fake_llm" | "real_llm";
+export type TaskType = "browser_task" | "docs_research";
+export type SkillId = "auto" | "docs_research";
+export type TaskLanguage = "auto" | "zh" | "en";
 
 export type TaskStatus =
   | "running"
@@ -15,6 +18,11 @@ export type TaskCreateRequest = {
   url: string;
   click?: string;
   expect?: string;
+  task_type?: TaskType;
+  skill_id?: Exclude<SkillId, "auto">;
+  query?: string;
+  research_goal?: string;
+  language?: TaskLanguage;
   planner: PlannerMode;
   reminder?: string;
   workspace?: string;
@@ -43,6 +51,9 @@ export type TaskStatusResponse = {
   updated_at?: string | null;
   current_step?: number | null;
   current_phase?: string | null;
+  skill_id?: string | null;
+  task_type?: string | null;
+  skill_status?: string | null;
 };
 
 export type TaskArtifactListResponse = {

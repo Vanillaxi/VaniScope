@@ -16,6 +16,7 @@ from webscoper.schemas.artifact import EvidenceItem
 from webscoper.schemas.browser import PageObservation
 from webscoper.schemas.runtime import PromptBuildResult
 from webscoper.schemas.review import ReviewerMode
+from webscoper.skills.docs_research import DocsResearchSkill
 
 
 def persist_prompt_context(run_dir: Path, prompt_result: PromptBuildResult) -> None:
@@ -85,11 +86,36 @@ def persist_evidence_and_final_report(
         final_observation=observation,
     )
     report_path.write_text(report_text, encoding="utf-8")
+    skill_result = None
+    if context.task.skill_id == "docs_research":
+        skill_result = DocsResearchSkill().build_result(
+            context.task,
+            evidence_items,
+            artifact_names=[
+                "final_report.md",
+                "evidence.jsonl",
+                "review.json",
+                "skill_result.json",
+                "tool_audit.jsonl",
+            ],
+        )
+        (context.run_dir / "skill_result.json").write_text(
+            json.dumps(
+                skill_result.model_dump(mode="json"),
+                indent=2,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
     context.transcript_store.append(
         "final_report_built",
         {
             "final_report_path": str(report_path),
             "evidence_count": len(evidence_items),
+            "skill_id": context.task.skill_id,
+            "skill_result_path": str(context.run_dir / "skill_result.json")
+            if skill_result is not None
+            else None,
         },
     )
     emit_report_event(

@@ -10,7 +10,13 @@ class TaskSpec(BaseModel):
     task_id: str
     raw_input: str
     task_type: str = "browser_task"
+    skill_id: str | None = None
     target_url: str
+    query: str | None = None
+    research_goal: str | None = None
+    expected_output: str | None = None
+    constraints: list[str] = Field(default_factory=list)
+    language: str = "auto"
     action: ActionContract | None = None
     expected_effect: ExpectedEffect | None = None
     require_evidence: bool = True

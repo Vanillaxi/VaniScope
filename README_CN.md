@@ -12,6 +12,10 @@ Runtime 现在按职责拆成 `runtime/execution`、`runtime/artifacts`、`runti
 
 Browser recovery 现在拆成 `browser/recovery/classifier`、`planner`、`strategies`、`executor` 和 `telemetry`；`browser/recovery/manager.py` 保持为公开 facade。
 
+`webscoper/skills/` 是 LangGraph 上层 skill 层。默认 registry 当前包含
+`docs_research`，它通过现有 Browser Runtime 和 ToolGateway 路径读取本地文档页，
+并输出带证据的 `final_report.md`、`review.json` 和 `skill_result.json`。
+
 ## 阶段边界
 
 VaniScope 不会绕过登录、验证码或付费墙，也不会输入真实账号、密码、支付信息或身份证件。高风险动作会被阻止，或要求本地审批后才继续执行。
@@ -86,6 +90,7 @@ docs/demo_next_console.md
 webscoper/
   browser/       # Browser Runtime：Playwright session、观察、定位、效果验证、恢复、风险信号
   runtime/       # Agent Runtime：execution、artifacts、LLM、prompt、review、safety
+  skills/        # Skill 定义、registry、确定性 router、docs_research skill
   api/           # FastAPI Task API、异步任务、审批、SSE 事件流、artifact 访问
   eval/          # Browser / Planner / Reviewer / Workflow regression eval harness
   workflows/     # LangGraph backend 编排模块
@@ -102,6 +107,7 @@ scripts/
   run_planner_eval.py
   run_reviewer_eval.py
   run_workflow_eval.py
+  run_langgraph_eval.py
   smoke_open_page.py
 
 configs/
@@ -110,6 +116,7 @@ configs/
 
 docs/
   runtime_modules.md
+  skills.md
 
 runs/
   .gitkeep
@@ -156,4 +163,12 @@ Tool Gateway eval 以 LangGraph 为主，覆盖 browser provider、本地 determ
 uv run python scripts/run_workflow_eval.py \
   --cases tests/fixtures/tool_gateway_eval_cases.json \
   --output-dir eval_results/tool_gateway_eval_local
+```
+
+Skill eval 使用本地 docs fixture 验证 `docs_research` MVP：
+
+```bash
+uv run python scripts/run_langgraph_eval.py \
+  --cases tests/fixtures/langgraph_skill_eval_cases.json \
+  --output-dir eval_results/langgraph_skill_eval_local
 ```

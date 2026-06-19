@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -77,6 +78,8 @@ class TaskService:
                 status=status,
                 run_dir=str(context.run_dir),
                 artifacts=list_existing_artifacts(context.run_dir),
+                skill_id=context.task.skill_id,
+                task_type=context.task.task_type,
                 error=context.state.error_message if status != "succeeded" else None,
             )
         except Exception as exc:
@@ -94,6 +97,10 @@ class TaskService:
                 status=status if status != "succeeded" else "failed",
                 run_dir=str(failed_run_dir),
                 artifacts=list_existing_artifacts(failed_run_dir),
+                skill_id=context.task.skill_id if context is not None else request.skill_id,
+                task_type=context.task.task_type
+                if context is not None
+                else (request.task_type or "browser_task"),
                 error=str(exc),
             )
 
@@ -123,6 +130,8 @@ class TaskService:
             status="running",
             run_dir=str(run_dir),
             artifacts=[],
+            skill_id=request.skill_id,
+            task_type=request.task_type or "browser_task",
             error=None,
         )
 
@@ -131,6 +140,7 @@ class TaskService:
             state = self._task_states[task_id]
             state.artifacts = list_existing_artifacts(state.run_dir)
             metadata = self._task_event_metadata(task_id, state.run_dir)
+            skill_metadata = _skill_metadata(state.run_dir)
             return TaskStatusResponse(
                 task_id=task_id,
                 status=state.status,
@@ -141,6 +151,9 @@ class TaskService:
                 updated_at=metadata.get("updated_at") or state.updated_at,
                 current_step=metadata.get("current_step") or state.current_step,
                 current_phase=metadata.get("current_phase") or state.current_phase,
+                skill_id=skill_metadata.get("skill_id"),
+                task_type=skill_metadata.get("task_type"),
+                skill_status=skill_metadata.get("skill_status"),
             )
 
         run_dir = self._run_dir(task_id)
@@ -149,6 +162,7 @@ class TaskService:
 
         status, error = status_from_transcript(run_dir)
         metadata = self._task_event_metadata(task_id, run_dir)
+        skill_metadata = _skill_metadata(run_dir)
         return TaskStatusResponse(
             task_id=task_id,
             status=status,
@@ -159,6 +173,9 @@ class TaskService:
             updated_at=metadata.get("updated_at"),
             current_step=metadata.get("current_step"),
             current_phase=metadata.get("current_phase"),
+            skill_id=skill_metadata.get("skill_id"),
+            task_type=skill_metadata.get("task_type"),
+            skill_status=skill_metadata.get("skill_status"),
         )
 
     def list_artifacts(self, task_id: str) -> TaskArtifactListResponse:
@@ -377,6 +394,54 @@ def _load_events_from_jsonl(path: Path) -> list[TaskEvent]:
         except Exception:
             continue
     return events
+
+
+def _skill_metadata(run_dir: Path) -> dict[str, str | None]:
+    result_path = run_dir / "skill_result.json"
+    if result_path.exists():
+        try:
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            result = {}
+        if isinstance(result, dict):
+            return {
+                "skill_id": result.get("skill_id")
+                if isinstance(result.get("skill_id"), str)
+                else None,
+                "task_type": _workflow_task_type(run_dir),
+                "skill_status": result.get("status")
+                if isinstance(result.get("status"), str)
+                else None,
+            }
+
+    workflow_path = run_dir / "workflow_state.json"
+    if not workflow_path.exists():
+        return {"skill_id": None, "task_type": None, "skill_status": None}
+    try:
+        workflow_state = json.loads(workflow_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {"skill_id": None, "task_type": None, "skill_status": None}
+    if not isinstance(workflow_state, dict):
+        return {"skill_id": None, "task_type": None, "skill_status": None}
+    skill_id = workflow_state.get("skill_id")
+    task_type = workflow_state.get("task_type")
+    return {
+        "skill_id": skill_id if isinstance(skill_id, str) else None,
+        "task_type": task_type if isinstance(task_type, str) else None,
+        "skill_status": None,
+    }
+
+
+def _workflow_task_type(run_dir: Path) -> str | None:
+    workflow_path = run_dir / "workflow_state.json"
+    if not workflow_path.exists():
+        return None
+    try:
+        workflow_state = json.loads(workflow_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    task_type = workflow_state.get("task_type") if isinstance(workflow_state, dict) else None
+    return task_type if isinstance(task_type, str) else None
 
 
 def _event_phase(event: TaskEvent) -> str:

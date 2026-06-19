@@ -3,6 +3,7 @@ from __future__ import annotations
 from webscoper.schemas.artifact import EvidenceItem
 from webscoper.schemas.browser import PageObservation
 from webscoper.schemas.task import TaskSpec
+from webscoper.skills.docs_research import DocsResearchSkill
 
 
 class FinalReportBuilder:
@@ -12,6 +13,13 @@ class FinalReportBuilder:
         evidence_items: list[EvidenceItem],
         final_observation: PageObservation | None = None,
     ) -> str:
+        if task_spec.skill_id == "docs_research":
+            return DocsResearchSkill().build_report(
+                task_spec,
+                evidence_items,
+                final_observation=final_observation,
+            )
+
         lines = [
             "# VaniScope Task Report",
             "",

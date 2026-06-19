@@ -94,6 +94,11 @@ class WorkflowRegressionEvalRunner:
                 url=case.request.url,
                 click=case.request.click,
                 expect=case.request.expect,
+                task_type=case.request.task_type,
+                skill_id=case.request.skill_id,
+                query=case.request.query,
+                research_goal=case.request.research_goal,
+                language=case.request.language,
                 task_id=run_id,
             )
             reminders = RuntimeReminderStore()
@@ -198,6 +203,29 @@ def evaluate_workflow_result(
                 f"{expected.min_review_score}, got {score}"
             )
 
+    for phrase in expected.final_report_contains:
+        report_text = str(result.metadata.get("final_report_text") or "")
+        if phrase not in report_text:
+            differences.append(
+                f"langgraph.final_report expected to contain {phrase!r}"
+            )
+
+    if expected.min_evidence_count is not None:
+        evidence_count = result.metadata.get("evidence_count")
+        if not isinstance(evidence_count, int) or evidence_count < expected.min_evidence_count:
+            differences.append(
+                f"langgraph.evidence_count expected >= "
+                f"{expected.min_evidence_count}, got {evidence_count}"
+            )
+
+    if expected.skill_status is not None:
+        skill_result = result.metadata.get("skill_result")
+        actual = skill_result.get("status") if isinstance(skill_result, dict) else None
+        if actual != expected.skill_status:
+            differences.append(
+                f"langgraph.skill_status expected {expected.skill_status}, got {actual}"
+            )
+
     missing_events = [
         kind
         for kind in sorted(
@@ -284,6 +312,8 @@ def _collect_result(
     risk_status = _read_risk_status(run_dir)
     recovery_kinds, recovery_error_types = _read_recovery_summary(run_dir)
     approval_statuses = _read_approval_statuses(run_dir)
+    skill_result = _read_json_object(run_dir / "skill_result.json") if run_dir else None
+    final_report_text = _read_text(run_dir / "final_report.md") if run_dir else ""
     return WorkflowEvalRunResult(
         task_id=context.run_id if context is not None else None,
         status=status,
@@ -311,6 +341,8 @@ def _collect_result(
             if run_dir is not None
             else 0,
             "event_sink_kinds": sorted(set(event_sink_kinds)),
+            "skill_result": skill_result or {},
+            "final_report_text": final_report_text,
         },
     )
 
@@ -474,6 +506,12 @@ def _read_json_object(path: Path) -> dict[str, Any] | None:
     except json.JSONDecodeError:
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def _read_text(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8")
 
 
 def _guard_offline_request(case: WorkflowEvalCase) -> None:

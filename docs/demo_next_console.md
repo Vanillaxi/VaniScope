@@ -59,6 +59,23 @@ workspace: tests/fixtures/workspace
 
 The form has a `填入 demo case` button that restores these values.
 
+For the skill demo, use `Docs Research Demo`:
+
+```text
+task_type: docs_research
+skill_id: docs_research
+url: tests/fixtures/mock_site/docs_research.html
+query: How do I install and run VaniScope?
+language: en
+```
+
+The Chinese preset uses:
+
+```text
+query: 如何安装并运行 VaniScope？
+language: zh
+```
+
 Submit the form. The console should redirect to:
 
 ```text
@@ -75,6 +92,8 @@ On the task detail page, verify:
 - `任务产物` lists generated artifacts
 - `final_report.md` appears when the task completes
 - `review.json`, `evidence.jsonl`, `events.jsonl`, and `tool_audit.jsonl` can be opened from the artifact viewer
+- docs research tasks show `skill_id`, `task_type`, and `skill_status`
+- docs research tasks include `skill_result.json`
 
 The artifact viewer formats JSON and JSONL for readability and truncates very large content to keep the page responsive.
 
@@ -113,4 +132,5 @@ Click `批准` to resume the task, or `拒绝` to stop it. The task detail page 
 - `review.json` visible
 - `evidence.jsonl` visible
 - `tool_audit.jsonl` visible
+- `skill_result.json` visible for the Docs Research Demo
 - Approval decision works for the approval fixture

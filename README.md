@@ -12,6 +12,11 @@ The runtime package is split by responsibility into `runtime/execution`, `runtim
 
 Browser recovery is split into `browser/recovery/classifier`, `planner`, `strategies`, `executor`, and `telemetry`, with `browser/recovery/manager.py` kept as the public facade.
 
+`webscoper/skills/` contains the LangGraph skill layer. The default registry
+currently ships `docs_research`, which reads a local documentation page through
+the normal Browser Runtime and ToolGateway path, then produces evidence-backed
+`final_report.md`, `review.json`, and `skill_result.json` artifacts.
+
 ## Scope
 
 VaniScope does not bypass login, CAPTCHA, or paywalls. It does not enter real accounts, passwords, payment details, or identity documents. Risky actions are blocked or require local approval before execution.
@@ -83,6 +88,7 @@ docs/demo_next_console.md
 webscoper/
   browser/       # Browser Runtime: Playwright session, observation, targeting, effects, recovery, risk signals
   runtime/       # Agent Runtime: execution, artifacts, LLM, prompt, review, safety
+  skills/        # Skill definitions, registry, deterministic router, docs_research skill
   api/           # FastAPI Task API, async tasks, approvals, SSE event stream, artifact access
   eval/          # Browser, planner, reviewer, and workflow regression eval harnesses
   workflows/     # LangGraph backend orchestration modules
@@ -99,6 +105,7 @@ scripts/
   run_planner_eval.py
   run_reviewer_eval.py
   run_workflow_eval.py
+  run_langgraph_eval.py
   smoke_open_page.py
 
 configs/
@@ -107,6 +114,7 @@ configs/
 
 docs/
   runtime_modules.md
+  skills.md
 
 runs/
   .gitkeep
@@ -153,4 +161,12 @@ Tool Gateway eval is LangGraph-first and verifies browser, local deterministic M
 uv run python scripts/run_workflow_eval.py \
   --cases tests/fixtures/tool_gateway_eval_cases.json \
   --output-dir eval_results/tool_gateway_eval_local
+```
+
+Skill eval verifies the `docs_research` MVP with local docs fixtures only:
+
+```bash
+uv run python scripts/run_langgraph_eval.py \
+  --cases tests/fixtures/langgraph_skill_eval_cases.json \
+  --output-dir eval_results/langgraph_skill_eval_local
 ```

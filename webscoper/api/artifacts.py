@@ -23,6 +23,7 @@ ARTIFACT_ALLOWLIST = {
     "final_report.md",
     "review.json",
     "review_summary.md",
+    "skill_result.json",
     "llm_review.json",
     "revision_plan.json",
     "revised_report.md",

@@ -1,0 +1,85 @@
+[
+  {
+    "case_id": "docs_research_install_en",
+    "description": "Docs research answers the English install question from local docs.",
+    "request": {
+      "url": "tests/fixtures/mock_site/docs_research.html",
+      "task_type": "docs_research",
+      "skill_id": "docs_research",
+      "query": "How do I install and run VaniScope?",
+      "expect": "installation steps with evidence",
+      "language": "en"
+    },
+    "expected": {
+      "status": "succeeded",
+      "required_artifacts": [
+        "final_report.md",
+        "evidence.jsonl",
+        "review.json",
+        "skill_result.json",
+        "tool_audit.jsonl"
+      ],
+      "final_report_contains": ["uv sync", "scripts/run_api.py"],
+      "min_evidence_count": 1,
+      "review_passed": true,
+      "skill_status": "success"
+    }
+  },
+  {
+    "case_id": "docs_research_install_zh",
+    "description": "Docs research handles a Chinese install query without external network.",
+    "request": {
+      "url": "tests/fixtures/mock_site/docs_research.html",
+      "task_type": "docs_research",
+      "skill_id": "docs_research",
+      "query": "如何安装并运行 VaniScope？",
+      "language": "zh"
+    },
+    "expected": {
+      "status": "succeeded",
+      "required_artifacts": ["final_report.md", "evidence.jsonl", "review.json", "skill_result.json", "tool_audit.jsonl"],
+      "final_report_contains": ["uv sync", "FastAPI"],
+      "min_evidence_count": 1,
+      "review_passed": true,
+      "skill_status": "success"
+    }
+  },
+  {
+    "case_id": "docs_research_config",
+    "description": "Docs research extracts console API configuration details.",
+    "request": {
+      "url": "tests/fixtures/mock_site/docs_research.html",
+      "task_type": "docs_research",
+      "skill_id": "docs_research",
+      "query": "How do I configure NEXT_PUBLIC_VANISCOPE_API_BASE_URL?",
+      "language": "en"
+    },
+    "expected": {
+      "status": "succeeded",
+      "required_artifacts": ["final_report.md", "evidence.jsonl", "review.json", "skill_result.json", "tool_audit.jsonl"],
+      "final_report_contains": ["NEXT_PUBLIC_VANISCOPE_API_BASE_URL", "http://localhost:8000"],
+      "min_evidence_count": 1,
+      "review_passed": true,
+      "skill_status": "success"
+    }
+  },
+  {
+    "case_id": "docs_research_missing_info",
+    "description": "Docs research reports limitations for missing information.",
+    "request": {
+      "url": "tests/fixtures/mock_site/docs_research.html",
+      "task_type": "docs_research",
+      "skill_id": "docs_research",
+      "query": "What is the production database migration command?",
+      "language": "en"
+    },
+    "expected": {
+      "status": "succeeded",
+      "required_artifacts": ["final_report.md", "evidence.jsonl", "review.json", "skill_result.json", "tool_audit.jsonl"],
+      "final_report_contains": ["not sufficient", "Limitations"],
+      "min_evidence_count": 1,
+      "review_passed": true,
+      "skill_status": "insufficient_info"
+    }
+  }
+]

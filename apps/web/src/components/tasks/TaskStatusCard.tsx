@@ -70,6 +70,32 @@ export function TaskStatusCard({ task, latestEvent }: TaskStatusCardProps) {
           <dd className="mt-1 text-sm">{task.artifacts.length}</dd>
         </div>
       </dl>
+      <dl className="mt-4 grid gap-4 sm:grid-cols-3">
+        <div>
+          <dt className="text-xs font-semibold uppercase text-[var(--muted)]">
+            {t.status.taskType}
+          </dt>
+          <dd className="mt-1 break-words text-sm">
+            {task.task_type ?? t.status.unknown}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs font-semibold uppercase text-[var(--muted)]">
+            {t.status.skillId}
+          </dt>
+          <dd className="mt-1 break-words text-sm">
+            {task.skill_id ?? t.status.unknown}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs font-semibold uppercase text-[var(--muted)]">
+            {t.status.skillStatus}
+          </dt>
+          <dd className="mt-1 break-words text-sm">
+            {task.skill_status ?? t.status.unknown}
+          </dd>
+        </div>
+      </dl>
       {task.error ? (
         <div className="mt-5 rounded-md border border-[#fecdca] bg-[#fef3f2] p-3 text-sm text-[var(--danger)]">
           {task.error}

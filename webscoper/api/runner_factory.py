@@ -41,5 +41,11 @@ def build_api_task(task_id: str, request: TaskCreateRequest) -> TaskSpec:
         url=request.url,
         click=request.click,
         expect=request.expect,
+        task_type=request.task_type or "browser_task",
+        skill_id=request.skill_id,
+        query=request.query,
+        research_goal=request.research_goal,
+        expected_output=request.expect,
+        language=request.language,
         task_id=task_id,
     )

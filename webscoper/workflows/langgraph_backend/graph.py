@@ -17,6 +17,7 @@ def build_langgraph_workflow(*, nodes: Any, checkpointer: Any | None = None):
 
     graph = StateGraph(VaniScopeGraphState)
     graph.add_node("init_task", nodes.init_task)
+    graph.add_node("route_skill", nodes.route_skill)
     graph.add_node("build_prompt", nodes.build_prompt)
     graph.add_node("plan_task", nodes.plan_task)
     graph.add_node("validate_plan", nodes.validate_plan)
@@ -30,6 +31,11 @@ def build_langgraph_workflow(*, nodes: Any, checkpointer: Any | None = None):
     graph.add_edge(START, "init_task")
     graph.add_conditional_edges(
         "init_task",
+        _route_to("route_skill"),
+        ["route_skill", "finalize_task"],
+    )
+    graph.add_conditional_edges(
+        "route_skill",
         _route_to("build_prompt"),
         ["build_prompt", "finalize_task"],
     )

@@ -6,6 +6,7 @@ from webscoper.schemas.runtime import (
     AgentsMdInstruction,
     PromptBuildResult,
     RuntimeReminder,
+    SkillPromptContext,
 )
 from webscoper.schemas.tool import ToolSpec
 from webscoper.tools.registry import ToolRegistry
@@ -20,6 +21,7 @@ class DynamicPromptBuilder:
         context: WebAgentContextSnapshot,
         agents_md_instructions: list[AgentsMdInstruction] | None = None,
         runtime_reminders: list[RuntimeReminder] | None = None,
+        skill: SkillPromptContext | None = None,
         context_pack: ContextPack | None = None,
     ) -> PromptBuildResult:
         agents_md_instructions = agents_md_instructions or []
@@ -30,6 +32,7 @@ class DynamicPromptBuilder:
             "identity": _identity_section(),
             "task": _task_section(context),
             "safety": _safety_section(context),
+            "skill_instruction": _skill_instruction_section(skill),
             "permission_mode": context.safety.mode,
             "runtime_version": _runtime_version_section(context),
             "core_tools": _core_tools_section(catalog.core_tools),
@@ -42,6 +45,7 @@ class DynamicPromptBuilder:
             "identity",
             "task",
             "safety",
+            "skill_instruction",
             "permission_mode",
             "runtime_version",
             "core_tools",
@@ -63,6 +67,7 @@ class DynamicPromptBuilder:
             ],
             core_tool_ids=[tool.tool_id for tool in catalog.core_tools],
             lazy_tool_ids=[tool.tool_id for tool in catalog.lazy_tools],
+            skill=skill,
             compact_context_metadata=context_pack.model_dump(mode="json")
             if context_pack is not None
             else None,
@@ -81,7 +86,12 @@ def _task_section(context: WebAgentContextSnapshot) -> str:
         f"- task_id: {task.task_id}",
         f"- raw_input: {task.raw_input}",
         f"- task_type: {task.task_type}",
+        f"- skill_id: {task.skill_id or 'none'}",
         f"- target_url: {task.target_url}",
+        f"- query: {task.query or 'none'}",
+        f"- research_goal: {task.research_goal or 'none'}",
+        f"- expected_output: {task.expected_output or 'none'}",
+        f"- language: {task.language}",
         f"- require_evidence: {task.require_evidence}",
         f"- tags: {', '.join(task.tags) if task.tags else 'none'}",
     ]
@@ -98,6 +108,40 @@ def _task_section(context: WebAgentContextSnapshot) -> str:
                 f"  - expected_value: {expected_effect.value or 'none'}",
             ]
         )
+    return "\n".join(lines)
+
+
+def _skill_instruction_section(skill: SkillPromptContext | None) -> str:
+    lines = ["# Skill Instruction", ""]
+    if skill is None:
+        lines.append("No skill selected; execute as a general browser task.")
+        return "\n".join(lines)
+
+    lines.extend(
+        [
+            f"- skill_id: {skill.skill_id}",
+            f"- name: {skill.name}",
+            f"- version: {skill.version}",
+            f"- description: {skill.description}",
+            "",
+            skill.instruction.strip(),
+        ]
+    )
+    if skill.plan is not None:
+        lines.extend(["", "## Skill Plan", ""])
+        objective = skill.plan.get("objective")
+        if objective:
+            lines.append(f"- objective: {objective}")
+        steps = skill.plan.get("steps")
+        if isinstance(steps, list) and steps:
+            lines.append("- steps:")
+            for step in steps:
+                lines.append(f"  - {step}")
+        required_evidence = skill.plan.get("required_evidence")
+        if isinstance(required_evidence, list) and required_evidence:
+            lines.append("- required_evidence:")
+            for item in required_evidence:
+                lines.append(f"  - {item}")
     return "\n".join(lines)
 
 

@@ -26,6 +26,11 @@ class TaskCreateRequest(BaseModel):
     url: str
     click: str | None = None
     expect: str | None = None
+    skill_id: str | None = None
+    task_type: str | None = None
+    query: str | None = None
+    research_goal: str | None = None
+    language: str = "auto"
     planner: PlannerMode = "deterministic"
     workflow: WorkflowBackend = "langgraph"
     reviewer: ReviewerMode = "deterministic"
@@ -51,6 +56,8 @@ class TaskCreateResponse(BaseModel):
     ]
     run_dir: str
     artifacts: list[str] = Field(default_factory=list)
+    skill_id: str | None = None
+    task_type: str | None = None
     error: str | None = None
 
 
@@ -64,6 +71,9 @@ class TaskStatusResponse(BaseModel):
     updated_at: str | None = None
     current_step: int | None = None
     current_phase: str | None = None
+    skill_id: str | None = None
+    task_type: str | None = None
+    skill_status: str | None = None
 
 
 class TaskArtifactListResponse(BaseModel):

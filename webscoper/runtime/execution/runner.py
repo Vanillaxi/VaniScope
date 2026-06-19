@@ -21,6 +21,11 @@ def run_browser_task_sync(
     url: str,
     click: str | None = None,
     expect: str | None = None,
+    task_type: str = "browser_task",
+    skill_id: str | None = None,
+    query: str | None = None,
+    research_goal: str | None = None,
+    language: str = "auto",
     planner: str = "deterministic",
     workspace: str | Path | None = None,
     reminders: list[str] | None = None,
@@ -39,6 +44,11 @@ def run_browser_task_sync(
         url=url,
         click=click,
         expect=expect,
+        task_type=task_type,
+        skill_id=skill_id,
+        query=query,
+        research_goal=research_goal,
+        language=language,
         task_id=task_id,
     )
     reminder_store = RuntimeReminderStore()
@@ -111,12 +121,26 @@ def build_task_spec(
     url: str,
     click: str | None = None,
     expect: str | None = None,
+    task_type: str = "browser_task",
+    skill_id: str | None = None,
+    query: str | None = None,
+    research_goal: str | None = None,
+    expected_output: str | None = None,
+    constraints: list[str] | None = None,
+    language: str = "auto",
     task_id: str = "cli_task",
 ) -> TaskSpec:
     return TaskSpec(
         task_id=task_id,
-        raw_input=raw_input(url, click, expect),
+        raw_input=raw_input(url, click, expect, query or research_goal),
+        task_type=task_type,
+        skill_id=skill_id,
         target_url=as_url(url),
+        query=query,
+        research_goal=research_goal,
+        expected_output=expected_output,
+        constraints=constraints or [],
+        language=language,
         action=action(click, expect) if click else None,
         expected_effect=expected_effect(expect) if expect else None,
         tags=["cli"],
@@ -147,12 +171,19 @@ def as_url(value: str) -> str:
     return Path(value).resolve().as_uri()
 
 
-def raw_input(url: str, click: str | None, expect: str | None) -> str:
+def raw_input(
+    url: str,
+    click: str | None,
+    expect: str | None,
+    query: str | None = None,
+) -> str:
     parts = [f"Open {url}"]
     if click:
         parts.append(f"click {click}")
     if expect:
         parts.append(f"expect {expect}")
+    if query:
+        parts.append(f"query {query}")
     return "; ".join(parts)
 
 

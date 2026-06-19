@@ -43,6 +43,30 @@ class ReportReviewer:
                 location="report",
             )
 
+        if task_spec is not None and task_spec.skill_id == "docs_research":
+            if "## Source URL" not in report_markdown:
+                builder.add(
+                    severity="error",
+                    issue_type="missing_source_url_section",
+                    message="Docs research report is missing the ## Source URL section.",
+                    location="report",
+                )
+            if not _has_source_url(report_markdown, evidence_items, task_spec.target_url):
+                builder.add(
+                    severity="error",
+                    issue_type="missing_source_url",
+                    message="Docs research report does not include the source URL.",
+                    location="## Source URL",
+                )
+            query = task_spec.query or task_spec.research_goal
+            if query and not _contains_query_terms(query, report_markdown, evidence_items):
+                builder.add(
+                    severity="warning",
+                    issue_type="query_not_answered",
+                    message=f"Report does not appear to answer query: {query}.",
+                    location="report",
+                )
+
         for evidence_id in referenced_ids:
             if evidence_id not in evidence_ids:
                 builder.add(
@@ -88,6 +112,7 @@ class ReportReviewer:
             metadata={
                 "evidence_count": len(evidence_items),
                 "referenced_evidence_ids": referenced_ids,
+                "skill_id": task_spec.skill_id if task_spec is not None else None,
             },
         )
 
@@ -237,6 +262,36 @@ def _contains_expected(
     if needle in report_markdown.lower():
         return True
     return any(needle in (item.text or "").lower() for item in evidence_items)
+
+
+def _has_source_url(
+    report_markdown: str,
+    evidence_items: list[EvidenceItem],
+    target_url: str,
+) -> bool:
+    candidates = {target_url}
+    candidates.update(item.source_url for item in evidence_items if item.source_url)
+    return any(candidate and candidate in report_markdown for candidate in candidates)
+
+
+def _contains_query_terms(
+    query: str,
+    report_markdown: str,
+    evidence_items: list[EvidenceItem],
+) -> bool:
+    terms = _query_terms(query)
+    if not terms:
+        return True
+    text = report_markdown.lower() + "\n" + "\n".join(
+        (item.text or "").lower() for item in evidence_items
+    )
+    return any(term in text for term in terms)
+
+
+def _query_terms(query: str) -> set[str]:
+    terms = re.findall(r"[a-zA-Z0-9_]+|[\u4e00-\u9fff]{2,}", query.lower())
+    stop = {"how", "do", "i", "the", "and", "run", "with", "what", "does", "如何"}
+    return {term for term in terms if len(term) > 1 and term not in stop}
 
 
 def _score(issues: list[ReviewIssue]) -> float:

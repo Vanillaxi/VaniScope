@@ -8,6 +8,7 @@ from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.runtime.artifacts.transcript import TranscriptStore
 from webscoper.schemas.runtime import (
     RuntimeState,
+    SkillPromptContext,
     TraceContext,
     VersionContext,
     WebAgentContextSnapshot,
@@ -25,6 +26,7 @@ class WebAgentContext:
     version: VersionContext
     state: RuntimeState
     evidence_store: EvidenceStore | None = None
+    skill_context: SkillPromptContext | None = None
 
     def snapshot(self) -> WebAgentContextSnapshot:
         return WebAgentContextSnapshot(

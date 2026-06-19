@@ -88,6 +88,11 @@ class WorkflowEvalRequest(BaseModel):
     url: str
     click: str | None = None
     expect: str | None = None
+    task_type: str = "browser_task"
+    skill_id: str | None = None
+    query: str | None = None
+    research_goal: str | None = None
+    language: str = "auto"
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     planner: str = "deterministic"
     reviewer: str = "deterministic"
@@ -111,6 +116,9 @@ class WorkflowEvalExpected(BaseModel):
     expected_risk_status: str | None = None
     expected_risk_decision: str | None = None
     simulate_approval_decision: Literal["approved", "rejected"] | None = None
+    final_report_contains: list[str] = Field(default_factory=list)
+    min_evidence_count: int | None = None
+    skill_status: str | None = None
 
 
 class WorkflowEvalCase(BaseModel):

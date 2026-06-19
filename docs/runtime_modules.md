@@ -2,6 +2,11 @@
 
 This document is a lightweight boundary map for `webscoper/runtime/`. The runtime package is split by responsibility into execution, artifacts, LLM, prompt, review, and safety subpackages. Project code imports these package paths directly.
 
+The skill layer lives outside runtime in `webscoper/skills/`. Skills are
+LangGraph task capabilities, not a separate workflow backend. They select
+instructions, plans, and skill metadata while the workflow still executes
+through Browser Runtime and ToolGateway.
+
 ## Execution-Related Modules
 
 - `execution/handler.py` owns the high-level agent execution handler: context creation, prompt building, planning, validation, tool-loop execution, and artifact finalization.
@@ -38,6 +43,8 @@ Gateway providers currently include:
 - `artifacts/evidence.py` manages `evidence.jsonl` and evidence context packs.
 - `artifacts/report.py` builds `final_report.md`.
 - `artifacts/compaction.py` creates `compact_context.json` and `compact_summary.md`.
+- Skill-aware artifact persistence also writes `skill_result.json` for selected
+  skills such as `docs_research`.
 
 ## Review And Revision Modules
 
@@ -55,6 +62,8 @@ Gateway providers currently include:
 
 - `context.py` defines runtime context snapshots and run state.
 - `prompt/builder.py` builds planner prompts from task context, tool schemas, reminders, compacted context, and AGENTS.md instructions.
+- Skill instructions are injected by `prompt/builder.py` before tool
+  instructions when LangGraph routes a task to a skill.
 - `prompt/agents_md.py` loads workspace instructions.
 - `prompt/reminders.py` stores runtime reminders.
 
@@ -67,6 +76,11 @@ LangGraph is the only workflow orchestration backend. `webscoper/runtime/` stays
 Workflow eval lives in `webscoper/eval/workflow_eval.py` and is LangGraph-only. The eval runner records status, artifacts, review, evidence, recovery, approval, risk, audit, and event behavior without changing runtime semantics.
 
 The workflow eval schema supports `case_type` values of `workflow`, `recovery`, `approval`, and `tool_gateway`. Recovery cases assert expected recovery strategies and error types from `recovery.jsonl`. Approval cases assert RiskGate decisions, approval-required/task-paused events, approve/reject resume outcomes, and persisted `approvals.jsonl`, `pending.jsonl`, `events.jsonl`, and `risk_report.json` artifacts. Tool Gateway cases assert LangGraph gateway provider, decision, status, risk level, workflow backend, and audit behavior. `tests/fixtures/langgraph_main_eval_cases.json` is the main LangGraph matrix; `tests/fixtures/tool_gateway_eval_cases.json` is the gateway matrix. Eval cases are guarded to use local fixture URLs and non-real planner/reviewer modes, so pytest and eval runs do not access real network targets or real LLM providers.
+
+`tests/fixtures/langgraph_skill_eval_cases.json` covers the `docs_research`
+skill with the local `tests/fixtures/mock_site/docs_research.html` page. It
+checks `final_report.md`, `evidence.jsonl`, `review.json`, `skill_result.json`,
+and `tool_audit.jsonl` without real network or real LLM calls.
 
 ## Control Console Boundary
 

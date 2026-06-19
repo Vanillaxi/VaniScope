@@ -121,11 +121,21 @@ class RuntimeReminder(BaseModel):
     source: str = "runtime"
 
 
+class SkillPromptContext(BaseModel):
+    skill_id: str
+    name: str
+    description: str
+    version: str
+    instruction: str
+    plan: dict[str, Any] | None = None
+
+
 class PromptBuildInput(BaseModel):
     identity: str
     task_summary: str
     safety_policy: str
     permission_mode: str
+    skill: SkillPromptContext | None = None
     agents_md_instructions: list[AgentsMdInstruction] = Field(default_factory=list)
     runtime_reminders: list[RuntimeReminder] = Field(default_factory=list)
 
@@ -136,6 +146,7 @@ class PromptBuildResult(BaseModel):
     loaded_agents_md_paths: list[str] = Field(default_factory=list)
     core_tool_ids: list[str] = Field(default_factory=list)
     lazy_tool_ids: list[str] = Field(default_factory=list)
+    skill: SkillPromptContext | None = None
     compact_context_metadata: dict[str, Any] | None = None
 
 
