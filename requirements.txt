@@ -1,4 +1,0 @@
-playwright
-pydantic
-pytest
-pytest-asyncio

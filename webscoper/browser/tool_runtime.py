@@ -8,14 +8,18 @@ from playwright.async_api import Page
 from webscoper.browser.actions import ActionExecutor
 from webscoper.browser.effects import EffectVerifier
 from webscoper.browser.observer import observe_page
+from webscoper.browser.readiness import (
+    PageReadinessDetector,
+    wait_after_navigation_or_action,
+)
 from webscoper.browser.recovery import RecoveryManager
 from webscoper.browser.session import BrowserSession
 from webscoper.runtime.execution.events import TaskEventSink
 from webscoper.runtime.artifacts.evidence import EvidenceStore
 from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.runtime.artifacts.transcript import TranscriptStore
-from webscoper.schemas.browser import ActionContract
-from webscoper.schemas.browser import PageObservation
+from webscoper.schemas.browser import ActionContract, EffectVerificationResult
+from webscoper.schemas.browser import PageObservation, ReadinessResult
 from webscoper.schemas.artifact import TraceStep
 
 
@@ -37,7 +41,8 @@ class StatefulBrowserToolRuntime:
         self.session: BrowserSession | None = None
         self.page: Page | None = None
         self.last_observation: PageObservation | None = None
-        self.action_executor = ActionExecutor()
+        self.readiness_detector = PageReadinessDetector()
+        self.action_executor = ActionExecutor(readiness_detector=self.readiness_detector)
         self.effect_verifier = EffectVerifier()
         self.recovery_manager = recovery_manager or RecoveryManager()
         self._step_index = 0
@@ -65,8 +70,16 @@ class StatefulBrowserToolRuntime:
 
         try:
             page = self._require_page()
-            await page.goto(url, wait_until="domcontentloaded")
+            await page.goto(url, wait_until="domcontentloaded", timeout=8000)
+            readiness = await self._wait_and_record_readiness(
+                page,
+                action_type="readiness_check",
+                url_before=None,
+                target_hint=None,
+                timeout_ms=4000,
+            )
             observation = await observe_page(page, screenshot_path=screenshot_path)
+            observation.metadata["readiness"] = readiness.model_dump(mode="json")
             page_url = observation.url
             self.last_observation = observation
             self.trace_recorder.record(
@@ -131,13 +144,22 @@ class StatefulBrowserToolRuntime:
             )
         )
 
+        transition_readiness = await self._wait_and_record_readiness(
+            page,
+            action_type="post_action_readiness",
+            url_before=action_result.url_before,
+            target_hint=None,
+            timeout_ms=3500,
+        )
+
         verify_step_id = self._next_step_id()
         verify_start = perf_counter()
-        verification_result = await self.effect_verifier.verify(
-            page,
-            expected=action.expected_effect,
-            url_before=action_result.url_before,
+        verification_result = await self._verify_after_transition(
+            page=page,
+            action=action,
+            action_result=action_result,
             body_text_before=body_text_before,
+            initial_readiness=transition_readiness,
         )
         self.trace_recorder.record(
             TraceStep(
@@ -150,7 +172,10 @@ class StatefulBrowserToolRuntime:
                 url_before=verification_result.url_before,
                 url_after=verification_result.url_after,
                 title=await _safe_title(page),
-                observation=verification_result.model_dump(mode="json"),
+                observation={
+                    **verification_result.model_dump(mode="json"),
+                    "transition_readiness": transition_readiness.model_dump(mode="json"),
+                },
                 error_type=verification_result.error_type,
                 error_message=verification_result.message
                 if not verification_result.satisfied
@@ -220,6 +245,9 @@ class StatefulBrowserToolRuntime:
         observe_start = perf_counter()
         screenshot_path = self.trace_recorder.run_dir / f"{observe_step_id}_after_click.png"
         observation = await observe_page(page, screenshot_path=screenshot_path)
+        observation.metadata["readiness"] = (
+            await self.readiness_detector.wait_for_readiness(page, timeout_ms=1000)
+        ).model_dump(mode="json")
         self.last_observation = observation
         self.trace_recorder.record(
             TraceStep(
@@ -282,6 +310,12 @@ class StatefulBrowserToolRuntime:
         step_id = self._next_step_id()
         try:
             observation = await observe_page(self.page)
+            observation.metadata["readiness"] = (
+                await self.readiness_detector.wait_for_readiness(
+                    self.page,
+                    timeout_ms=1000,
+                )
+            ).model_dump(mode="json")
             self.last_observation = observation
             output = _observation_extract(observation)
             self.trace_recorder.record(
@@ -333,6 +367,113 @@ class StatefulBrowserToolRuntime:
             raise RuntimeError("Browser tool runtime has not been started.")
         return self.page
 
+    async def _wait_and_record_readiness(
+        self,
+        page: Page,
+        *,
+        action_type: str,
+        url_before: str | None,
+        target_hint: str | None,
+        timeout_ms: int,
+    ) -> ReadinessResult:
+        start = perf_counter()
+        readiness = await wait_after_navigation_or_action(
+            page,
+            target_hint=target_hint,
+            timeout_ms=timeout_ms,
+        )
+        self.trace_recorder.record(
+            TraceStep(
+                step_id=self._next_step_id(),
+                run_id=self.trace_recorder.run_id,
+                phase="browser_tool_runtime",
+                actor="tool",
+                action_type=action_type,
+                status=readiness.status,
+                url_before=url_before,
+                url_after=page.url,
+                title=await _safe_title(page),
+                observation={"readiness": readiness.model_dump(mode="json")},
+                error_type=_readiness_error_type(readiness),
+                error_message="; ".join(readiness.warnings) if readiness.warnings else None,
+                latency_ms=_elapsed_ms(start),
+            )
+        )
+        if self.event_sink is not None:
+            try:
+                self.event_sink(
+                    "readiness_check",
+                    "Browser readiness checked",
+                    {
+                        "status": readiness.status,
+                        "confidence": readiness.confidence,
+                        "warnings": readiness.warnings,
+                        "signals": readiness.signals,
+                    },
+                )
+            except Exception:
+                pass
+        return readiness
+
+    async def _verify_after_transition(
+        self,
+        *,
+        page: Page,
+        action: ActionContract,
+        action_result,
+        body_text_before: str,
+        initial_readiness: ReadinessResult,
+    ) -> EffectVerificationResult:
+        metadata_attempts = [
+            {
+                "kind": "initial_readiness",
+                "readiness": initial_readiness.model_dump(mode="json"),
+            }
+        ]
+        result = await self.effect_verifier.verify(
+            page,
+            expected=action.expected_effect,
+            url_before=action_result.url_before,
+            body_text_before=body_text_before,
+            timeout_ms=1800,
+        )
+        if result.satisfied:
+            return result
+
+        for attempt in range(1, 3):
+            readiness = await self.readiness_detector.wait_for_readiness(
+                page,
+                timeout_ms=1800,
+            )
+            await observe_page(page)
+            result = await self.effect_verifier.verify(
+                page,
+                expected=action.expected_effect,
+                url_before=action_result.url_before,
+                body_text_before=body_text_before,
+                timeout_ms=1200,
+            )
+            metadata_attempts.append(
+                {
+                    "kind": "wait_and_reobserve",
+                    "attempt": attempt,
+                    "readiness": readiness.model_dump(mode="json"),
+                    "verification": result.model_dump(mode="json"),
+                }
+            )
+            if result.satisfied:
+                return result
+
+        error_type = "ACTION_NO_EFFECT_AFTER_TRANSITION"
+        if not initial_readiness.signals.get("text_stable", True):
+            error_type = "POSTCONDITION_STILL_PENDING"
+        return result.model_copy(
+            update={
+                "error_type": error_type,
+                "message": result.message or "Expected effect was still pending after transition waits.",
+            }
+        )
+
     def _next_step_id(self) -> str:
         self._step_index += 1
         return f"step_{self._step_index:03d}"
@@ -383,6 +524,31 @@ def _observation_extract(observation: PageObservation) -> dict[str, Any]:
         "interactive_elements_count": len(observation.interactive_elements),
         "risk_signals_count": len(observation.risk_signals),
     }
+
+
+def _readiness_error_type(readiness: ReadinessResult) -> str | None:
+    if readiness.status == "ready":
+        return None
+    signals = readiness.signals
+    if not signals.get("overlay_absent", True):
+        return "OVERLAY_BLOCKING_ACTION"
+    if not signals.get("spinner_absent", True):
+        return "PAGE_STILL_LOADING"
+    if not signals.get("skeleton_absent", True):
+        return "TARGET_HYDRATING"
+    if not signals.get("target_visible", True):
+        return "TARGET_NOT_READY"
+    if not signals.get("target_enabled", True):
+        return "TARGET_DISABLED_PENDING_HYDRATION"
+    if not signals.get("text_stable", True):
+        return "CONTENT_STABILITY_TIMEOUT"
+    if not signals.get("soft_network_quiet", True):
+        return "NETWORK_QUIET_TIMEOUT"
+    if readiness.status == "timeout":
+        return "PAGE_LOADING_TIMEOUT"
+    if readiness.status == "loading":
+        return "PAGE_STILL_LOADING"
+    return None
 
 
 async def _body_text(page: Page) -> str:

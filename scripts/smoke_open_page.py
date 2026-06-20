@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from webscoper.browser.legacy_runtime import BrowserRuntime
+from webscoper.browser.tool_runtime import StatefulBrowserToolRuntime
 from webscoper.runtime.artifacts.trace import TraceRecorder
 
 
@@ -26,9 +26,16 @@ async def main() -> None:
     run_id = f"run_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
     run_dir = Path("traces") / run_id
     recorder = TraceRecorder(run_dir=run_dir, run_id=run_id)
-    runtime = BrowserRuntime(trace_recorder=recorder, headless=not args.headed)
+    runtime = StatefulBrowserToolRuntime(
+        trace_recorder=recorder,
+        headless=not args.headed,
+    )
 
-    observation = await runtime.open_and_observe(args.url)
+    await runtime.start()
+    try:
+        observation = await runtime.open_observe(args.url)
+    finally:
+        await runtime.close()
 
     print(f"run_id: {run_id}")
     print(f"url: {observation.url}")

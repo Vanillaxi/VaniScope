@@ -29,6 +29,23 @@ class RecoveryClassifier:
                 getattr(action_result, "error_message", None)
             )
             combined = f"{action_error} {action_message}".strip()
+            if "page loading timeout" in combined:
+                return RecoveryErrorType.PAGE_LOADING_TIMEOUT
+            if "page still loading" in combined or "spinner" in combined:
+                return RecoveryErrorType.PAGE_STILL_LOADING
+            if "target not ready" in combined:
+                return RecoveryErrorType.TARGET_NOT_READY
+            if "target hydrating" in combined or "skeleton" in combined:
+                return RecoveryErrorType.TARGET_HYDRATING
+            if (
+                "target disabled pending hydration" in combined
+                or "hydration" in combined
+            ):
+                return RecoveryErrorType.TARGET_DISABLED_PENDING_HYDRATION
+            if "target covered by overlay" in combined:
+                return RecoveryErrorType.TARGET_COVERED_BY_OVERLAY
+            if "overlay blocking action" in combined:
+                return RecoveryErrorType.OVERLAY_BLOCKING_ACTION
             if "target_not_found" in action_error or "target not found" in combined:
                 return RecoveryErrorType.TARGET_NOT_FOUND
             if "target_ambiguous" in action_error or "ambiguous" in combined:
@@ -50,9 +67,15 @@ class RecoveryClassifier:
                     getattr(verification_result, "message", None)
                 )
                 if "timeout" in error_type or "timeout" in message:
+                    if "content" in message:
+                        return RecoveryErrorType.CONTENT_STABILITY_TIMEOUT
                     return RecoveryErrorType.NAVIGATION_TIMEOUT
                 if "no url or page text change" in message:
                     return RecoveryErrorType.ACTION_NO_EFFECT
+                if "action no effect after transition" in error_type:
+                    return RecoveryErrorType.ACTION_NO_EFFECT_AFTER_TRANSITION
+                if "postcondition still pending" in error_type:
+                    return RecoveryErrorType.POSTCONDITION_STILL_PENDING
                 return RecoveryErrorType.POSTCONDITION_FAILED
 
         if error is not None:

@@ -92,6 +92,16 @@ class PageObservation(BaseModel):
     interactive_elements: list[InteractiveElement]
     risk_signals: list[RiskSignal]
     screenshot_path: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReadinessResult(BaseModel):
+    status: Literal["ready", "loading", "degraded_ready", "timeout"]
+    confidence: float
+    signals: dict[str, bool] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+    elapsed_ms: int
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 _RECOVERY_ID_COUNTER = count(1)
@@ -105,6 +115,19 @@ class RecoveryErrorType(StrEnum):
     ACTION_NO_EFFECT = "action_no_effect"
     POSTCONDITION_FAILED = "postcondition_failed"
     NAVIGATION_TIMEOUT = "navigation_timeout"
+    PAGE_LOADING_TIMEOUT = "page_loading_timeout"
+    PAGE_STILL_LOADING = "page_still_loading"
+    TARGET_NOT_READY = "target_not_ready"
+    TARGET_HYDRATING = "target_hydrating"
+    TARGET_DISABLED_PENDING_HYDRATION = "target_disabled_pending_hydration"
+    TARGET_COVERED_BY_OVERLAY = "target_covered_by_overlay"
+    SPA_ROUTE_PENDING = "spa_route_pending"
+    CONTENT_STABILITY_TIMEOUT = "content_stability_timeout"
+    NETWORK_QUIET_TIMEOUT = "network_quiet_timeout"
+    ACTION_NO_EFFECT_AFTER_TRANSITION = "action_no_effect_after_transition"
+    POSTCONDITION_STILL_PENDING = "postcondition_still_pending"
+    LAZY_CONTENT_NOT_LOADED = "lazy_content_not_loaded"
+    OVERLAY_BLOCKING_ACTION = "overlay_blocking_action"
     LAZY_CONTENT_NOT_READY = "lazy_content_not_ready"
     LOGIN_REQUIRED = "login_required"
     CAPTCHA_DETECTED = "captcha_detected"
@@ -114,9 +137,13 @@ class RecoveryErrorType(StrEnum):
 
 class RecoveryStrategy(StrEnum):
     WAIT_AND_REOBSERVE = "wait_and_reobserve"
+    RETRY_AFTER_READY = "retry_after_ready"
     SCROLL_AND_REOBSERVE = "scroll_and_reobserve"
+    RE_RESOLVE_TARGET = "re_resolve_target"
     RETRY_SAME_TARGET = "retry_same_target"
     RETRY_ALTERNATIVE_TARGET = "retry_alternative_target"
+    CLICK_AFTER_OVERLAY_GONE = "click_after_overlay_gone"
+    DEGRADED_EXTRACT = "degraded_extract"
     CLOSE_MODAL_IF_SAFE = "close_modal_if_safe"
     OPEN_HREF_DIRECTLY = "open_href_directly"
     ABORT_AS_BLOCKED = "abort_as_blocked"

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import builtins
+import json
 from pathlib import Path
 
 from webscoper.runtime.execution.runner import run_browser_task_sync

@@ -3,7 +3,7 @@ from pathlib import Path
 
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.runtime.execution.runner import build_task_spec
-from webscoper.workflows.langgraph_adapter import LangGraphWorkflowAdapter
+from webscoper.workflows import LangGraphWorkflowAdapter
 
 
 def test_github_issue_research_skill_generates_structured_artifacts(

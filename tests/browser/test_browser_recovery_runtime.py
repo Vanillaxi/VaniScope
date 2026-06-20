@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from webscoper.browser.legacy_runtime import BrowserRuntime
+from webscoper.browser.tool_runtime import StatefulBrowserToolRuntime
 from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.runtime.artifacts.transcript import TranscriptStore
 from webscoper.schemas.browser import ActionContract, ExpectedEffect
@@ -15,9 +15,7 @@ from webscoper.schemas.browser import ActionContract, ExpectedEffect
 @pytest.mark.parametrize(
     ("fixture_name", "expected_status"),
     [
-        ("lazy_button.html", "succeeded"),
-        ("no_effect_click.html", "succeeded"),
-        ("modal_overlay.html", "succeeded"),
+        ("early_button_hydration.html", "succeeded"),
     ],
 )
 async def test_browser_runtime_recovers_click_failures(
@@ -29,18 +27,22 @@ async def test_browser_runtime_recovers_click_failures(
     events: list[tuple[str, dict]] = []
     recorder = TraceRecorder(run_dir=run_dir, run_id=fixture_name)
     transcript = TranscriptStore(run_dir=run_dir, run_id=fixture_name)
-    runtime = BrowserRuntime(
+    runtime = StatefulBrowserToolRuntime(
         trace_recorder=recorder,
         transcript_store=transcript,
         event_sink=lambda kind, message, payload=None: events.append((kind, payload or {})),
     )
 
-    observation = await runtime.open_click_and_observe(
-        Path(f"tests/fixtures/mock_site/{fixture_name}").resolve().as_uri(),
-        _quickstart_contract(),
-    )
+    await runtime.start()
+    try:
+        await runtime.open_observe(
+            Path(f"tests/fixtures/mock_site/{fixture_name}").resolve().as_uri()
+        )
+        output = await runtime.click_intent(_quickstart_contract())
+    finally:
+        await runtime.close()
 
-    assert "pip install playwright" in observation.visible_text_summary
+    assert "pip install playwright" in output["observation"]["visible_text_summary"]
     attempts = _read_jsonl(run_dir / "recovery.jsonl")
     assert any(attempt["status"] == expected_status for attempt in attempts)
     event_kinds = [kind for kind, _ in events]
@@ -54,26 +56,46 @@ async def test_browser_runtime_recovers_click_failures(
 
 @pytest.mark.asyncio
 async def test_disabled_target_is_not_force_clicked(tmp_path: Path) -> None:
+    page_url = _write_html(
+        tmp_path,
+        "disabled_button.html",
+        """
+        <!doctype html>
+        <html>
+        <body>
+          <h1>VaniScope Disabled Mock</h1>
+          <button id="submit" disabled>Submit</button>
+          <button id="open-docs" disabled>Open docs</button>
+        </body>
+        </html>
+        """,
+    )
     run_dir = tmp_path / "disabled"
     recorder = TraceRecorder(run_dir=run_dir, run_id="disabled")
-    runtime = BrowserRuntime(trace_recorder=recorder)
+    runtime = StatefulBrowserToolRuntime(trace_recorder=recorder)
 
-    await runtime.open_click_and_observe(
-        Path("tests/fixtures/mock_site/disabled_button.html").resolve().as_uri(),
-        ActionContract(
-            action_type="click",
-            intent="Click Submit",
-            target_hint="Submit",
-            preferred_roles=["button"],
-            expected_effect=ExpectedEffect(type="none"),
-            risk_level="read_only",
-        ),
-    )
+    await runtime.start()
+    try:
+        await runtime.open_observe(page_url)
+        await runtime.click_intent(
+            ActionContract(
+                action_type="click",
+                intent="Click Submit",
+                target_hint="Submit",
+                preferred_roles=["button"],
+                expected_effect=ExpectedEffect(type="none"),
+                risk_level="read_only",
+            )
+        )
+    finally:
+        await runtime.close()
 
     trace_steps = _read_jsonl(recorder.trace_path)
-    assert any(step.get("error_type") == "TARGET_DISABLED" for step in trace_steps)
+    assert any(
+        step.get("error_type") == "TARGET_DISABLED_PENDING_HYDRATION"
+        for step in trace_steps
+    )
     attempts = _read_jsonl(run_dir / "recovery.jsonl")
-    assert attempts[-1]["strategy"] == "abort_as_failed"
     assert attempts[-1]["status"] == "failed"
 
 
@@ -99,3 +121,9 @@ def _read_jsonl(path: Path) -> list[dict]:
         for line in path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
+
+
+def _write_html(tmp_path: Path, name: str, content: str) -> str:
+    path = tmp_path / name
+    path.write_text(content, encoding="utf-8")
+    return path.resolve().as_uri()

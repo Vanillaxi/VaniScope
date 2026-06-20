@@ -32,6 +32,29 @@ class RecoveryPlanner:
         elif error_type == RecoveryErrorType.TARGET_DISABLED:
             strategies = [RecoveryStrategy.ABORT_AS_FAILED]
             reason = "Disabled targets are not safe to force-click."
+        elif error_type == RecoveryErrorType.TARGET_DISABLED_PENDING_HYDRATION:
+            strategies = [
+                RecoveryStrategy.WAIT_AND_REOBSERVE,
+                RecoveryStrategy.RETRY_AFTER_READY,
+                RecoveryStrategy.RE_RESOLVE_TARGET,
+            ]
+            reason = "Target is disabled while hydration completes; wait until ready, then retry."
+        elif error_type in {
+            RecoveryErrorType.PAGE_LOADING_TIMEOUT,
+            RecoveryErrorType.PAGE_STILL_LOADING,
+            RecoveryErrorType.TARGET_NOT_READY,
+            RecoveryErrorType.TARGET_HYDRATING,
+            RecoveryErrorType.SPA_ROUTE_PENDING,
+            RecoveryErrorType.CONTENT_STABILITY_TIMEOUT,
+            RecoveryErrorType.NETWORK_QUIET_TIMEOUT,
+            RecoveryErrorType.POSTCONDITION_STILL_PENDING,
+        }:
+            strategies = [
+                RecoveryStrategy.WAIT_AND_REOBSERVE,
+                RecoveryStrategy.RETRY_AFTER_READY,
+                RecoveryStrategy.RE_RESOLVE_TARGET,
+            ]
+            reason = "Page or target is still settling; wait for readiness and retry safely."
         elif error_type == RecoveryErrorType.TARGET_COVERED:
             strategies = [
                 RecoveryStrategy.CLOSE_MODAL_IF_SAFE,
@@ -40,7 +63,18 @@ class RecoveryPlanner:
             ]
             reason = "Target appears covered; close safe modal controls before retrying."
         elif error_type in {
+            RecoveryErrorType.TARGET_COVERED_BY_OVERLAY,
+            RecoveryErrorType.OVERLAY_BLOCKING_ACTION,
+        }:
+            strategies = [
+                RecoveryStrategy.CLICK_AFTER_OVERLAY_GONE,
+                RecoveryStrategy.CLOSE_MODAL_IF_SAFE,
+                RecoveryStrategy.RETRY_AFTER_READY,
+            ]
+            reason = "A blocking overlay is present; wait for it to disappear or close a safe modal control."
+        elif error_type in {
             RecoveryErrorType.ACTION_NO_EFFECT,
+            RecoveryErrorType.ACTION_NO_EFFECT_AFTER_TRANSITION,
             RecoveryErrorType.POSTCONDITION_FAILED,
         }:
             strategies = [
@@ -49,6 +83,16 @@ class RecoveryPlanner:
                 RecoveryStrategy.RETRY_ALTERNATIVE_TARGET,
             ]
             reason = "Action completed but expected effect was not observed."
+        elif error_type in {
+            RecoveryErrorType.LAZY_CONTENT_NOT_LOADED,
+            RecoveryErrorType.LAZY_CONTENT_NOT_READY,
+        }:
+            strategies = [
+                RecoveryStrategy.SCROLL_AND_REOBSERVE,
+                RecoveryStrategy.WAIT_AND_REOBSERVE,
+                RecoveryStrategy.RE_RESOLVE_TARGET,
+            ]
+            reason = "Expected lazy content was not loaded; scroll, re-observe, then retry."
         elif error_type == RecoveryErrorType.NAVIGATION_TIMEOUT:
             strategies = [
                 RecoveryStrategy.WAIT_AND_REOBSERVE,

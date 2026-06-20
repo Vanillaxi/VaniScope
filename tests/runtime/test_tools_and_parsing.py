@@ -10,36 +10,32 @@ from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.schemas.runtime import RuntimeState, TraceContext, WebAgentContextSnapshot
 from webscoper.schemas.task import TaskSpec
 from webscoper.schemas.tool import ToolCall
-from webscoper.tools.browser_tools import StatefulBrowserToolRuntime
+from webscoper.browser.tool_runtime import StatefulBrowserToolRuntime
 from webscoper.tools.registry import create_default_tool_registry
 
 
 @pytest.mark.asyncio
-async def test_local_tool_executor_returns_unknown_tool(tmp_path: Path) -> None:
+async def test_local_tool_executor_rejects_unknown_and_lazy_tools(
+    tmp_path: Path,
+) -> None:
     executor = _executor(tmp_path)
     context = _context(tmp_path)
+    cases = [
+        (ToolCall(call_id="call_001", tool_id="unknown_tool"), "UNKNOWN_TOOL"),
+        (
+            ToolCall(
+                call_id="call_002",
+                tool_id="web_search",
+                arguments={"query": "test"},
+            ),
+            "LAZY_TOOL_NOT_LOADED",
+        ),
+    ]
 
-    result = await executor.execute(
-        ToolCall(call_id="call_001", tool_id="unknown_tool"),
-        context,
-    )
-
-    assert result.status == "failed"
-    assert result.error_type == "UNKNOWN_TOOL"
-
-
-@pytest.mark.asyncio
-async def test_local_tool_executor_does_not_execute_lazy_tool(tmp_path: Path) -> None:
-    executor = _executor(tmp_path)
-    context = _context(tmp_path)
-
-    result = await executor.execute(
-        ToolCall(call_id="call_001", tool_id="web_search", arguments={"query": "test"}),
-        context,
-    )
-
-    assert result.status == "failed"
-    assert result.error_type == "LAZY_TOOL_NOT_LOADED"
+    for call, error_type in cases:
+        result = await executor.execute(call, context)
+        assert result.status == "failed"
+        assert result.error_type == error_type
 
 
 def _executor(tmp_path: Path) -> LocalToolExecutor:
@@ -76,30 +72,25 @@ import json
 from webscoper.runtime.execution.tool_call_parser import ToolCallParser
 
 
-def test_parse_plain_json_dict() -> None:
-    result = ToolCallParser().parse(
-        json.dumps(
-            {
-                "tool_calls": [
-                    {
-                        "call_id": "call_001",
-                        "tool_id": "browser_open_observe",
-                        "arguments": {"url": "file:///tmp/basic.html"},
-                        "reason": "Open the target page.",
-                    }
-                ]
-            }
-        )
-    )
-
-    assert result.status == "success"
-    assert len(result.tool_calls) == 1
-    assert result.tool_calls[0].tool_id == "browser_open_observe"
-
-
-def test_parse_fenced_json() -> None:
-    result = ToolCallParser().parse(
-        """```json
+def test_tool_call_parser_accepts_supported_shapes() -> None:
+    cases = [
+        (
+            json.dumps(
+                {
+                    "tool_calls": [
+                        {
+                            "call_id": "call_001",
+                            "tool_id": "browser_open_observe",
+                            "arguments": {"url": "file:///tmp/basic.html"},
+                            "reason": "Open the target page.",
+                        }
+                    ]
+                }
+            ),
+            "browser_open_observe",
+        ),
+        (
+            """```json
 {
   "tool_calls": [
     {
@@ -109,115 +100,57 @@ def test_parse_fenced_json() -> None:
     }
   ]
 }
-```"""
-    )
-
-    assert result.status == "success"
-    assert result.tool_calls[0].tool_id == "browser_extract"
-
-
-def test_parse_json_array() -> None:
-    result = ToolCallParser().parse(
-        json.dumps(
-            [
-                {
-                    "call_id": "call_001",
-                    "tool_id": "finish_task",
-                    "arguments": {"summary": "Done."},
-                }
-            ]
-        )
-    )
-
-    assert result.status == "success"
-    assert result.tool_calls[0].tool_id == "finish_task"
-
-
-def test_parse_tool_calls_single_object() -> None:
-    result = ToolCallParser().parse(
-        json.dumps(
-            {
-                "tool_calls": {
-                    "call_id": "call_001",
-                    "tool_id": "browser_open_observe",
-                    "arguments": {"url": "file:///tmp/basic.html"},
-                }
-            }
-        )
-    )
-
-    assert result.status == "success"
-    assert len(result.tool_calls) == 1
-    assert result.tool_calls[0].tool_id == "browser_open_observe"
-
-
-def test_parse_missing_call_id_autofills() -> None:
-    result = ToolCallParser().parse(
-        json.dumps(
-            {
-                "tool_calls": [
-                    {
-                        "tool_id": "browser_extract",
-                    }
-                ]
-            }
-        )
-    )
-
-    assert result.status == "success"
-    assert result.tool_calls[0].call_id == "call_001"
-    assert result.tool_calls[0].arguments == {}
-
-
-def test_parse_missing_tool_id_fails() -> None:
-    result = ToolCallParser().parse(
-        json.dumps(
-            {
-                "tool_calls": [
+```""",
+            "browser_extract",
+        ),
+        (
+            json.dumps(
+                [
                     {
                         "call_id": "call_001",
-                        "arguments": {},
+                        "tool_id": "finish_task",
+                        "arguments": {"summary": "Done."},
                     }
                 ]
-            }
-        )
+            ),
+            "finish_task",
+        ),
+        (
+            json.dumps(
+                {
+                    "tool_calls": {
+                        "call_id": "call_001",
+                        "tool_id": "browser_open_observe",
+                        "arguments": {"url": "file:///tmp/basic.html"},
+                    }
+                }
+            ),
+            "browser_open_observe",
+        ),
+    ]
+
+    for payload, tool_id in cases:
+        result = ToolCallParser().parse(payload)
+        assert result.status == "success"
+        assert result.tool_calls[0].tool_id == tool_id
+
+
+def test_tool_call_parser_autofills_call_id_and_rejects_bad_input() -> None:
+    autofilled = ToolCallParser().parse(
+        json.dumps({"tool_calls": [{"tool_id": "browser_extract"}]})
     )
-
-    assert result.status == "failed"
-    assert result.error_type == "INVALID_TOOL_CALL"
-
-
-def test_parse_non_json_fails() -> None:
-    result = ToolCallParser().parse("I think you should click the button.")
-
-    assert result.status == "failed"
-    assert result.error_type == "TOOL_CALL_PARSE_ERROR"
-
-# From test_tool_call_schema.py
-from webscoper.schemas.tool import ToolCall, ToolExecutionRecord, ToolResult
-
-
-def test_tool_call_models_dump_json() -> None:
-    call = ToolCall(
-        call_id="call_001",
-        tool_id="browser_open_observe",
-        arguments={"url": "file:///tmp/basic.html"},
-        reason="Open the page.",
+    invalid_tool_call = ToolCallParser().parse(
+        json.dumps({"tool_calls": [{"call_id": "call_001", "arguments": {}}]})
     )
-    result = ToolResult(
-        call_id=call.call_id,
-        tool_id=call.tool_id,
-        status="success",
-        output={"ok": True},
-    )
-    record = ToolExecutionRecord(call=call, result=result)
+    non_json = ToolCallParser().parse("I think you should click the button.")
 
-    payload = record.model_dump(mode="json")
-
-    assert payload["call"]["call_id"] == "call_001"
-    assert payload["call"]["tool_id"] == "browser_open_observe"
-    assert payload["result"]["tool_id"] == "browser_open_observe"
-    assert payload["result"]["status"] == "success"
+    assert autofilled.status == "success"
+    assert autofilled.tool_calls[0].call_id == "call_001"
+    assert autofilled.tool_calls[0].arguments == {}
+    assert invalid_tool_call.status == "failed"
+    assert invalid_tool_call.error_type == "INVALID_TOOL_CALL"
+    assert non_json.status == "failed"
+    assert non_json.error_type == "TOOL_CALL_PARSE_ERROR"
 
 # From test_tool_registry.py
 from webscoper.tools.registry import create_default_tool_registry

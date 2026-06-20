@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from webscoper.browser.legacy_runtime import BrowserRuntime
+from webscoper.browser.tool_runtime import StatefulBrowserToolRuntime
 from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.schemas.browser import ActionContract, ExpectedEffect
 
@@ -32,7 +32,10 @@ async def main() -> None:
     run_id = f"run_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
     run_dir = Path("traces") / run_id
     recorder = TraceRecorder(run_dir=run_dir, run_id=run_id)
-    runtime = BrowserRuntime(trace_recorder=recorder, headless=not args.headed)
+    runtime = StatefulBrowserToolRuntime(
+        trace_recorder=recorder,
+        headless=not args.headed,
+    )
     contract = ActionContract(
         action_type="click",
         intent=f"Click {args.click}",
@@ -46,16 +49,22 @@ async def main() -> None:
         risk_level="read_only",
     )
 
-    observation = await runtime.open_click_and_observe(target_url, contract)
+    await runtime.start()
+    try:
+        await runtime.open_observe(target_url)
+        output = await runtime.click_intent(contract)
+    finally:
+        await runtime.close()
 
     print(f"run_id: {run_id}")
-    print(f"final_url: {observation.url}")
-    print(f"title: {observation.title}")
-    print(f"interactive_elements: {len(observation.interactive_elements)}")
-    print(f"risk_signals: {len(observation.risk_signals)}")
+    observation = output["observation"]
+    print(f"final_url: {observation['url']}")
+    print(f"title: {observation['title']}")
+    print(f"interactive_elements: {len(observation['interactive_elements'])}")
+    print(f"risk_signals: {len(observation['risk_signals'])}")
     print(f"trace_path: {recorder.trace_path}")
-    if observation.screenshot_path:
-        print(f"final_screenshot_path: {observation.screenshot_path}")
+    if observation.get("screenshot_path"):
+        print(f"final_screenshot_path: {observation['screenshot_path']}")
 
 
 def _to_url(value: str) -> str:

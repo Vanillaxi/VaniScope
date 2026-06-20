@@ -92,74 +92,67 @@ def test_deterministic_open_only_plan_validates_success(tmp_path: Path) -> None:
     assert result.issues == []
 
 
-def test_unknown_tool_returns_unknown_tool(tmp_path: Path) -> None:
-    task = _task()
-    plan = _plan(
-        ToolCall(call_id="call_001", tool_id="browser_magic_click"),
-    )
+def test_plan_validator_reports_core_invalid_plan_cases(tmp_path: Path) -> None:
+    cases = [
+        (
+            _task(),
+            _plan(ToolCall(call_id="call_001", tool_id="browser_magic_click")),
+            "UNKNOWN_TOOL",
+        ),
+        (
+            _task(),
+            _plan(
+                ToolCall(
+                    call_id="call_001",
+                    tool_id="web_search",
+                    arguments={"query": "x"},
+                )
+            ),
+            "LAZY_TOOL_NOT_EXECUTABLE",
+        ),
+        (
+            _task(),
+            _plan(ToolCall(call_id="call_001", tool_id="browser_open_observe")),
+            "MISSING_REQUIRED_ARGUMENT",
+        ),
+        (
+            _task(action=True),
+            _plan(
+                ToolCall(
+                    call_id="call_001",
+                    tool_id="browser_click_intent",
+                    arguments={
+                        "action": _task(action=True).action.model_dump(mode="json")
+                    },
+                )
+            ),
+            "INVALID_TOOL_ORDER",
+        ),
+        (
+            _task(),
+            _plan(
+                ToolCall(
+                    call_id="call_001",
+                    tool_id="browser_open_observe",
+                    arguments={"url": _task().target_url},
+                ),
+                ToolCall(call_id="call_002", tool_id="finish_task"),
+                ToolCall(call_id="call_003", tool_id="browser_extract"),
+            ),
+            "INVALID_TOOL_ORDER",
+        ),
+        (
+            _task(budget=BudgetContext(max_steps=1)),
+            DeterministicTaskPlanner().build_plan(
+                _task(budget=BudgetContext(max_steps=1))
+            ),
+            "MAX_STEPS_EXCEEDED",
+        ),
+    ]
 
-    result = _validator().validate(plan, _context(tmp_path, task).snapshot())
-
-    assert _issue_types(result) == ["UNKNOWN_TOOL"]
-
-
-def test_lazy_tool_returns_lazy_tool_not_executable(tmp_path: Path) -> None:
-    task = _task()
-    plan = _plan(
-        ToolCall(call_id="call_001", tool_id="web_search", arguments={"query": "x"}),
-    )
-
-    result = _validator().validate(plan, _context(tmp_path, task).snapshot())
-
-    assert "LAZY_TOOL_NOT_EXECUTABLE" in _issue_types(result)
-
-
-def test_missing_url_returns_missing_required_argument(tmp_path: Path) -> None:
-    task = _task()
-    plan = _plan(
-        ToolCall(call_id="call_001", tool_id="browser_open_observe"),
-    )
-
-    result = _validator().validate(plan, _context(tmp_path, task).snapshot())
-
-    assert "MISSING_REQUIRED_ARGUMENT" in _issue_types(result)
-
-
-def test_click_before_open_returns_invalid_tool_order(tmp_path: Path) -> None:
-    task = _task(action=True)
-    plan = _plan(
-        ToolCall(
-            call_id="call_001",
-            tool_id="browser_click_intent",
-            arguments={"action": task.action.model_dump(mode="json")},
-        )
-    )
-
-    result = _validator().validate(plan, _context(tmp_path, task).snapshot())
-
-    assert "INVALID_TOOL_ORDER" in _issue_types(result)
-
-
-def test_finish_task_not_last_returns_invalid_tool_order(tmp_path: Path) -> None:
-    task = _task()
-    plan = _plan(
-        ToolCall(call_id="call_001", tool_id="browser_open_observe", arguments={"url": task.target_url}),
-        ToolCall(call_id="call_002", tool_id="finish_task"),
-        ToolCall(call_id="call_003", tool_id="browser_extract"),
-    )
-
-    result = _validator().validate(plan, _context(tmp_path, task).snapshot())
-
-    assert "INVALID_TOOL_ORDER" in _issue_types(result)
-
-
-def test_max_steps_exceeded_returns_max_steps_exceeded(tmp_path: Path) -> None:
-    task = _task(budget=BudgetContext(max_steps=1))
-    plan = DeterministicTaskPlanner().build_plan(task)
-
-    result = _validator().validate(plan, _context(tmp_path, task).snapshot())
-
-    assert "MAX_STEPS_EXCEEDED" in _issue_types(result)
+    for task, plan, expected_issue in cases:
+        result = _validator().validate(plan, _context(tmp_path, task).snapshot())
+        assert expected_issue in _issue_types(result)
 
 
 def _validator() -> PlanValidator:

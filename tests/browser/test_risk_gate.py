@@ -26,24 +26,19 @@ def test_risk_gate_requires_approval_for_submit_click() -> None:
     assert result.signals[0].kind == "external_submit"
 
 
-def test_risk_gate_blocks_delete_click() -> None:
-    result = RiskGate().check_action_contract(
-        task_id="task_test",
-        action_contract=_action("Delete account"),
-    )
+def test_risk_gate_blocks_dangerous_click_intents() -> None:
+    cases = [
+        ("Delete account", "delete_action"),
+        ("Pay now", "payment_form"),
+    ]
 
-    assert result.blocked
-    assert result.signals[0].kind == "delete_action"
-
-
-def test_risk_gate_blocks_payment_click() -> None:
-    result = RiskGate().check_action_contract(
-        task_id="task_test",
-        action_contract=_action("Pay now"),
-    )
-
-    assert result.blocked
-    assert result.signals[0].kind == "payment_form"
+    for target_hint, signal_kind in cases:
+        result = RiskGate().check_action_contract(
+            task_id="task_test",
+            action_contract=_action(target_hint),
+        )
+        assert result.blocked
+        assert result.signals[0].kind == signal_kind
 
 
 def test_risk_gate_blocks_password_and_captcha_page_signals() -> None:

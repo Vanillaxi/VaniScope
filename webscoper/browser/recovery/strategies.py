@@ -7,6 +7,7 @@ from typing import Any, Awaitable, Callable
 from playwright.async_api import Page
 
 from webscoper.browser.observer import observe_page
+from webscoper.browser.readiness import PageReadinessDetector
 from webscoper.browser.recovery.classifier import (
     observation_has_expected,
     observation_summary,
@@ -52,8 +53,27 @@ class RecoveryStrategies:
                     execute_click_fn=execute_click_fn,
                     verify_fn=verify_fn,
                 )
+            if strategy == RecoveryStrategy.RETRY_AFTER_READY:
+                return await self.retry_after_ready(
+                    page=page,
+                    attempt=attempt,
+                    observe_fn=observe_fn,
+                    resolve_fn=resolve_fn,
+                    execute_click_fn=execute_click_fn,
+                    verify_fn=verify_fn,
+                    target_hint=target_hint,
+                )
             if strategy == RecoveryStrategy.SCROLL_AND_REOBSERVE:
                 return await self.scroll_and_reobserve(
+                    page=page,
+                    attempt=attempt,
+                    observe_fn=observe_fn,
+                    resolve_fn=resolve_fn,
+                    execute_click_fn=execute_click_fn,
+                    verify_fn=verify_fn,
+                )
+            if strategy == RecoveryStrategy.RE_RESOLVE_TARGET:
+                return await self.retry_same_target(
                     page=page,
                     attempt=attempt,
                     observe_fn=observe_fn,
@@ -69,6 +89,25 @@ class RecoveryStrategies:
                     resolve_fn=resolve_fn,
                     execute_click_fn=execute_click_fn,
                     verify_fn=verify_fn,
+                )
+            if strategy == RecoveryStrategy.CLICK_AFTER_OVERLAY_GONE:
+                return await self.click_after_overlay_gone(
+                    page=page,
+                    attempt=attempt,
+                    observe_fn=observe_fn,
+                    resolve_fn=resolve_fn,
+                    execute_click_fn=execute_click_fn,
+                    verify_fn=verify_fn,
+                    target_hint=target_hint,
+                )
+            if strategy == RecoveryStrategy.DEGRADED_EXTRACT:
+                observation = await call(observe_fn)
+                return finish_attempt(
+                    attempt,
+                    page,
+                    "succeeded",
+                    "Recovered by accepting degraded but usable extracted content.",
+                    observation,
                 )
             if strategy == RecoveryStrategy.RETRY_ALTERNATIVE_TARGET:
                 return await self.retry_alternative_target(
@@ -126,6 +165,7 @@ class RecoveryStrategies:
         verify_fn: VerifyFn,
     ) -> RecoveryAttempt:
         await page.wait_for_timeout(800)
+        await PageReadinessDetector(timeout_ms=1400).wait_for_readiness(page)
         observation = await call(observe_fn)
         risk_type = risk_error_type(observation)
         if risk_type is not None:
@@ -153,6 +193,78 @@ class RecoveryStrategies:
             execute_click_fn=execute_click_fn,
             verify_fn=verify_fn,
             fallback_reason="Target was still unavailable after waiting.",
+        )
+
+    async def retry_after_ready(
+        self,
+        *,
+        page: Page,
+        attempt: RecoveryAttempt,
+        observe_fn: ObserveFn,
+        resolve_fn: ResolveFn,
+        execute_click_fn: ExecuteClickFn,
+        verify_fn: VerifyFn,
+        target_hint: str,
+    ) -> RecoveryAttempt:
+        readiness = await PageReadinessDetector(timeout_ms=2500).wait_for_readiness(
+            page,
+            target_hint=target_hint,
+        )
+        if readiness.status == "loading":
+            observation = await call(observe_fn)
+            return finish_attempt(
+                attempt,
+                page,
+                "failed",
+                "Page or target was still loading after readiness wait.",
+                observation,
+                {"readiness": readiness.model_dump(mode="json")},
+            )
+        return await retry_click_and_verify(
+            page=page,
+            attempt=attempt,
+            observe_fn=observe_fn,
+            resolve_fn=resolve_fn,
+            execute_click_fn=execute_click_fn,
+            verify_fn=verify_fn,
+            fallback_reason="Retry after readiness did not satisfy the expected effect.",
+            metadata={"readiness": readiness.model_dump(mode="json")},
+        )
+
+    async def click_after_overlay_gone(
+        self,
+        *,
+        page: Page,
+        attempt: RecoveryAttempt,
+        observe_fn: ObserveFn,
+        resolve_fn: ResolveFn,
+        execute_click_fn: ExecuteClickFn,
+        verify_fn: VerifyFn,
+        target_hint: str,
+    ) -> RecoveryAttempt:
+        readiness = await PageReadinessDetector(timeout_ms=2500).wait_for_readiness(
+            page,
+            target_hint=target_hint,
+        )
+        if not readiness.signals.get("overlay_absent", True):
+            observation = await call(observe_fn)
+            return finish_attempt(
+                attempt,
+                page,
+                "failed",
+                "Overlay was still blocking the action after waiting.",
+                observation,
+                {"readiness": readiness.model_dump(mode="json")},
+            )
+        return await retry_click_and_verify(
+            page=page,
+            attempt=attempt,
+            observe_fn=observe_fn,
+            resolve_fn=resolve_fn,
+            execute_click_fn=execute_click_fn,
+            verify_fn=verify_fn,
+            fallback_reason="Click after overlay disappeared did not satisfy the expected effect.",
+            metadata={"readiness": readiness.model_dump(mode="json")},
         )
 
     async def scroll_and_reobserve(

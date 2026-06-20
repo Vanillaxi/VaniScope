@@ -122,7 +122,7 @@ def run_langgraph_workflow(
     task_id: str,
 ):
     try:
-        from webscoper.workflows.langgraph_adapter import LangGraphWorkflowAdapter
+        from webscoper.workflows import LangGraphWorkflowAdapter
     except ImportError as exc:
         raise RuntimeError(
             "LangGraph workflow requested but langgraph is not installed"
