@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Callable
 
 from webscoper.runtime.execution.context import WebAgentContext
@@ -505,7 +506,7 @@ class LangGraphWorkflowNodes:
 
         planner = AutoExploreActionPlanner(
             self._auto_explore_llm_client(context),
-            repair_attempts=self.workflow.handler.repair_attempts,
+            repair_attempts=max(1, self.workflow.handler.repair_attempts),
         )
 
         for step_index in range(len(records) + 1, context.task.budget.max_steps + 1):
@@ -517,9 +518,14 @@ class LangGraphWorkflowNodes:
                     step_index=step_index,
                 )
             except RuntimeError as exc:
+                self._write_action_validation_artifact(context, planner)
                 context.transcript_store.append(
                     "auto_explore_validation_failed",
-                    {"error": str(exc), "step_index": step_index},
+                    {
+                        "error": str(exc),
+                        "step_index": step_index,
+                        "validation_errors": planner.validation_errors,
+                    },
                 )
                 return self._finish_auto_explore_failure(
                     context,
@@ -534,6 +540,8 @@ class LangGraphWorkflowNodes:
                 "auto_explore_decision",
                 decision.model_dump(mode="json"),
             )
+            if planner.validation_errors:
+                self._write_action_validation_artifact(context, planner)
             self.workflow.handler._emit_event(
                 "planner_finished",
                 "Auto explore action selected",
@@ -548,6 +556,7 @@ class LangGraphWorkflowNodes:
             try:
                 tool_call = decision_to_tool_call(decision, f"auto_call_{step_index:03d}")
             except RuntimeError as exc:
+                self._write_action_validation_artifact(context, planner)
                 return self._finish_auto_explore_failure(
                     context,
                     runtime,
@@ -631,6 +640,28 @@ class LangGraphWorkflowNodes:
             "MAX_STEPS_EXCEEDED",
             "auto_explore exceeded task budget max_steps.",
         )
+
+    def _write_action_validation_artifact(
+        self,
+        context: WebAgentContext,
+        planner: AutoExploreActionPlanner,
+    ) -> None:
+        payload = {
+            "task_id": context.run_id,
+            "status": "failed" if planner.last_decision is None else "repaired",
+            "validation_errors": planner.validation_errors,
+            "repair_attempt_count": len(planner.repair_requests),
+            "last_decision": planner.last_decision.model_dump(mode="json")
+            if planner.last_decision is not None
+            else None,
+        }
+        try:
+            (context.run_dir / "action_validation.json").write_text(
+                json.dumps(payload, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except Exception:
+            return
 
     async def _invoke_auto_tool(
         self,

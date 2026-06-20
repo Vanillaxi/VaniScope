@@ -7,7 +7,10 @@ from typing import Any
 
 from webscoper.api.schemas import DiagnosticsResponse
 from webscoper.browser.public_web import PublicWebRuntimeConfig, load_runtime_config
-from webscoper.runtime.llm.config import default_fake_router_config
+from webscoper.runtime.llm.config import (
+    default_fake_router_config,
+    load_llm_router_config_from_file,
+)
 from webscoper.skills.registry import create_default_skill_registry
 
 
@@ -47,17 +50,50 @@ def _artifact_directory_status(runs_path: Path) -> dict[str, object]:
 
 
 def _llm_status() -> dict[str, object]:
-    router = default_fake_router_config()
-    local_config = Path("configs/llm.local.toml")
+    local_config = Path(os.getenv("VANISCOPE_LLM_CONFIG", "configs/llm.local.toml"))
     committed_example = Path("configs/llm.example.toml")
+    warnings: list[str] = []
+    config_source = None
+    router = default_fake_router_config()
+    real_enabled = False
+    selected_provider = router.providers.get(router.default_provider)
+    if local_config.exists():
+        config_source = str(local_config)
+        try:
+            router = load_llm_router_config_from_file(local_config)
+            selected_provider = router.providers.get(router.default_provider)
+            real_enabled = (
+                router.mode in {"real", "openai_compatible"}
+                and selected_provider is not None
+                and selected_provider.provider_type == "openai_compatible"
+            )
+            if not real_enabled:
+                warnings.append(
+                    "Real LLM is disabled because configs/llm.local.toml router.mode is not real."
+                )
+        except Exception as exc:
+            router = default_fake_router_config()
+            selected_provider = router.providers.get(router.default_provider)
+            warnings.append(f"Failed to load local LLM config: {type(exc).__name__}")
+    else:
+        warnings.append("No configs/llm.local.toml found; fake LLM provider is active.")
+
     return {
-        "mode": "fake",
+        "mode": router.mode,
         "default_provider": router.default_provider,
         "default_model": router.default_model,
+        "model": selected_provider.model if selected_provider is not None else router.default_model,
+        "provider_type": selected_provider.provider_type if selected_provider is not None else None,
+        "real_enabled": real_enabled,
         "real_llm_enabled_by_default": False,
         "local_config_present": local_config.exists(),
         "example_config_present": committed_example.exists(),
-        "api_key_required_for_default": False,
+        "config_source": config_source,
+        "budget": _redacted_budget(router.budget),
+        "warnings": warnings,
+        "api_key_required_for_default": real_enabled,
+        "api_key_configured": _api_key_configured(selected_provider) if selected_provider else False,
+        "sensitive_values_redacted": True,
     }
 
 
@@ -116,3 +152,25 @@ def _config_status(public_web) -> dict[str, object]:
         "public_web_config_path": public_web.source_path,
         "sensitive_values_redacted": True,
     }
+
+
+def _redacted_budget(budget: dict[str, Any]) -> dict[str, object]:
+    safe_keys = {
+        "max_prompt_tokens",
+        "max_completion_tokens",
+        "max_total_tokens_per_task",
+        "max_llm_calls_per_task",
+        "max_cost_usd",
+        "timeout_seconds",
+    }
+    return {key: value for key, value in budget.items() if key in safe_keys}
+
+
+def _api_key_configured(provider) -> bool:
+    if provider is None:
+        return False
+    if provider.api_key and provider.api_key != "YOUR_API_KEY_HERE":
+        return True
+    if provider.api_key_env:
+        return bool(os.getenv(provider.api_key_env))
+    return False

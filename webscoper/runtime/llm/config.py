@@ -60,11 +60,12 @@ def load_llm_router_config_from_file(path: Path) -> LLMRouterConfig:
     for provider_id, provider_payload in providers_payload.items():
         if not isinstance(provider_payload, dict):
             raise ValueError(f"Provider config must be a table: {provider_id}")
-        provider_type = provider_payload.get("type") or provider_payload.get("provider_type")
+        normalized_provider = _normalize_provider_payload(provider_payload)
+        provider_type = normalized_provider.get("type") or normalized_provider.get("provider_type")
         try:
             providers[provider_id] = LLMProviderConfig.model_validate(
                 {
-                    **provider_payload,
+                    **normalized_provider,
                     "provider_type": provider_type or "openai_compatible",
                     "provider_id": provider_id,
                 }
@@ -77,7 +78,9 @@ def load_llm_router_config_from_file(path: Path) -> LLMRouterConfig:
         default_model=str(default_model or "fake-planner"),
         mode=str(mode),
         providers=providers,
-        budget=payload.get("budget") if isinstance(payload.get("budget"), dict) else {},
+        budget=_normalize_budget_payload(
+            payload.get("budget") if isinstance(payload.get("budget"), dict) else {}
+        ),
     )
 
 
@@ -178,3 +181,28 @@ def _timeout_ms(value: str | None) -> int:
     if timeout_ms <= 0:
         raise ValueError("VANISCOPE_LLM_TIMEOUT_MS must be positive")
     return timeout_ms
+
+
+def _normalize_provider_payload(payload: dict) -> dict:
+    normalized = dict(payload)
+    timeout_seconds = normalized.pop("timeout_seconds", None)
+    if timeout_seconds is not None and "timeout_ms" not in normalized:
+        try:
+            normalized["timeout_ms"] = int(float(timeout_seconds) * 1000)
+        except (TypeError, ValueError):
+            normalized["timeout_ms"] = timeout_seconds
+    return normalized
+
+
+def _normalize_budget_payload(payload: dict) -> dict:
+    aliases = {
+        "max_calls_per_task": "max_llm_calls_per_task",
+        "max_input_tokens_per_task": "max_prompt_tokens",
+        "max_output_tokens_per_task": "max_completion_tokens",
+        "max_cost_usd_per_task": "max_cost_usd",
+    }
+    normalized = dict(payload)
+    for source, target in aliases.items():
+        if source in normalized:
+            normalized[target] = normalized[source]
+    return normalized

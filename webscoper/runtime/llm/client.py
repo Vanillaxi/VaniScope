@@ -109,7 +109,17 @@ def _fake_auto_explore_response(request: LLMRequest) -> LLMResponse:
         if isinstance(item, dict)
     ]
 
-    if "invalid_action" in goal or "非法 action" in goal:
+    if "selector_action" in goal:
+        payload = {
+            "reasoning_summary": "Try to return a forbidden selector for validation tests.",
+            "action": {
+                "type": "click_intent",
+                "target_hint": "css=#quickstart",
+                "expected_effect": {"type": "content_or_url_changes", "value": "install"},
+                "risk_level": "read_only",
+            },
+        }
+    elif "invalid_action" in goal or "非法 action" in goal:
         payload: dict[str, Any] = {
             "reasoning_summary": "Return an invalid action for schema validation tests.",
             "action": {"type": "navigate", "target_hint": "invalid"},
@@ -121,7 +131,7 @@ def _fake_auto_explore_response(request: LLMRequest) -> LLMResponse:
                 "type": "click_intent",
                 "target_hint": "Delete",
                 "expected_effect": {"type": "content_or_url_changes", "value": "delete"},
-                "risk_level": "sensitive",
+                "risk_level": "high",
             },
         }
     elif (

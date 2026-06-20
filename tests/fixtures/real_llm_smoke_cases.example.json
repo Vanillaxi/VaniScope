@@ -1,0 +1,20 @@
+[
+  {
+    "case_id": "github_profile_vanillaxi",
+    "description": "Summarize a public GitHub profile with evidence.",
+    "url": "https://github.com/Vanillaxi",
+    "goal": "Summarize this person's open-source experience, main repositories, technical direction, and activity."
+  },
+  {
+    "case_id": "playwright_python_docs",
+    "description": "Find Python installation and quickstart information in Playwright docs.",
+    "url": "https://playwright.dev/python/",
+    "goal": "Find the Python installation and quickstart information."
+  },
+  {
+    "case_id": "python_docs_home",
+    "description": "Summarize where a beginner should start in Python docs.",
+    "url": "https://docs.python.org/3/",
+    "goal": "Summarize what this documentation page provides and where a beginner should start."
+  }
+]

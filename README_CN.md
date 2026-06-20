@@ -335,9 +335,34 @@ configs/llm.local.toml
 ```toml
 [router]
 mode = "real"
+default_provider = "openai_compatible"
+
+[providers.openai_compatible]
+type = "openai_compatible"
+base_url = "https://api.openai.com/v1"
+api_key = "YOUR_API_KEY_HERE"
+model = "gpt-4.1-mini"
+timeout_seconds = 30
 ```
 
-LLM 调用会经过预算控制，并写入 `llm_calls.jsonl`。API key 不会写入 artifact。
+public web mode 和 real LLM mode 是两个独立开关：开启其中一个不会自动开启另一个。
+真实公网探索需要同时配置 `configs/runtime.local.toml` 的公网访问，以及
+`configs/llm.local.toml` 中的 `router.mode = "real"`。
+
+LLM 调用会经过预算控制，并写入 `llm_calls.jsonl`。API key 不会写入 artifact、
+diagnostics 或 smoke summary。action validation 失败会写入 `action_validation.json`。
+
+手动 real LLM smoke 是 opt-in，不属于 pytest 或 CI：
+
+```bash
+uv run python scripts/run_real_llm_smoke.py \
+  --cases tests/fixtures/real_llm_smoke_cases.example.json \
+  --output-dir eval_results/real_llm_smoke_local
+```
+
+smoke runner 使用软断言，输出 task status、final URL/title、action count、
+LLM call count、artifact 存在情况、failure reason 和 run_dir。
+
 dry-run 任务会生成 `prompt_preview.md`、`prompt_context.json` 和 `dry_run_result.json`，
 然后在浏览器或 LLM 执行前停止。
 

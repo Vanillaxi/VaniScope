@@ -87,6 +87,11 @@ export default function Home() {
                 Web Mode: {String(diagnostics.web.mode)}
               </Badge>
             ) : null}
+            {diagnostics?.llm?.mode ? (
+              <Badge tone={diagnostics.llm.real_enabled ? "warning" : "neutral"}>
+                LLM: {String(diagnostics.llm.mode)}
+              </Badge>
+            ) : null}
           </div>
         </div>
         {healthError ? (

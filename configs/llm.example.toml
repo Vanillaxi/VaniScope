@@ -3,14 +3,17 @@
 # Do not put real API keys in this example file.
 
 [router]
+mode = "fake"
 default_provider = "fake"
 default_model = "fake-planner"
-mode = "fake"
 
 [budget]
-max_prompt_tokens = 12000
-max_completion_tokens = 2000
-max_total_tokens_per_task = 50000
+max_calls_per_task = 8
+max_input_tokens_per_task = 30000
+max_output_tokens_per_task = 6000
+max_cost_usd_per_task = 0.2
+max_prompt_tokens = 30000
+max_completion_tokens = 6000
 max_llm_calls_per_task = 20
 timeout_seconds = 60
 
@@ -18,20 +21,9 @@ timeout_seconds = 60
 type = "fake"
 model = "fake-planner"
 
-[providers.openai]
+[providers.openai_compatible]
 type = "openai_compatible"
 base_url = "https://api.openai.com/v1"
-api_key = "replace-me"
-model = "gpt-4.1"
-
-[providers.deepseek]
-type = "openai_compatible"
-base_url = "https://api.deepseek.com/v1"
-api_key = "replace-me"
-model = "deepseek-chat"
-
-[providers.glm]
-type = "openai_compatible"
-base_url = "replace-me"
-api_key = "replace-me"
-model = "replace-me"
+api_key = "YOUR_API_KEY_HERE"
+model = "gpt-4.1-mini"
+timeout_seconds = 30

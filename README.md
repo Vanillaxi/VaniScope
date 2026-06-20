@@ -303,9 +303,29 @@ A real provider must explicitly set:
 ```toml
 [router]
 mode = "real"
+default_provider = "openai_compatible"
+
+[providers.openai_compatible]
+type = "openai_compatible"
+base_url = "https://api.openai.com/v1"
+api_key = "YOUR_API_KEY_HERE"
+model = "gpt-4.1-mini"
+timeout_seconds = 30
 ```
 
-LLM calls go through budget control and are written to `llm_calls.jsonl`. API keys are never written into artifacts.
+Public web mode and real LLM mode are independent switches: enabling one does not enable the other. Real public exploration needs both `configs/runtime.local.toml` public web access and `configs/llm.local.toml` with `router.mode = "real"`.
+
+LLM calls go through budget control and are written to `llm_calls.jsonl`. API keys are never written into artifacts, diagnostics, or smoke summaries. Action validation failures are written to `action_validation.json`.
+
+Manual real LLM smoke is opt-in and not part of pytest or CI:
+
+```bash
+uv run python scripts/run_real_llm_smoke.py \
+  --cases tests/fixtures/real_llm_smoke_cases.example.json \
+  --output-dir eval_results/real_llm_smoke_local
+```
+
+The smoke runner uses soft assertions and reports task status, final URL/title, action count, LLM call count, artifact presence, failure reason, and run directory.
 
 Dry-run tasks generate `prompt_preview.md`, `prompt_context.json`, and `dry_run_result.json`, then stop before browser or LLM execution.
 

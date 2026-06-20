@@ -1,17 +1,17 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
-import { createTask } from "@/lib/api";
+import { createTask, getDiagnostics } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { type ConsoleSkill, type ConsoleSkillId, skillById } from "@/lib/skills";
 import { upsertTaskHistory } from "@/lib/taskHistory";
-import type { PlannerMode, TaskLanguage, TaskMode } from "@/lib/types";
+import type { DiagnosticsResponse, PlannerMode, TaskLanguage, TaskMode } from "@/lib/types";
 
 export function TaskCreateForm() {
   const searchParams = useSearchParams();
@@ -54,6 +54,7 @@ function TaskCreateFormBody({ selectedSkill }: { selectedSkill: ConsoleSkill }) 
   );
   const [riskMode, setRiskMode] = useState("read_only");
   const [dryRun, setDryRun] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -69,6 +70,12 @@ function TaskCreateFormBody({ selectedSkill }: { selectedSkill: ConsoleSkill }) 
     setTaskLanguage(preset.values.language);
     setReminder(t.taskCreate[preset.values.reminderKey]);
   };
+
+  useEffect(() => {
+    getDiagnostics()
+      .then((result) => setDiagnostics(result))
+      .catch(() => setDiagnostics(null));
+  }, []);
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -210,6 +217,22 @@ function TaskCreateFormBody({ selectedSkill }: { selectedSkill: ConsoleSkill }) 
               </select>
             </label>
 
+            <div className="flex min-h-10 flex-col justify-end gap-1 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone={llmRealEnabled(diagnostics) ? "warning" : "neutral"}>
+                  {llmModeLabel(diagnostics)}
+                </Badge>
+                {planner === "llm" && !llmRealEnabled(diagnostics) ? (
+                  <Badge tone="danger">{t.taskCreate.realLlmUnavailable}</Badge>
+                ) : null}
+              </div>
+              <div className="text-xs text-[var(--muted)]">
+                {planner === "llm" && llmRealEnabled(diagnostics)
+                  ? t.taskCreate.realLlmCostWarning
+                  : t.taskCreate.fakeLlmDefaultHint}
+              </div>
+            </div>
+
             {selectedSkill.id === "browser_task" ? (
               <>
                 {mode === "guided" ? (
@@ -345,4 +368,15 @@ function taskTitle(skillId: ConsoleSkillId, value: string) {
         : "Browser";
   const compactValue = value.trim().replace(/\s+/g, " ").slice(0, 72);
   return compactValue ? `${label}: ${compactValue}` : `${label}: New task`;
+}
+
+function llmRealEnabled(diagnostics: DiagnosticsResponse | null) {
+  return diagnostics?.llm?.real_enabled === true;
+}
+
+function llmModeLabel(diagnostics: DiagnosticsResponse | null) {
+  if (!diagnostics?.llm) return "LLM: unknown";
+  const mode = String(diagnostics.llm.mode ?? "fake");
+  const model = diagnostics.llm.model ? ` / ${String(diagnostics.llm.model)}` : "";
+  return `LLM: ${mode}${model}`;
 }

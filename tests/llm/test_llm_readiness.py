@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
+from webscoper.api.diagnostics import build_diagnostics
 from webscoper.runtime.llm.client import BaseLLMClient, FakeLLMClient
+from webscoper.runtime.llm.auto_explore import AutoExploreActionPlanner
 from webscoper.runtime.llm.config import load_llm_router_config_from_file
 from webscoper.runtime.llm.router import AuditedBudgetedLLMClient, LLMProviderRouter
 from webscoper.schemas.llm import LLMMessage, LLMRequest, LLMResponse
@@ -29,7 +31,9 @@ def test_example_llm_config_parses() -> None:
     assert config.default_provider == "fake"
     assert config.mode == "fake"
     assert config.providers["fake"].provider_type == "fake"
-    assert config.providers["openai"].api_key == "replace-me"
+    assert config.providers["openai_compatible"].api_key == "YOUR_API_KEY_HERE"
+    assert config.providers["openai_compatible"].timeout_ms == 30000
+    assert config.budget["max_llm_calls_per_task"] == 8
 
 
 def test_real_provider_requires_real_router_mode(tmp_path: Path) -> None:
@@ -51,6 +55,37 @@ model = "test-model"
 
     with pytest.raises(ValueError, match='router.mode = "real"'):
         LLMProviderRouter(config_path).create_client()
+
+
+def test_diagnostics_reports_real_llm_without_leaking_key(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "llm.local.toml"
+    config_path.write_text(
+        """
+[router]
+default_provider = "openai_compatible"
+mode = "real"
+
+[providers.openai_compatible]
+type = "openai_compatible"
+base_url = "https://example.test/v1"
+api_key = "super-secret-test-key"
+model = "test-model"
+timeout_seconds = 10
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("VANISCOPE_LLM_CONFIG", str(config_path))
+
+    payload = build_diagnostics(runs_dir=tmp_path / "runs").model_dump(mode="json")
+
+    assert payload["llm"]["mode"] == "real"
+    assert payload["llm"]["real_enabled"] is True
+    assert payload["llm"]["default_provider"] == "openai_compatible"
+    assert payload["llm"]["model"] == "test-model"
+    assert "super-secret-test-key" not in json.dumps(payload)
 
 
 @pytest.mark.asyncio
@@ -105,6 +140,49 @@ async def test_budget_blocks_llm_call_and_audits_skip(tmp_path: Path) -> None:
     assert record["status"] == "skipped"
     assert record["error_type"] == "LLM_BUDGET_EXCEEDED"
     assert record["budget_decision"] == "max_prompt_tokens_exceeded"
+
+
+@pytest.mark.asyncio
+async def test_auto_explore_invalid_json_repairs_once(tmp_path: Path) -> None:
+    class RepairingClient(BaseLLMClient):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def generate(self, request: LLMRequest) -> LLMResponse:
+            self.calls += 1
+            if self.calls == 1:
+                return LLMResponse(content="not-json", model="test")
+            return LLMResponse(
+                content=json.dumps(
+                    {
+                        "reasoning_summary": "Extract enough visible information.",
+                        "action": {"type": "extract", "risk_level": "read_only"},
+                    }
+                ),
+                model="test",
+            )
+
+    task = TaskSpec(
+        task_id="repair_task",
+        raw_input="Open local mock page.",
+        target_url=Path("tests/fixtures/mock_site/basic.html").resolve().as_uri(),
+        mode="auto_explore",
+        goal="Summarize the page.",
+    )
+    context = WebAgentExecutionHandler(output_root=tmp_path).build_context(task)
+    client = RepairingClient()
+    planner = AutoExploreActionPlanner(client, repair_attempts=1)
+
+    decision = await planner.decide(
+        context=context.snapshot(),
+        observation=None,
+        history=[],
+        step_index=1,
+    )
+
+    assert decision.action.type == "extract"
+    assert client.calls == 2
+    assert planner.validation_errors[0]["phase"] == "initial"
 
 
 @pytest.mark.asyncio
