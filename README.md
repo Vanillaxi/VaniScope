@@ -1,76 +1,116 @@
 # VaniScope
 
-[中文说明](README_CN.md)
+VaniScope / Web-Scoper is a LangGraph-based Browser Agent Runtime for local,
+replayable browser-agent tasks. It combines Python, FastAPI, LangGraph,
+Playwright, ToolGateway governance, evidence-backed reporting, human approval
+workflows, runtime artifact replay, regression evals, and a Next.js 16 control
+console.
 
-VaniScope / Web-Scoper is a LangGraph-based Browser Agent Runtime for local and fixture-driven web tasks. It combines a Playwright Browser Runtime, LangGraph workflow orchestration, ToolGateway policy/audit routing, evidence-backed reports, deterministic review, risk-gated approval, recovery telemetry, a Runtime Inspector API, and a Next.js 16 control console.
+VaniScope is not a generic web search assistant. It is a runtime for executing
+and inspecting browser-agent workflows with strong local demos, deterministic
+regression coverage, and auditable artifacts.
 
-The runtime package is split by responsibility into `runtime/execution`, `runtime/artifacts`, `runtime/inspector`, `runtime/llm`, `runtime/prompt`, `runtime/review`, and `runtime/safety`. Runtime root-level compatibility re-exports have been removed; project code imports the concrete package paths directly.
+## What It Does
 
-`webscoper/workflows/langgraph_adapter.py` remains the public LangGraph workflow entry point. Its orchestration internals live under `webscoper/workflows/langgraph_backend/`. LangGraph is the only task orchestration layer.
+VaniScope runs browser tasks through a LangGraph workflow, executes governed
+browser/tool calls, verifies effects, records evidence, reviews the final
+report, pauses for risky actions, and exposes the whole run through a Runtime
+Inspector.
 
-`webscoper/tools/gateway/` contains the formal tool invocation entry point. LangGraph tool nodes call `ToolGateway.invoke()`, which applies policy, risk/approval decisions, provider dispatch, and `tool_audit.jsonl` audit records. Browser Runtime is exposed as a ToolGateway provider, and `FakeMCPToolProvider` gives deterministic local MCP-shaped tools for tests.
+The current Python mainline is release-candidate focused:
 
-Browser recovery is split into `browser/recovery/classifier`, `planner`, `strategies`, `executor`, and `telemetry`, with `browser/recovery/manager.py` kept as the public facade.
+- LangGraph is the only workflow backend.
+- Browser execution uses Playwright and local fixtures by default.
+- Real LLM providers are supported only through explicit local config and are
+  not enabled by default.
+- Demo skills use local fixture pages and do not call real GitHub, real MCP
+  servers, or external web targets.
+- Go control-plane work is intentionally deferred to a later branch.
 
-`webscoper/skills/` contains the LangGraph skill layer. The default registry
-ships two demo skills: `docs_research` and `github_issue_research`. Both read
-local fixtures through the normal Browser Runtime and ToolGateway path, then
-produce evidence-backed `final_report.md`, `review.json`, and
-`skill_result.json` artifacts. The GitHub issue skill uses a mock issue fixture
-only and does not access GitHub or the GitHub API.
+## Architecture
 
-## Scope
-
-VaniScope does not bypass login, CAPTCHA, or paywalls. It does not enter real accounts, passwords, payment details, or identity documents. Risky actions are blocked or require local approval before execution.
-
-## Smoke Test
-
-```bash
-uv run python scripts/smoke_open_page.py https://example.com
-uv run python scripts/smoke_open_page.py https://example.com --headed
+```text
+Next.js Console  ->  FastAPI Task API  ->  LangGraph Workflow
+                                              |
+                                              v
+                                      ToolGateway Policy
+                                              |
+                                              v
+                                  Browser Runtime / Providers
+                                              |
+                                              v
+                            Evidence, Review, Approval, Artifacts
+                                              |
+                                              v
+                                  Runtime Inspector / Replay
 ```
 
-Each run creates `traces/<run_id>/trace.jsonl` and `traces/<run_id>/step_001.png`.
+Core boundaries:
 
-The terminal prints the run ID, final URL, page title, screenshot path, interactive element count, risk signal count, and trace path.
+- `webscoper/workflows/`: LangGraph workflow adapter and backend nodes.
+- `webscoper/browser/`: Playwright browser runtime, observation, target
+  resolution, effect verification, risk signals, and recovery.
+- `webscoper/tools/gateway/`: tool governance, provider dispatch, approval
+  decisions, and `tool_audit.jsonl`.
+- `webscoper/runtime/`: execution, artifacts, prompt context, LLM routing,
+  review, safety, and inspector logic.
+- `webscoper/api/`: FastAPI task API, SSE event stream, artifacts, approvals,
+  diagnostics, timeline, and inspector endpoints.
+- `apps/web/`: Next.js 16 local console.
 
-## Tests
+See [docs/architecture.md](docs/architecture.md) for the detailed architecture.
 
-```bash
-uv run pytest
-```
+## Core Features
 
-Default pytest keeps workflow coverage to focused smoke cases. Run the explicit workflow eval command below when you want the full recovery/approval regression matrix.
+- Browser Runtime: observe pages, resolve click intent, execute actions, verify
+  expected effects, and recover from known browser failure modes.
+- LangGraph Workflow: one orchestration path for browser tasks, approvals,
+  recovery, skill execution, and artifact finalization.
+- ToolGateway: a governed tool boundary with policy, risk classification,
+  approval pause, provider dispatch, and audit records.
+- Evidence and Review: writes `evidence.jsonl`, builds `final_report.md`, and
+  checks claims through deterministic review in `review.json`.
+- Approval Workflow: risky submit/delete/password/CAPTCHA-like actions are
+  approved, rejected, or blocked with persisted artifacts.
+- Runtime Inspector: replays run directories into timeline, report, evidence,
+  review, tools, LLM, and debug views.
+- Next.js Console: local task workspace with API health, skill launchers, task
+  detail tabs, user-friendly artifact rendering, and Developer raw views.
+- Diagnostics: `GET /diagnostics` reports API status, LangGraph backend,
+  artifact directory, default fake LLM status, registered skills, browser
+  readiness, and redacted config state.
 
-## Control Console
+## Demo Scenarios
 
-The Next.js 16 control console lives in `apps/web` and talks only to the FastAPI Task API. It can create and complete local LangGraph browser tasks, stream task events over SSE, inspect artifacts, handle approvals, view evidence/review/report outputs, and show the local eval command helper.
+The default demos are local and deterministic:
 
-The console is now organized as a ChatGPT-style task workspace: the sidebar has
-`+ New Task`, skill shortcuts, API health, language switching, and a recent task
-history stored in browser `localStorage`. Skill selection lives in the sidebar
-and home-page skill cards instead of a large mixed form; `/tasks/new?skill=...`
-renders fields specific to Browser Task, Docs Research, or GitHub Issue Research.
-Task detail pages include a Runtime Inspector with Overview, Timeline, Report,
-Evidence, Review, Tools, LLM / Prompt, and Debug tabs. User-facing artifact
-views are shown by default; raw JSON, JSONL, markdown, prompt, and trace files
-remain available in Developer/Debug views. The inspector is backed by
-`/tasks/{task_id}/timeline` and `/tasks/{task_id}/inspector`, which dynamically
-aggregate run artifacts without a database.
+1. Browser Task Demo: click `Quickstart` in
+   `tests/fixtures/mock_site/basic.html` and verify `pip install playwright`.
+2. Docs Research Demo: run `docs_research` on
+   `tests/fixtures/mock_site/docs_research.html`.
+3. GitHub Issue Research Demo: run `github_issue_research` on
+   `tests/fixtures/mock_site/github_issue_research.html`; this uses a mock
+   issue fixture only.
+4. Approval Demo: submit action on `tests/fixtures/mock_site/risk_actions.html`,
+   pause, approve or reject, and inspect approval artifacts.
+5. Recovery Demo: run local lazy/modal/no-effect/ambiguous fixtures and inspect
+   `recovery.jsonl`.
 
-Next.js 16 控制台位于 `apps/web`，只对接 FastAPI Task API。它支持完整跑通本地 LangGraph 浏览器任务，通过 SSE 查看实时事件，检查 artifacts，处理审批，查看 evidence / review / report 输出，并提供本地 eval 命令辅助页。
+See [docs/demo_playbook.md](docs/demo_playbook.md) for exact inputs, expected
+artifacts, console views, common failures, and debugging paths.
 
-Start the API:
+## Local Run
 
-启动 API：
+Install Python dependencies with the project environment you already use for
+`uv`.
+
+Start FastAPI from the repository root:
 
 ```bash
 uv run python scripts/run_api.py
 ```
 
-Configure and start the console:
-
-配置并启动前端：
+Start the Next.js console:
 
 ```bash
 cd apps/web
@@ -78,131 +118,60 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://localhost:3000`. The console reads:
+Open:
 
-访问 `http://localhost:3000`。控制台读取：
+```text
+http://localhost:3000
+```
+
+Default API base URL:
+
+```text
+http://localhost:8000
+```
+
+Check runtime readiness:
+
+```text
+GET http://localhost:8000/health
+GET http://localhost:8000/diagnostics
+```
+
+If the API uses a different base URL, create a local `apps/web/.env` from
+`apps/web/.env.example` and set:
 
 ```bash
 NEXT_PUBLIC_VANISCOPE_API_BASE_URL=http://localhost:8000
 ```
 
-Copy `apps/web/.env.example` to a local `.env` if you need a different API base URL.
+Do not commit local `.env`, `configs/*.local.toml`, `configs/llm.toml`,
+generated `runs/`, `traces/`, `eval_results/`, `.next/`, `node_modules/`, or
+cache files.
 
-如果 API 地址不同，可以基于 `apps/web/.env.example` 创建本地 `.env`。
+## Eval And Regression
 
-Full-stack demo / 完整链路 demo:
-
-```text
-docs/demo_next_console.md
-docs/demo_playbook.md
-```
-
-## Local Demo Run
-
-Start the FastAPI API from the repository root:
+Run all tests:
 
 ```bash
-uv run python scripts/run_api.py
+uv run pytest -q
 ```
 
-In another terminal, start the Next.js console:
+Run the deterministic Phase 39 smoke suite:
 
 ```bash
-cd apps/web
-pnpm dev
+uv run python scripts/run_phase39_smoke.py \
+  --output-dir eval_results/phase39_demo_smoke
 ```
 
-Open `http://localhost:3000`. The default API base URL is
-`http://localhost:8000`. Confirm runtime readiness with:
+Run LangGraph skill evals:
 
-```text
-GET http://localhost:8000/diagnostics
+```bash
+uv run python scripts/run_langgraph_eval.py \
+  --cases tests/fixtures/langgraph_skill_eval_cases.json \
+  --output-dir eval_results/langgraph_skill_eval_local
 ```
 
-Suggested demo order:
-
-1. Browser Task Demo: click `Quickstart` in `tests/fixtures/mock_site/basic.html`.
-2. Docs Research Demo: run `docs_research` on `tests/fixtures/mock_site/docs_research.html`.
-3. GitHub Issue Research Demo: run `github_issue_research` on `tests/fixtures/mock_site/github_issue_research.html`.
-4. Approval Demo: run a submit action against `tests/fixtures/mock_site/risk_actions.html`.
-5. Recovery Demo: run a recovery fixture from `tests/fixtures/langgraph_main_eval_cases.json`.
-
-Use `docs/demo_playbook.md` for inputs, expected artifacts, console views,
-failure causes, and debugging paths.
-
-## Project Layout
-
-```text
-webscoper/
-  browser/       # Browser Runtime: Playwright session, observation, targeting, effects, recovery, risk signals
-  runtime/       # Agent Runtime: execution, artifacts, inspector, LLM, prompt, review, safety
-  skills/        # Skill definitions, registry, deterministic router, docs and GitHub issue skills
-  api/           # FastAPI Task API, async tasks, approvals, SSE event stream, artifact access
-  eval/          # Browser, planner, reviewer, and workflow regression eval harnesses
-  workflows/     # LangGraph backend orchestration modules
-  tools/         # Tool registry, browser tool definitions, and ToolGateway providers
-  schemas/       # Shared Pydantic schemas
-
-apps/
-  web/           # Next.js 16 control console for the FastAPI Task API
-
-scripts/
-  run_task.py
-  run_api.py
-  run_browser_eval.py
-  run_planner_eval.py
-  run_reviewer_eval.py
-  run_workflow_eval.py
-  run_langgraph_eval.py
-  smoke_open_page.py
-
-configs/
-  llm.example.toml
-  llm.local.toml  # local only, ignored
-
-docs/
-  demo_playbook.md
-  runtime_modules.md
-  runtime_inspector.md
-  skills.md
-
-runs/
-  .gitkeep
-
-traces/
-  .gitkeep
-
-eval_results/
-  .gitkeep
-
-tests/
-  api/
-  browser/
-  eval/
-  llm/
-  runtime/
-  workflows/
-  fixtures/
-```
-
-## Configuration
-
-Use `configs/llm.example.toml` as the committed template. Put local provider settings in `configs/llm.local.toml`; local config files and generated run/eval artifacts are ignored by git.
-
-LLM integration is intentionally controlled. Default task paths use deterministic
-or fake planning and pytest does not require real LLM calls. Real providers must
-be enabled through `configs/llm.local.toml` with `router.mode = "real"` and a
-configured OpenAI-compatible provider. LLM readiness details, budget controls,
-`prompt_preview.md`, `prompt_context.json`, `llm_calls.jsonl`, and dry-run mode
-are documented in `docs/llm_readiness.md`.
-
-## Workflow Eval
-
-LangGraph workflow eval runs local task cases without real network or real LLM calls. The main fixture covers:
-
-- workflow cases for status, artifacts, review, evidence, and compaction
-- recovery cases for lazy controls, modal overlays, no-effect retries, ambiguous targets, disabled controls, login/password blocking, and captcha blocking
-- approval cases for RiskGate approval-required decisions, task pause, approved resume, rejected stop, blocked delete actions, and persisted audit artifacts
+Run the main workflow eval matrix:
 
 ```bash
 uv run python scripts/run_workflow_eval.py \
@@ -210,9 +179,7 @@ uv run python scripts/run_workflow_eval.py \
   --output-dir eval_results/langgraph_eval_local
 ```
 
-The runner writes `score.json` and `report.md` under the selected output directory. `score.json` includes total/pass/fail counts, recovery and approval pass counts, and LangGraph expectation failures.
-
-Tool Gateway eval is LangGraph-first and verifies browser, local deterministic MCP-shaped tools, approval, blocking, and audit behavior:
+Run ToolGateway evals:
 
 ```bash
 uv run python scripts/run_workflow_eval.py \
@@ -220,11 +187,65 @@ uv run python scripts/run_workflow_eval.py \
   --output-dir eval_results/tool_gateway_eval_local
 ```
 
-Skill eval verifies `docs_research` and `github_issue_research` with local
-fixtures only:
+See [docs/eval_report.md](docs/eval_report.md) for the release-candidate eval
+coverage.
 
-```bash
-uv run python scripts/run_langgraph_eval.py \
-  --cases tests/fixtures/langgraph_skill_eval_cases.json \
-  --output-dir eval_results/langgraph_skill_eval_local
+## LLM Configuration
+
+The default path is deterministic or fake-LLM. Real LLM providers are controlled
+and must be explicitly configured in ignored local files such as
+`configs/llm.local.toml`.
+
+Use `configs/llm.example.toml` as the template. Real providers require
+`router.mode = "real"` and an OpenAI-compatible provider with credentials. API
+keys are never written to artifacts.
+
+See [docs/llm_readiness.md](docs/llm_readiness.md).
+
+## Project Layout
+
+```text
+webscoper/
+  api/           # FastAPI task API, SSE, approvals, artifacts, diagnostics
+  browser/       # Playwright Browser Runtime, recovery, risk, effects
+  eval/          # Regression eval harnesses
+  runtime/       # Execution, artifacts, inspector, LLM, prompt, review, safety
+  schemas/       # Shared Pydantic models
+  skills/        # docs_research and github_issue_research demo skills
+  tools/         # Tool registry and ToolGateway
+  workflows/     # LangGraph workflow backend
+
+apps/web/        # Next.js 16 control console
+scripts/         # API, task, eval, smoke runners
+docs/            # Architecture, eval, demo, inspector, LLM docs
+tests/           # API, browser, runtime, eval, skills, workflows, tools
 ```
+
+## Limitations
+
+- No real network access is required or assumed for demos/evals.
+- The GitHub Issue Research demo uses local mock issue HTML, not GitHub API.
+- Real LLM providers are not enabled by default.
+- The runtime does not bypass login, CAPTCHA, paywalls, or access control.
+- There is no production database, authentication, multi-user tenancy, or hosted
+  deployment package.
+- The Next.js console is a local control console, not a production SaaS
+  frontend.
+- Real MCP server integration and Go control-plane work are intentionally
+  deferred.
+
+## Roadmap
+
+Near-term:
+
+- Keep Python runtime APIs and artifacts stable.
+- Expand deterministic eval coverage for artifact and inspector regressions.
+- Improve demo polish and error diagnostics.
+- Document artifact schemas and task lifecycle more formally.
+
+Later branches:
+
+- Go control plane wrapping the stabilized Python runtime contract.
+- Optional real MCP server adapters.
+- Optional production deployment and persistence model.
+- Broader browser/runtime compatibility testing.
