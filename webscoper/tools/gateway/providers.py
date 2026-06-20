@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Protocol
+from urllib.parse import urlparse
 
+from webscoper.browser.public_web import PublicWebPolicyError
 from webscoper.browser.tool_runtime import StatefulBrowserToolRuntime
 from webscoper.schemas.browser import ActionContract
 from webscoper.tools.gateway.descriptors import (
@@ -58,9 +60,21 @@ class BrowserToolProvider:
     async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
         if request.tool_name == "browser_open_observe":
             url = _normalize_url(str(request.arguments.get("url") or ""))
-            observation = await self.browser_runtime.open_observe(
-                url
-            )
+            try:
+                observation = await self.browser_runtime.open_observe(url)
+            except PublicWebPolicyError as exc:
+                output = {"public_web_policy": exc.decision.model_dump(mode="json")}
+                if exc.observation is not None:
+                    output["observation"] = exc.observation.model_dump(mode="json")
+                return _failed(
+                    request,
+                    "browser",
+                    "PUBLIC_WEB_BLOCKED",
+                    exc.decision.reason,
+                    output=output,
+                    status="blocked",
+                    metadata={"public_web_policy": exc.decision.model_dump(mode="json")},
+                )
             return _success(request, "browser", {"observation": observation.model_dump(mode="json")})
 
         if request.tool_name == "browser_click_intent":
@@ -247,7 +261,7 @@ def _local_echo_descriptor() -> ToolDescriptor:
 
 
 def _normalize_url(value: str) -> str:
-    if value.startswith(("http://", "https://", "file://")):
+    if urlparse(value).scheme:
         return value
     return Path(value).resolve().as_uri()
 
@@ -276,6 +290,7 @@ def _failed(
     *,
     output: dict[str, Any] | None = None,
     status: str = "failed",
+    metadata: dict[str, Any] | None = None,
 ) -> ToolInvocationResult:
     return ToolInvocationResult(
         task_id=request.task_id,
@@ -287,4 +302,5 @@ def _failed(
         output=output or {},
         error_type=error_type,
         error_message=error_message,
+        metadata=metadata or {},
     )

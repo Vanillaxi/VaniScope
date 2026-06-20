@@ -51,7 +51,7 @@ def health() -> dict[str, str]:
 
 @app.get("/diagnostics", response_model=DiagnosticsResponse)
 def diagnostics() -> DiagnosticsResponse:
-    return build_diagnostics(task_service.runs_dir)
+    return build_diagnostics(task_service.runs_dir, task_service.web_config)
 
 # 创建并同步运行任务
 @app.post("/tasks", response_model=TaskCreateResponse)

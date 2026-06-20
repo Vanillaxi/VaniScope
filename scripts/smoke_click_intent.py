@@ -5,12 +5,14 @@ import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 import sys
+from urllib.parse import urlparse
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from webscoper.browser.tool_runtime import StatefulBrowserToolRuntime
+from webscoper.browser.public_web import load_public_web_config
 from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.schemas.browser import ActionContract, ExpectedEffect
 
@@ -23,6 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--click", required=True, help="Natural-language click target hint.")
     parser.add_argument("--expect", required=True, help="Text expected to appear after click.")
     parser.add_argument("--headed", action="store_true", help="Run Chromium in headed mode.")
+    parser.add_argument("--public-web-config", help="Optional public web TOML config path.")
     return parser.parse_args()
 
 
@@ -35,6 +38,9 @@ async def main() -> None:
     runtime = StatefulBrowserToolRuntime(
         trace_recorder=recorder,
         headless=not args.headed,
+        public_web_config=load_public_web_config(args.public_web_config)
+        if args.public_web_config
+        else None,
     )
     contract = ActionContract(
         action_type="click",
@@ -49,7 +55,6 @@ async def main() -> None:
         risk_level="read_only",
     )
 
-    await runtime.start()
     try:
         await runtime.open_observe(target_url)
         output = await runtime.click_intent(contract)
@@ -68,7 +73,7 @@ async def main() -> None:
 
 
 def _to_url(value: str) -> str:
-    if value.startswith(("http://", "https://", "file://")):
+    if urlparse(value).scheme:
         return value
     return Path(value).resolve().as_uri()
 

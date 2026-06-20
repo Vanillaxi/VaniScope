@@ -92,7 +92,7 @@ class AgentExecutionLoop:
                         "result": tool_result.model_dump(mode="json"),
                     },
                 )
-            elif tool_result.error_type == "RISK_BLOCKED":
+            elif tool_result.status == "blocked":
                 transcript.append(
                     "risk_blocked",
                     {

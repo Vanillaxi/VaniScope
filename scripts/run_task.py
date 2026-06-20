@@ -67,6 +67,13 @@ def main() -> int:
         default=0,
         help="Number of reviewer revise attempts to run after final report generation.",
     )
+    parser.add_argument(
+        "--public-web-config",
+        help=(
+            "Path to public web TOML config. Defaults to "
+            "configs/runtime.local.toml when present."
+        ),
+    )
     args = parser.parse_args()
 
     try:
@@ -85,6 +92,7 @@ def main() -> int:
             revise_attempts=args.revise_attempts,
             llm_config=args.llm_config,
             llm_provider=args.llm_provider,
+            public_web_config_path=args.public_web_config,
             reminder_source="cli",
         )
     except ValueError as exc:
@@ -110,6 +118,10 @@ def main() -> int:
     print(f"repair_attempts: {args.repair_attempts}")
     print(f"reviewer_mode: {args.reviewer}")
     print(f"revise_attempts: {args.revise_attempts}")
+    print(f"web_mode: {handler.public_web_config.mode}")
+    print(f"public_network_enabled: {handler.public_web_config.public_network_enabled}")
+    print(f"public_allowed_domains: {handler.public_web_config.allowed_domains}")
+    print(f"runtime_mode: {handler.public_web_config.runtime_mode}")
     print("execution_mode: tool_loop")
     print(f"risk_signals_count: {len(observation.risk_signals)}")
     print(f"interactive_elements_count: {len(observation.interactive_elements)}")

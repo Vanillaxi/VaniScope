@@ -25,3 +25,5 @@ apps/web/.env.local
 apps/web/.next/
 apps/web/node_modules/
 .pnpm-store/
+configs/*.local.toml
+configs/runtime.local.toml

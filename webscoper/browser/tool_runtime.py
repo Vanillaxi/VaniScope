@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from time import perf_counter
 from typing import Any
 
@@ -8,6 +9,11 @@ from playwright.async_api import Page
 from webscoper.browser.actions import ActionExecutor
 from webscoper.browser.effects import EffectVerifier
 from webscoper.browser.observer import observe_page
+from webscoper.browser.public_web import (
+    PublicWebPolicy,
+    PublicWebPolicyError,
+    PublicWebRuntimeConfig,
+)
 from webscoper.browser.readiness import (
     PageReadinessDetector,
     wait_after_navigation_or_action,
@@ -18,7 +24,7 @@ from webscoper.runtime.execution.events import TaskEventSink
 from webscoper.runtime.artifacts.evidence import EvidenceStore
 from webscoper.runtime.artifacts.trace import TraceRecorder
 from webscoper.runtime.artifacts.transcript import TranscriptStore
-from webscoper.schemas.browser import ActionContract, EffectVerificationResult
+from webscoper.schemas.browser import ActionContract, EffectVerificationResult, RiskSignal
 from webscoper.schemas.browser import PageObservation, ReadinessResult
 from webscoper.schemas.artifact import TraceStep
 
@@ -32,6 +38,7 @@ class StatefulBrowserToolRuntime:
         event_sink: TaskEventSink | None = None,
         evidence_store: EvidenceStore | None = None,
         recovery_manager: RecoveryManager | None = None,
+        public_web_config: PublicWebRuntimeConfig | None = None,
     ) -> None:
         self.trace_recorder = trace_recorder
         self.headless = headless
@@ -45,6 +52,9 @@ class StatefulBrowserToolRuntime:
         self.action_executor = ActionExecutor(readiness_detector=self.readiness_detector)
         self.effect_verifier = EffectVerifier()
         self.recovery_manager = recovery_manager or RecoveryManager()
+        self.public_web_config = public_web_config or PublicWebRuntimeConfig()
+        self.public_web_policy = PublicWebPolicy(self.public_web_config)
+        self._public_pages_opened = 0
         self._step_index = 0
 
     async def start(self) -> None:
@@ -67,10 +77,48 @@ class StatefulBrowserToolRuntime:
         screenshot_path = self.trace_recorder.run_dir / f"{step_id}_open.png"
         start = perf_counter()
         page_url: str | None = None
+        policy_decision = self.public_web_policy.check(
+            url,
+            pages_opened=self._public_pages_opened,
+        )
+        if not policy_decision.allow:
+            observation = _blocked_policy_observation(url, policy_decision)
+            self.last_observation = observation
+            payload = policy_decision.model_dump(mode="json")
+            self.trace_recorder.record(
+                TraceStep(
+                    step_id=step_id,
+                    run_id=self.trace_recorder.run_id,
+                    phase="browser_tool_runtime",
+                    actor="tool",
+                    action_type="browser_open_observe",
+                    status="blocked",
+                    url_before=None,
+                    url_after=url,
+                    title=observation.title,
+                    observation=observation.model_dump(mode="json"),
+                    error_type="PUBLIC_WEB_BLOCKED",
+                    error_message=policy_decision.reason,
+                    latency_ms=_elapsed_ms(start),
+                )
+            )
+            self._emit_public_web_block(policy_decision)
+            raise PublicWebPolicyError(policy_decision, observation)
+
+        if policy_decision.url_classification == "public_http":
+            self._public_pages_opened += 1
+            if self.public_web_config.request_delay_ms > 0:
+                await asyncio.sleep(self.public_web_config.request_delay_ms / 1000)
 
         try:
+            if self.page is None:
+                await self.start()
             page = self._require_page()
-            await page.goto(url, wait_until="domcontentloaded", timeout=8000)
+            await page.goto(
+                url,
+                wait_until="domcontentloaded",
+                timeout=self.public_web_config.navigation_timeout_ms,
+            )
             readiness = await self._wait_and_record_readiness(
                 page,
                 action_type="readiness_check",
@@ -80,6 +128,9 @@ class StatefulBrowserToolRuntime:
             )
             observation = await observe_page(page, screenshot_path=screenshot_path)
             observation.metadata["readiness"] = readiness.model_dump(mode="json")
+            observation.metadata["public_web_policy"] = policy_decision.model_dump(
+                mode="json"
+            )
             page_url = observation.url
             self.last_observation = observation
             self.trace_recorder.record(
@@ -116,6 +167,23 @@ class StatefulBrowserToolRuntime:
                 )
             )
             raise
+
+    def _emit_public_web_block(self, decision) -> None:
+        if self.event_sink is None:
+            return
+        try:
+            self.event_sink(
+                "risk_blocked",
+                "Public web URL blocked",
+                {
+                    "run_id": self.trace_recorder.run_id,
+                    "tool_name": "browser_open_observe",
+                    "error_type": "PUBLIC_WEB_BLOCKED",
+                    "public_web_policy": decision.model_dump(mode="json"),
+                },
+            )
+        except Exception:
+            return
 
     async def click_intent(self, action: ActionContract) -> dict[str, Any]:
         if self.page is None:
@@ -505,6 +573,23 @@ class StatefulBrowserToolRuntime:
 
 def _elapsed_ms(start: float) -> int:
     return int((perf_counter() - start) * 1000)
+
+
+def _blocked_policy_observation(url: str, decision) -> PageObservation:
+    return PageObservation(
+        url=url,
+        title="Blocked by public web policy",
+        visible_text_summary=decision.reason,
+        interactive_elements=[],
+        risk_signals=[
+            RiskSignal(
+                risk_type="public_web_policy",
+                message=decision.reason,
+                severity="high",
+            )
+        ],
+        metadata={"public_web_policy": decision.model_dump(mode="json")},
+    )
 
 
 def _failed_output(error_type: str, error_message: str) -> dict[str, Any]:

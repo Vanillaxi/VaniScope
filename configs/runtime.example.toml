@@ -1,0 +1,29 @@
+# VaniScope runtime config example.
+# Copy to configs/runtime.local.toml for local-only overrides.
+# Do not commit configs/runtime.local.toml or any *.local.toml.
+
+[web]
+mode = "local"
+public_network_enabled = false
+allowed_domains = []
+max_pages_per_task = 3
+request_delay_ms = 250
+navigation_timeout_ms = 8000
+
+# public_safe example:
+# [web]
+# mode = "public_safe"
+# public_network_enabled = true
+# allowed_domains = ["github.com", "playwright.dev", "docs.python.org", "arxiv.org"]
+# max_pages_per_task = 3
+# request_delay_ms = 250
+# navigation_timeout_ms = 12000
+
+# public_open example for local manual exploration only:
+# [web]
+# mode = "public_open"
+# public_network_enabled = true
+# allowed_domains = ["*"]
+# max_pages_per_task = 3
+# request_delay_ms = 250
+# navigation_timeout_ms = 12000

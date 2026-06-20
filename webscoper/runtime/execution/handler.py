@@ -64,6 +64,7 @@ from webscoper.schemas.review import ReviewerMode
 from webscoper.schemas.task import TaskSpec
 from webscoper.schemas.runtime import VersionContext
 from webscoper.browser.tool_runtime import StatefulBrowserToolRuntime
+from webscoper.browser.public_web import PublicWebRuntimeConfig, load_public_web_config
 from webscoper.tools.registry import ToolRegistry, create_default_tool_registry
 
 
@@ -99,6 +100,8 @@ class WebAgentExecutionHandler:
         reviewer_mode: str = "deterministic",
         revise_attempts: int = 0,
         dry_run: bool = False,
+        public_web_config: PublicWebRuntimeConfig | None = None,
+        public_web_config_path: Path | None = None,
     ) -> None:
         self.output_root = output_root
         self.headless = headless
@@ -121,6 +124,9 @@ class WebAgentExecutionHandler:
         self.reviewer_mode = ReviewerMode(reviewer_mode)
         self.revise_attempts = max(0, revise_attempts)
         self.dry_run = dry_run
+        self.public_web_config = public_web_config or load_public_web_config(
+            public_web_config_path
+        )
         if self.model_override:
             self.version.model = self.model_override
         self.last_context: WebAgentContext | None = None
@@ -173,13 +179,21 @@ class WebAgentExecutionHandler:
             "context_built",
             context.snapshot().model_dump(mode="json"),
         )
+        transcript.append(
+            "public_web_config_loaded",
+            self.public_web_config.model_dump(mode="json"),
+        )
         context.state.status = "running"
         context.state.current_step = 1
         transcript.append("execution_started", _state_payload(context))
         self._emit_event(
             "task_started",
             "Task started",
-            {"run_id": context.run_id, "run_dir": str(context.run_dir)},
+            {
+                "run_id": context.run_id,
+                "run_dir": str(context.run_dir),
+                "public_web": self.public_web_config.model_dump(mode="json"),
+            },
         )
         return context
 
@@ -193,6 +207,7 @@ class WebAgentExecutionHandler:
             transcript_store=context.transcript_store,
             event_sink=self.event_sink,
             evidence_store=context.evidence_store,
+            public_web_config=self.public_web_config,
         )
         tool_executor = LocalToolExecutor(
             tool_registry=self.tool_registry,
@@ -396,7 +411,6 @@ class WebAgentExecutionHandler:
         runtime: WebAgentRuntimeComponents,
     ) -> PageObservation:
         context.transcript_store.append("browser_tool_runtime_started", _state_payload(context))
-        await runtime.browser_runtime.start()
         context.state.current_step = 4
         loop_result = await runtime.execution_loop.run(
             context,

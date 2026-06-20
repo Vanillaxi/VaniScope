@@ -34,6 +34,7 @@ from webscoper.api.task_state import (
     status_from_context_state,
     status_from_transcript,
 )
+from webscoper.browser.public_web import PublicWebRuntimeConfig, load_runtime_config
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.runtime.inspector import RunArtifactLoader, RuntimeTimelineBuilder
 from webscoper.runtime.safety.approvals import ApprovalStore
@@ -50,8 +51,19 @@ from webscoper.schemas.workflow import LangGraphResumeResult
 
 
 class TaskService:
-    def __init__(self, runs_dir: Path = Path("runs")) -> None:
+    def __init__(
+        self,
+        runs_dir: Path = Path("runs"),
+        *,
+        web_config: PublicWebRuntimeConfig | None = None,
+        runtime_config_path: str | Path | None = None,
+        runtime_example_config_path: str | Path | None = None,
+    ) -> None:
         self.runs_dir = runs_dir
+        self.web_config = web_config or load_runtime_config(
+            example_path=runtime_example_config_path,
+            local_path=runtime_config_path,
+        )
         self.event_store = TaskEventStore()
         self.event_bus = InMemoryTaskEventBus()
         self.approval_store = ApprovalStore()

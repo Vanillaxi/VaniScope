@@ -14,6 +14,7 @@ It is a runtime for executing, auditing, and inspecting browser-agent workflows.
 * FastAPI provides task APIs, event streaming, artifact reads, approval decisions, resume, and diagnostics.
 * Next.js is a local console, not a production SaaS frontend.
 * Real LLM providers must be explicitly enabled through local configuration. Tests and demos do not depend on real LLMs by default.
+* Public web access is disabled by default. Local fixtures, `file://`, localhost, and `127.0.0.1` remain the default operating surface.
 * VaniScope does not bypass login, CAPTCHA, paywalls, or access controls. It also does not enter real sensitive information.
 
 ## Directory Boundaries
@@ -138,6 +139,66 @@ expect: pip install playwright
 planner: deterministic
 workspace: tests/fixtures/workspace
 ```
+
+## Web Runtime Modes
+
+VaniScope is local-first by default, but real public web access is a formal local runtime mode. It is never enabled by pytest, workflow eval, CI, or the default checked-in config.
+
+Copy and edit the example config:
+
+```bash
+cp configs/runtime.example.toml configs/runtime.local.toml
+```
+
+Do not commit `configs/runtime.local.toml` or any `configs/*.local.toml`.
+
+Modes:
+
+* `local`: default. Allows local fixtures, `file://`, localhost, `127.0.0.1`, and `::1`; blocks public URLs.
+* `public_safe`: allows public HTTP/HTTPS only when the domain matches `allowed_domains`.
+* `public_open`: allows any public HTTP/HTTPS domain, usually with `allowed_domains = ["*"]`, for local manual exploration only.
+
+`public_safe` example:
+
+```toml
+[web]
+mode = "public_safe"
+public_network_enabled = true
+allowed_domains = ["github.com", "playwright.dev", "docs.python.org", "arxiv.org"]
+max_pages_per_task = 3
+request_delay_ms = 250
+navigation_timeout_ms = 12000
+```
+
+The public URL policy classifies each `browser_open_observe` URL before navigation:
+
+* local fixture / `file://`: allowed by default
+* localhost / `127.0.0.1` / `::1`: allowed by default
+* public `http` / `https`: blocked in `local`, allow-listed in `public_safe`, open in `public_open`
+* private/internal network addresses and hostnames: blocked
+* unsupported schemes such as `javascript:` or `data:`: blocked
+
+Safety gates still apply in every mode: VaniScope does not bypass login, CAPTCHA, paywalls, access control, password fields, payment fields, PII fields, or destructive submit/publish/delete/payment actions.
+
+## Public Web Smoke
+
+Public web smoke is manual, non-deterministic, and not a benchmark.
+
+Manual smoke cases live in:
+
+```text
+tests/fixtures/public_web_smoke_cases.example.json
+```
+
+Run them manually:
+
+```bash
+uv run python scripts/run_public_web_smoke.py \
+  --config configs/runtime.local.toml \
+  --cases tests/fixtures/public_web_smoke_cases.example.json
+```
+
+The runner writes `summary.json` plus task artifacts under `runs/`. It uses soft checks only: page opens, title exists, visible text is non-empty, and expected artifacts exist when a task succeeds. Public smoke is non-deterministic and is not a benchmark.
 
 ## Browser Reliability
 

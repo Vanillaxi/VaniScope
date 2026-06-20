@@ -7,15 +7,16 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
-import { getHealth } from "@/lib/api";
+import { getDiagnostics, getHealth } from "@/lib/api";
 import { formatDateTime, statusTone } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { loadTaskHistory, type TaskHistoryItem } from "@/lib/taskHistory";
-import type { HealthResponse } from "@/lib/types";
+import type { DiagnosticsResponse, HealthResponse } from "@/lib/types";
 
 export default function Home() {
   const { language, t } = useI18n();
   const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [taskId, setTaskId] = useState("");
   const [history, setHistory] = useState<TaskHistoryItem[]>([]);
@@ -30,6 +31,9 @@ export default function Home() {
         setHealth(null);
         setHealthError(reason instanceof Error ? reason.message : String(reason));
       });
+    getDiagnostics()
+      .then((result) => setDiagnostics(result))
+      .catch(() => setDiagnostics(null));
   }, []);
 
   useEffect(() => {
@@ -70,6 +74,19 @@ export default function Home() {
             ) : (
               <Badge tone="info">{t.home.apiChecking}</Badge>
             )}
+            {diagnostics?.web?.mode ? (
+              <Badge
+                tone={
+                  diagnostics.web.mode === "public_open"
+                    ? "warning"
+                    : diagnostics.web.mode === "public_safe"
+                      ? "info"
+                      : "neutral"
+                }
+              >
+                Web Mode: {String(diagnostics.web.mode)}
+              </Badge>
+            ) : null}
           </div>
         </div>
         {healthError ? (

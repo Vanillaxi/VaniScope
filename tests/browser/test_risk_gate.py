@@ -73,6 +73,24 @@ def test_risk_gate_blocks_password_and_captcha_page_signals() -> None:
     assert captcha_result.signals[0].kind == "captcha_detected"
 
 
+def test_risk_gate_blocks_pii_page_signals() -> None:
+    result = RiskGate().check_action_contract(
+        task_id="task_test",
+        action_contract=_action("Profile"),
+        page_observation={
+            "risk_signals": [
+                {
+                    "risk_type": "pii",
+                    "message": "Page contains personal information fields.",
+                }
+            ]
+        },
+    )
+
+    assert result.blocked
+    assert result.signals[0].kind == "pii_field"
+
+
 def _action(target_hint: str) -> ActionContract:
     return ActionContract(
         action_type="click",

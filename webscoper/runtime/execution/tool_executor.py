@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from webscoper.runtime.safety.approvals import ApprovalStore
+from webscoper.browser.public_web import PublicWebPolicyError
 from webscoper.runtime.execution.events import TaskEventSink
 from webscoper.runtime.safety.pending import PendingApprovalManager
 from webscoper.runtime.safety.risk_gate import RiskGate
@@ -99,6 +100,18 @@ class LocalToolExecutor:
                 output=output,
                 error_type=output.get("error_type"),
                 error_message=output.get("error_message"),
+            )
+        except PublicWebPolicyError as exc:
+            output = {"public_web_policy": exc.decision.model_dump(mode="json")}
+            if exc.observation is not None:
+                output["observation"] = exc.observation.model_dump(mode="json")
+            return _result(
+                call,
+                started_at,
+                status="blocked",
+                output=output,
+                error_type="PUBLIC_WEB_BLOCKED",
+                error_message=exc.decision.reason,
             )
         except Exception as exc:
             return _result(

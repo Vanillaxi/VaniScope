@@ -50,6 +50,7 @@ class TaskCreateRequest(BaseModel):
     llm_provider: str | None = None
     model: str | None = None
     dry_run: bool = False
+    public_web_config: str | None = None
 
 
 class TaskCreateResponse(BaseModel):
@@ -115,6 +116,7 @@ class DiagnosticsResponse(BaseModel):
     runtime_backend: Literal["langgraph"] = "langgraph"
     artifact_directory: dict[str, object] = Field(default_factory=dict)
     llm: dict[str, object] = Field(default_factory=dict)
+    web: dict[str, object] = Field(default_factory=dict)
     registered_skills: list[dict[str, object]] = Field(default_factory=list)
     browser: dict[str, object] = Field(default_factory=dict)
     config: dict[str, object] = Field(default_factory=dict)

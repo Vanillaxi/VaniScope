@@ -127,7 +127,12 @@ class RiskGate:
             return None
 
         signal_kinds = {signal.kind for signal in signals}
-        if signal_kinds & {"captcha_detected", "password_field", "payment_form"}:
+        if signal_kinds & {
+            "captcha_detected",
+            "password_field",
+            "payment_form",
+            "pii_field",
+        }:
             return self._blocked("Page contains blocking risk signals.", signals)
         if "login_required" in signal_kinds:
             return self._requires_approval("Page appears to require login.", signals)
@@ -143,6 +148,7 @@ class RiskGate:
                 "captcha": "captcha_detected",
                 "password": "password_field",
                 "payment": "payment_form",
+                "pii": "pii_field",
                 "login": "login_required",
             }.get(risk_type)
             if kind is None:

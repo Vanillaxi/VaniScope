@@ -6,20 +6,26 @@ from pathlib import Path
 from typing import Any
 
 from webscoper.api.schemas import DiagnosticsResponse
+from webscoper.browser.public_web import PublicWebRuntimeConfig, load_runtime_config
 from webscoper.runtime.llm.config import default_fake_router_config
 from webscoper.skills.registry import create_default_skill_registry
 
 
-def build_diagnostics(runs_dir: Path = Path("runs")) -> DiagnosticsResponse:
+def build_diagnostics(
+    runs_dir: Path = Path("runs"),
+    web_config: PublicWebRuntimeConfig | None = None,
+) -> DiagnosticsResponse:
     runs_path = runs_dir.resolve()
+    web_config = web_config or load_runtime_config()
     return DiagnosticsResponse(
         status="ok",
         runtime_backend="langgraph",
         artifact_directory=_artifact_directory_status(runs_path),
         llm=_llm_status(),
+        web=web_config.diagnostics_payload(),
         registered_skills=_registered_skills(),
-        browser=_browser_status(),
-        config=_config_status(),
+        browser=_browser_status(web_config),
+        config=_config_status(web_config),
     )
 
 
@@ -70,7 +76,7 @@ def _registered_skills() -> list[dict[str, object]]:
     ]
 
 
-def _browser_status() -> dict[str, object]:
+def _browser_status(public_web) -> dict[str, object]:
     playwright_importable = importlib.util.find_spec("playwright") is not None
     chromium_ready = False
     browser_check_error: str | None = None
@@ -88,10 +94,13 @@ def _browser_status() -> dict[str, object]:
         "ready": playwright_importable and chromium_ready,
         "check": "local import and browser executable probe only",
         "error": browser_check_error,
+        "runtime_mode": public_web.mode,
+        "public_network_enabled": public_web.public_network_enabled,
+        "allowed_domains": public_web.allowed_domains,
     }
 
 
-def _config_status() -> dict[str, object]:
+def _config_status(public_web) -> dict[str, object]:
     return {
         "cors_origins": [
             origin.strip()
@@ -101,5 +110,9 @@ def _config_status() -> dict[str, object]:
         "llm_env_base_url_set": bool(os.getenv("VANISCOPE_LLM_BASE_URL")),
         "llm_env_model_set": bool(os.getenv("VANISCOPE_LLM_MODEL")),
         "llm_env_api_key_set": bool(os.getenv("VANISCOPE_LLM_API_KEY")),
+        "runtime_mode": public_web.mode,
+        "public_network_enabled": public_web.public_network_enabled,
+        "allowed_domains": public_web.allowed_domains,
+        "public_web_config_path": public_web.source_path,
         "sensitive_values_redacted": True,
     }

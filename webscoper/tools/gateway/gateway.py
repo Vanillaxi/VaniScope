@@ -132,7 +132,7 @@ class ToolGateway:
                 error_message=str(exc),
                 started_at=started_at,
             )
-        result.decision = "allowed"
+        result.decision = "blocked" if result.status == "blocked" else "allowed"
         result.provider_type = descriptor.provider_type
         result.approval_id = request.approval_override_id
         result.started_at = result.started_at or started_at
@@ -253,6 +253,7 @@ class ToolGateway:
                 error_type=result.error_type,
                 duration_ms=duration_ms,
                 approval_id=result.approval_id,
+                metadata=result.metadata,
             )
         )
         return result

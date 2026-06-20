@@ -28,6 +28,7 @@ export type TaskCreateRequest = {
   workspace?: string;
   risk_mode?: string;
   dry_run?: boolean;
+  public_web_config?: string;
 };
 
 export type TaskCreateApiRequest = Omit<TaskCreateRequest, "planner"> & {
@@ -125,6 +126,7 @@ export type DiagnosticsResponse = {
   runtime_backend: "langgraph";
   artifact_directory: Record<string, unknown>;
   llm: Record<string, unknown>;
+  web: Record<string, unknown>;
   registered_skills: Record<string, unknown>[];
   browser: Record<string, unknown>;
   config: Record<string, unknown>;

@@ -15,6 +15,7 @@ async def detect_risks(page: Page) -> list[RiskSignal]:
     email_or_username_count = int(page_facts.get("email_or_username_count", 0))
     captcha_detected = bool(page_facts.get("captcha_detected", False))
     payment_detected = bool(page_facts.get("payment_detected", False))
+    pii_detected = bool(page_facts.get("pii_detected", False))
 
     if password_count > 0:
         signals.append(
@@ -39,6 +40,15 @@ async def detect_risks(page: Page) -> list[RiskSignal]:
             RiskSignal(
                 risk_type="payment",
                 message="Page appears to contain payment-related fields or text.",
+                severity="high",
+            )
+        )
+
+    if pii_detected:
+        signals.append(
+            RiskSignal(
+                risk_type="pii",
+                message="Page appears to contain personal information fields.",
                 severity="high",
             )
         )
@@ -92,7 +102,16 @@ async def _collect_page_facts(page: Page) -> dict[str, Any]:
                     password_count: passwordCount,
                     email_or_username_count: emailOrUsernameCount,
                     captcha_detected: hasAny(['captcha', 'recaptcha', 'hcaptcha', 'verify you are human']),
-                    payment_detected: hasAny(['card number', 'credit card', 'cvv', 'cvc', 'expiry', 'expiration date'])
+                    payment_detected: hasAny(['card number', 'credit card', 'cvv', 'cvc', 'expiry', 'expiration date']),
+                    pii_detected: hasAny([
+                        'social security',
+                        'ssn',
+                        'passport',
+                        'driver license',
+                        'date of birth',
+                        'personal id',
+                        'identity number'
+                    ])
                 };
             }"""
         )
@@ -106,4 +125,5 @@ async def _collect_page_facts(page: Page) -> dict[str, Any]:
         "email_or_username_count": 0,
         "captcha_detected": False,
         "payment_detected": False,
+        "pii_detected": False,
     }

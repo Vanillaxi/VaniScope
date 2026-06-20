@@ -191,8 +191,6 @@ class LangGraphWorkflowNodes:
             "browser_tool_runtime_started",
             state_payload(context),
         )
-        if runtime.browser_runtime.session is None:
-            await runtime.browser_runtime.start()
         context.state.current_step = 4
         records: list[ToolExecutionRecord] = []
         final_output: dict[str, Any] = {}
@@ -343,7 +341,7 @@ class LangGraphWorkflowNodes:
                 "tool_call_completed",
                 record.model_dump(mode="json"),
             )
-            if tool_result.error_type == "RISK_BLOCKED":
+            if tool_result.status == "blocked":
                 risk_payload = {
                     "run_id": context.run_id,
                     "tool_name": step.tool_call.tool_id,

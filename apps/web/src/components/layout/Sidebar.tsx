@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
-import { getHealth } from "@/lib/api";
+import { getDiagnostics, getHealth } from "@/lib/api";
 import { formatDateTime, statusTone } from "@/lib/format";
 import type { Language } from "@/lib/i18n";
 import { useI18n } from "@/lib/i18n";
@@ -14,7 +14,7 @@ import {
   loadTaskHistory,
   type TaskHistoryItem,
 } from "@/lib/taskHistory";
-import type { HealthResponse } from "@/lib/types";
+import type { DiagnosticsResponse, HealthResponse } from "@/lib/types";
 
 export function Sidebar() {
   const { language, setLanguage, t } = useI18n();
@@ -22,6 +22,7 @@ export function Sidebar() {
   const searchParams = useSearchParams();
   const [history, setHistory] = useState<TaskHistoryItem[]>([]);
   const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsResponse | null>(null);
   const [healthError, setHealthError] = useState(false);
 
   useEffect(() => {
@@ -45,6 +46,9 @@ export function Sidebar() {
         setHealth(null);
         setHealthError(true);
       });
+    getDiagnostics()
+      .then((result) => setDiagnostics(result))
+      .catch(() => setDiagnostics(null));
   }, []);
 
   const recentTasks = useMemo(() => history.slice(0, 20), [history]);
@@ -176,6 +180,14 @@ export function Sidebar() {
             <Badge tone="info">{t.home.apiChecking}</Badge>
           )}
         </div>
+        {diagnostics?.web?.mode ? (
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span className="font-medium text-[var(--muted)]">Web Mode</span>
+            <Badge tone={diagnostics.web.mode === "public_open" ? "warning" : "neutral"}>
+              {String(diagnostics.web.mode)}
+            </Badge>
+          </div>
+        ) : null}
       </div>
     </aside>
   );

@@ -116,10 +116,12 @@ export function TaskStatusCard({ task, latestEvent }: TaskStatusCardProps) {
       </dl>
       {task.error ? (
         <div className="mt-5 rounded-md border border-[#fecdca] bg-[#fef3f2] p-3 text-sm text-[var(--danger)]">
-          <div className="font-semibold">{t.taskDetail.failureReason}</div>
-          <div className="mt-1 break-words text-[#912018]">
-            {friendlyTaskError(task.error)}
+          <div className="font-semibold">
+            {publicWebBlocked(task.error)
+              ? "Blocked by public web policy"
+              : t.taskDetail.failureReason}
           </div>
+          <div className="mt-1 break-words text-[#912018]">{friendlyTaskError(task.error)}</div>
         </div>
       ) : null}
     </Card>
@@ -128,10 +130,27 @@ export function TaskStatusCard({ task, latestEvent }: TaskStatusCardProps) {
 
 function friendlyTaskError(error: string) {
   if (!error) return "";
+  if (publicWebBlocked(error)) {
+    const detail = error.replace(/^.*PUBLIC_WEB_BLOCKED:\s*/s, "").trim();
+    const hints = [];
+    if (error.includes("disabled")) {
+      hints.push("Enable public web mode in configs/runtime.local.toml and restart the API.");
+    }
+    if (error.includes("not in allowed_domains")) {
+      hints.push(
+        "Add this domain to allowed_domains or use public_open for local manual exploration.",
+      );
+    }
+    return [detail || "Public web navigation was blocked.", ...hints].join(" ");
+  }
   if (error.includes("Task not found")) return "The task run could not be found.";
   if (error.includes("approval")) return error;
   if (error.includes("LangGraph workflow completed without a final observation")) {
     return "The workflow ended before producing a final browser observation. Check Timeline and Debug artifacts for the last runtime step.";
   }
   return error;
+}
+
+function publicWebBlocked(error: string) {
+  return error.includes("PUBLIC_WEB_BLOCKED") || error.includes("public web policy");
 }

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
+from webscoper.browser.public_web import PublicWebRuntimeConfig
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.runtime.prompt.reminders import RuntimeReminderStore
 from webscoper.schemas.browser import ActionContract, ExpectedEffect, PageObservation
@@ -39,6 +41,8 @@ def run_browser_task_sync(
     llm_provider: str | None = None,
     task_id: str = "cli_task",
     reminder_source: str = "runtime",
+    public_web_config: PublicWebRuntimeConfig | None = None,
+    public_web_config_path: str | Path | None = None,
 ) -> TaskRunOutput:
     task = build_task_spec(
         url=url,
@@ -67,6 +71,10 @@ def run_browser_task_sync(
         revise_attempts=revise_attempts,
         llm_config_path=llm_config_path(planner, llm_config, reviewer=reviewer),
         llm_provider=llm_provider,
+        public_web_config=public_web_config,
+        public_web_config_path=Path(public_web_config_path)
+        if public_web_config_path is not None
+        else None,
     )
     workflow_result = run_langgraph_workflow_sync(handler, task)
     if workflow_result.error and workflow_result.status == "failed":
@@ -166,7 +174,7 @@ def expected_effect(expect: str | None) -> ExpectedEffect:
 
 
 def as_url(value: str) -> str:
-    if value.startswith(("http://", "https://", "file://")):
+    if urlparse(value).scheme:
         return value
     return Path(value).resolve().as_uri()
 

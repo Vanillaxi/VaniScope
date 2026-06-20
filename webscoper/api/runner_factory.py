@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from webscoper.api.schemas import TaskCreateRequest
+from webscoper.browser.public_web import load_public_web_config
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.runtime.prompt.reminders import RuntimeReminderStore
 from webscoper.runtime.execution.runner import build_task_spec, llm_config_path
@@ -34,6 +35,9 @@ def build_handler(service, task_id: str, request: TaskCreateRequest) -> WebAgent
         approval_store=service.approval_store,
         pending_manager=service.pending_manager,
         dry_run=request.dry_run,
+        public_web_config=load_public_web_config(request.public_web_config)
+        if request.public_web_config
+        else service.web_config,
     )
 
 

@@ -29,7 +29,13 @@ def state_payload(context: WebAgentContext) -> dict:
 def status_from_loop_error(error_type: str | None) -> str | None:
     if error_type == "RISK_APPROVAL_REQUIRED":
         return "requires_approval"
-    if error_type in {"RISK_BLOCKED", "UNKNOWN_TOOL", "TOOL_DISABLED", "TOOL_DANGEROUS"}:
+    if error_type in {
+        "RISK_BLOCKED",
+        "PUBLIC_WEB_BLOCKED",
+        "UNKNOWN_TOOL",
+        "TOOL_DISABLED",
+        "TOOL_DANGEROUS",
+    }:
         return "blocked"
     return None
 
