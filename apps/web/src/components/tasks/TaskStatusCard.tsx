@@ -116,9 +116,22 @@ export function TaskStatusCard({ task, latestEvent }: TaskStatusCardProps) {
       </dl>
       {task.error ? (
         <div className="mt-5 rounded-md border border-[#fecdca] bg-[#fef3f2] p-3 text-sm text-[var(--danger)]">
-          {task.error}
+          <div className="font-semibold">{t.taskDetail.failureReason}</div>
+          <div className="mt-1 break-words text-[#912018]">
+            {friendlyTaskError(task.error)}
+          </div>
         </div>
       ) : null}
     </Card>
   );
+}
+
+function friendlyTaskError(error: string) {
+  if (!error) return "";
+  if (error.includes("Task not found")) return "The task run could not be found.";
+  if (error.includes("approval")) return error;
+  if (error.includes("LangGraph workflow completed without a final observation")) {
+    return "The workflow ended before producing a final browser observation. Check Timeline and Debug artifacts for the last runtime step.";
+  }
+  return error;
 }

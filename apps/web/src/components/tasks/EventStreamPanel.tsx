@@ -63,7 +63,10 @@ export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelPro
           .forEach(pushEvent);
         setConnectionState("polling");
       } catch {
-        if (!closed) setConnectionState("unavailable");
+        if (!closed) {
+          setConnectionState("unavailable");
+          setStreamWarning(t.events.snapshotUnavailable);
+        }
       }
     };
 
@@ -77,6 +80,7 @@ export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelPro
         () => setStreamWarning(t.events.invalidSse),
         () => {
           setConnectionState("polling");
+          setStreamWarning(t.events.disconnected);
           void loadFallback();
         },
       );
@@ -93,7 +97,13 @@ export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelPro
       window.clearInterval(interval);
       source?.close();
     };
-  }, [taskId, t.events.invalidJsonl, t.events.invalidSse]);
+  }, [
+    taskId,
+    t.events.disconnected,
+    t.events.invalidJsonl,
+    t.events.invalidSse,
+    t.events.snapshotUnavailable,
+  ]);
 
   const renderedEvents = useMemo(() => [...events].reverse(), [events]);
 
@@ -106,7 +116,14 @@ export function EventStreamPanel({ taskId, onEventsChange }: EventStreamPanelPro
             {connectionStateLabel(connectionState, t)}
           </p>
         </div>
-        <Button variant="secondary" onClick={() => void loadEventsSnapshot(taskId, setEvents)}>
+        <Button
+          variant="secondary"
+          onClick={() =>
+            void loadEventsSnapshot(taskId, setEvents).catch(() =>
+              setStreamWarning(t.events.snapshotUnavailable),
+            )
+          }
+        >
           {t.events.manualRefresh}
         </Button>
       </div>

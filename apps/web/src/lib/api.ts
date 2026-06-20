@@ -3,6 +3,7 @@ import type {
   ApprovalDecisionResponse,
   ApprovalRequest,
   BackendPlannerMode,
+  DiagnosticsResponse,
   HealthResponse,
   PlannerMode,
   RuntimeInspectorResponse,
@@ -17,6 +18,18 @@ import type {
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_VANISCOPE_API_BASE_URL ?? "http://localhost:8000";
+
+export class ApiRequestError extends Error {
+  status?: number;
+  detail?: unknown;
+
+  constructor(message: string, status?: number, detail?: unknown) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
 
 function plannerToApiMode(planner: PlannerMode): BackendPlannerMode {
   return planner === "llm" ? "real_llm" : planner;
@@ -39,8 +52,8 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
       },
     });
   } catch (reason) {
-    throw new Error(
-      `无法连接 VaniScope API (${API_BASE_URL})：${
+    throw new ApiRequestError(
+      `Cannot connect to VaniScope API at ${API_BASE_URL}. Start the FastAPI server with "uv run python scripts/run_api.py". Details: ${
         reason instanceof Error ? reason.message : String(reason)
       }`,
     );
@@ -48,27 +61,37 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(formatApiError(response.status, body));
+    const detail = parseApiErrorDetail(body);
+    throw new ApiRequestError(formatApiError(response.status, body), response.status, detail);
   }
 
   return response.json() as Promise<T>;
 }
 
 function formatApiError(status: number, body: string) {
-  if (!body) return `请求失败：HTTP ${status}`;
+  if (!body) return `Request failed: HTTP ${status}`;
+  const detail = parseApiErrorDetail(body);
+  if (typeof detail === "string") return `Request failed: HTTP ${status} - ${detail}`;
+  if (detail) return `Request failed: HTTP ${status} - ${JSON.stringify(detail)}`;
+  return `Request failed: HTTP ${status} - ${body}`;
+}
+
+function parseApiErrorDetail(body: string) {
+  if (!body) return null;
   try {
     const parsed = JSON.parse(body) as { detail?: unknown; message?: unknown };
-    const detail = parsed.detail ?? parsed.message;
-    if (typeof detail === "string") return `请求失败：HTTP ${status} - ${detail}`;
-    if (detail) return `请求失败：HTTP ${status} - ${JSON.stringify(detail)}`;
+    return parsed.detail ?? parsed.message ?? parsed;
   } catch {
-    return `请求失败：HTTP ${status} - ${body}`;
+    return body;
   }
-  return `请求失败：HTTP ${status} - ${body}`;
 }
 
 export function getHealth() {
   return requestJson<HealthResponse>("/health", { cache: "no-store" });
+}
+
+export function getDiagnostics() {
+  return requestJson<DiagnosticsResponse>("/diagnostics", { cache: "no-store" });
 }
 
 export function createTask(payload: TaskCreateRequest) {

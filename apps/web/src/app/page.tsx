@@ -72,6 +72,13 @@ export default function Home() {
             )}
           </div>
         </div>
+        {healthError ? (
+          <div className="mt-5 rounded-md border border-[#fecdca] bg-[#fef3f2] p-4 text-sm leading-6 text-[var(--danger)]">
+            <div className="font-semibold">{t.home.apiErrorTitle}</div>
+            <div className="mt-1 text-[#912018]">{t.home.apiErrorHint}</div>
+            <div className="mt-2 break-words text-xs text-[#912018]">{healthError}</div>
+          </div>
+        ) : null}
       </section>
 
       <SkillLauncher />

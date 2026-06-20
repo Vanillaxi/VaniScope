@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from webscoper.api.schemas import (
     ApprovalDecisionRequest,
     ApprovalDecisionResponse,
+    DiagnosticsResponse,
     RuntimeInspectorResponse,
     RuntimeTimelineResponse,
     TaskArtifactContentResponse,
@@ -18,6 +19,7 @@ from webscoper.api.schemas import (
     TaskCreateResponse,
     TaskStatusResponse,
 )
+from webscoper.api.diagnostics import build_diagnostics
 from webscoper.api.task_service import TaskService
 from webscoper.runtime.execution.events import TERMINAL_EVENT_KINDS
 from webscoper.schemas.runtime import TaskEvent
@@ -45,6 +47,11 @@ app.add_middleware(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "vaniscope-api"}
+
+
+@app.get("/diagnostics", response_model=DiagnosticsResponse)
+def diagnostics() -> DiagnosticsResponse:
+    return build_diagnostics(task_service.runs_dir)
 
 # 创建并同步运行任务
 @app.post("/tasks", response_model=TaskCreateResponse)

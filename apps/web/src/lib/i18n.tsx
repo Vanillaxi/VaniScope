@@ -29,6 +29,8 @@ const messages = {
       apiOk: "正常",
       apiDown: "不可用",
       apiChecking: "检查中",
+      apiErrorTitle: "无法连接后端",
+      apiErrorHint: "请确认 FastAPI 已启动：uv run python scripts/run_api.py",
       heroEyebrow: "LangGraph-only Browser Agent Runtime",
       newTaskTitle: "新建任务",
       newTaskDescription:
@@ -107,6 +109,12 @@ const messages = {
     taskDetail: {
       unavailable: "任务不可用",
       loading: "正在加载任务...",
+      notFoundTitle: "未找到这个任务",
+      notFoundDescription: "请检查任务 ID，或先从新建任务页面创建一个本地 demo 任务。",
+      loadFailedTitle: "任务加载失败",
+      loadFailedHint: "通常是 FastAPI 未启动、任务 ID 不存在，或 runs 目录不可读。",
+      failureReason: "失败原因",
+      retry: "重试",
       artifacts: "任务产物",
       refreshArtifacts: "刷新产物",
       finalReportPreview: "Final report 预览",
@@ -144,6 +152,9 @@ const messages = {
       polling: "轮询回退",
       unavailable: "暂不可用",
       connecting: "连接中",
+      disconnected:
+        "事件流连接已断开。控制台会尝试从 events.jsonl 读取快照；如果仍为空，请刷新任务或检查后端。",
+      snapshotUnavailable: "暂时无法读取 events.jsonl 快照。",
       invalidSse: "收到无法解析的 SSE 事件，已跳过。",
       invalidJsonl: "events.jsonl 中存在无法解析的事件行，已跳过。",
     },
@@ -252,6 +263,8 @@ const messages = {
       apiOk: "OK",
       apiDown: "Unavailable",
       apiChecking: "Checking",
+      apiErrorTitle: "Backend unavailable",
+      apiErrorHint: "Make sure FastAPI is running: uv run python scripts/run_api.py",
       heroEyebrow: "LangGraph-only Browser Agent Runtime",
       newTaskTitle: "New Task",
       newTaskDescription:
@@ -330,6 +343,12 @@ const messages = {
     taskDetail: {
       unavailable: "Task unavailable",
       loading: "Loading task...",
+      notFoundTitle: "Task not found",
+      notFoundDescription: "Check the task ID, or create a local demo task from New Task first.",
+      loadFailedTitle: "Task loading failed",
+      loadFailedHint: "This usually means FastAPI is not running, the task ID is missing, or the runs directory cannot be read.",
+      failureReason: "Failure reason",
+      retry: "Retry",
       artifacts: "Artifacts",
       refreshArtifacts: "Refresh artifacts",
       finalReportPreview: "Final report preview",
@@ -367,6 +386,9 @@ const messages = {
       polling: "Polling fallback",
       unavailable: "Disconnected",
       connecting: "Connecting",
+      disconnected:
+        "The event stream disconnected. The console will try to read an events.jsonl snapshot; refresh the task or check the backend if it stays empty.",
+      snapshotUnavailable: "Could not read the events.jsonl snapshot yet.",
       invalidSse: "Received an invalid SSE event; skipped it.",
       invalidJsonl: "events.jsonl contains an invalid event line; skipped it.",
     },

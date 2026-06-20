@@ -12,7 +12,7 @@ import { TaskStatusCard } from "@/components/tasks/TaskStatusCard";
 import { TimelinePanel } from "@/components/tasks/TimelinePanel";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { getTask, getTaskInspector, listArtifacts } from "@/lib/api";
+import { ApiRequestError, getTask, getTaskInspector, listArtifacts } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { skillIdFromTask } from "@/lib/skills";
 import { updateTaskHistoryOpened } from "@/lib/taskHistory";
@@ -35,7 +35,7 @@ export default function TaskPage({ params }: TaskPageProps) {
   const [artifacts, setArtifacts] = useState<string[]>([]);
   const [selectedArtifact, setSelectedArtifact] = useState<string | null>(null);
   const [inspector, setInspector] = useState<RuntimeInspectorResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadError | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -54,9 +54,9 @@ export default function TaskPage({ params }: TaskPageProps) {
       setInspector(inspectorResult);
       setSelectedArtifact((current) => current ?? artifactResult.artifacts[0] ?? null);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(loadErrorFromReason(reason, t));
     }
-  }, [taskId]);
+  }, [taskId, t]);
 
   useEffect(() => {
     const initial = window.setTimeout(() => void refresh(), 0);
@@ -88,9 +88,24 @@ export default function TaskPage({ params }: TaskPageProps) {
   if (error) {
     return (
       <Card className="p-5">
-        <h1 className="text-xl font-semibold">{t.taskDetail.unavailable}</h1>
+        <h1 className="text-xl font-semibold">{error.title}</h1>
         <div className="mt-3 rounded-md border border-[#fecdca] bg-[#fef3f2] p-3 text-sm text-[var(--danger)]">
-          {error}
+          <div>{error.message}</div>
+          {error.hint ? <div className="mt-2 text-[#912018]">{error.hint}</div> : null}
+        </div>
+        <Button className="mt-4" variant="secondary" onClick={() => void refresh()}>
+          {t.taskDetail.retry}
+        </Button>
+      </Card>
+    );
+  }
+
+  if (task?.status === "not_found") {
+    return (
+      <Card className="p-5">
+        <h1 className="text-xl font-semibold">{t.taskDetail.notFoundTitle}</h1>
+        <div className="mt-3 rounded-md border border-dashed border-[var(--line)] p-5 text-sm leading-6 text-[var(--muted)]">
+          {t.taskDetail.notFoundDescription}
         </div>
       </Card>
     );
@@ -300,4 +315,29 @@ function historyTitle(skillId: string, taskId: string) {
         ? "Issue"
         : "Browser";
   return `${prefix}: ${taskId}`;
+}
+
+type LoadError = {
+  title: string;
+  message: string;
+  hint?: string;
+};
+
+function loadErrorFromReason(
+  reason: unknown,
+  t: ReturnType<typeof useI18n>["t"],
+): LoadError {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  if (reason instanceof ApiRequestError && reason.status === 404) {
+    return {
+      title: t.taskDetail.notFoundTitle,
+      message,
+      hint: t.taskDetail.notFoundDescription,
+    };
+  }
+  return {
+    title: t.taskDetail.loadFailedTitle,
+    message,
+    hint: t.taskDetail.loadFailedHint,
+  };
 }

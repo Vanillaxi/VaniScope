@@ -107,3 +107,14 @@ class ApprovalDecisionRequest(BaseModel):
 class ApprovalDecisionResponse(BaseModel):
     approval: ApprovalRequest
     resume_result: TaskResumeResult | LangGraphResumeResult | None = None
+
+
+class DiagnosticsResponse(BaseModel):
+    status: str
+    service: str = "vaniscope-api"
+    runtime_backend: Literal["langgraph"] = "langgraph"
+    artifact_directory: dict[str, object] = Field(default_factory=dict)
+    llm: dict[str, object] = Field(default_factory=dict)
+    registered_skills: list[dict[str, object]] = Field(default_factory=list)
+    browser: dict[str, object] = Field(default_factory=dict)
+    config: dict[str, object] = Field(default_factory=dict)

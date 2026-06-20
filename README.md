@@ -2,7 +2,7 @@
 
 [中文说明](README_CN.md)
 
-VaniScope / Web-Scoper is a LangGraph-based browser-agent runtime for local and fixture-based web task execution. It includes browser observation and click intent, deterministic and LLM-backed planning modes, evidence/report artifacts, reviewer and revise-loop support, FastAPI task APIs, risk-gated approval pause/resume, context compaction, a LangGraph workflow backend, regression evals for workflow behavior, and a Next.js 16 control console.
+VaniScope / Web-Scoper is a LangGraph-based Browser Agent Runtime for local and fixture-driven web tasks. It combines a Playwright Browser Runtime, LangGraph workflow orchestration, ToolGateway policy/audit routing, evidence-backed reports, deterministic review, risk-gated approval, recovery telemetry, a Runtime Inspector API, and a Next.js 16 control console.
 
 The runtime package is split by responsibility into `runtime/execution`, `runtime/artifacts`, `runtime/inspector`, `runtime/llm`, `runtime/prompt`, `runtime/review`, and `runtime/safety`. Runtime root-level compatibility re-exports have been removed; project code imports the concrete package paths directly.
 
@@ -13,11 +13,11 @@ The runtime package is split by responsibility into `runtime/execution`, `runtim
 Browser recovery is split into `browser/recovery/classifier`, `planner`, `strategies`, `executor`, and `telemetry`, with `browser/recovery/manager.py` kept as the public facade.
 
 `webscoper/skills/` contains the LangGraph skill layer. The default registry
-currently ships `docs_research` and `github_issue_research`. Both read local
-fixtures through the normal Browser Runtime and ToolGateway path, then produce
-evidence-backed `final_report.md`, `review.json`, and `skill_result.json`
-artifacts. The GitHub issue skill uses a mock issue fixture only and does not
-access GitHub or the GitHub API.
+ships two demo skills: `docs_research` and `github_issue_research`. Both read
+local fixtures through the normal Browser Runtime and ToolGateway path, then
+produce evidence-backed `final_report.md`, `review.json`, and
+`skill_result.json` artifacts. The GitHub issue skill uses a mock issue fixture
+only and does not access GitHub or the GitHub API.
 
 ## Scope
 
@@ -51,8 +51,10 @@ The console is now organized as a ChatGPT-style task workspace: the sidebar has
 history stored in browser `localStorage`. Skill selection lives in the sidebar
 and home-page skill cards instead of a large mixed form; `/tasks/new?skill=...`
 renders fields specific to Browser Task, Docs Research, or GitHub Issue Research.
-Task detail pages include a Runtime Inspector with Timeline, Artifacts,
-Evidence, LLM / Prompt, Review, and Approval tabs. The inspector is backed by
+Task detail pages include a Runtime Inspector with Overview, Timeline, Report,
+Evidence, Review, Tools, LLM / Prompt, and Debug tabs. User-facing artifact
+views are shown by default; raw JSON, JSONL, markdown, prompt, and trace files
+remain available in Developer/Debug views. The inspector is backed by
 `/tasks/{task_id}/timeline` and `/tasks/{task_id}/inspector`, which dynamically
 aggregate run artifacts without a database.
 
@@ -92,7 +94,41 @@ Full-stack demo / 完整链路 demo:
 
 ```text
 docs/demo_next_console.md
+docs/demo_playbook.md
 ```
+
+## Local Demo Run
+
+Start the FastAPI API from the repository root:
+
+```bash
+uv run python scripts/run_api.py
+```
+
+In another terminal, start the Next.js console:
+
+```bash
+cd apps/web
+pnpm dev
+```
+
+Open `http://localhost:3000`. The default API base URL is
+`http://localhost:8000`. Confirm runtime readiness with:
+
+```text
+GET http://localhost:8000/diagnostics
+```
+
+Suggested demo order:
+
+1. Browser Task Demo: click `Quickstart` in `tests/fixtures/mock_site/basic.html`.
+2. Docs Research Demo: run `docs_research` on `tests/fixtures/mock_site/docs_research.html`.
+3. GitHub Issue Research Demo: run `github_issue_research` on `tests/fixtures/mock_site/github_issue_research.html`.
+4. Approval Demo: run a submit action against `tests/fixtures/mock_site/risk_actions.html`.
+5. Recovery Demo: run a recovery fixture from `tests/fixtures/langgraph_main_eval_cases.json`.
+
+Use `docs/demo_playbook.md` for inputs, expected artifacts, console views,
+failure causes, and debugging paths.
 
 ## Project Layout
 
@@ -125,6 +161,7 @@ configs/
   llm.local.toml  # local only, ignored
 
 docs/
+  demo_playbook.md
   runtime_modules.md
   runtime_inspector.md
   skills.md

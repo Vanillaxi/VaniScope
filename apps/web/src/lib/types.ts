@@ -119,6 +119,17 @@ export type HealthResponse = {
   service: string;
 };
 
+export type DiagnosticsResponse = {
+  status: string;
+  service: string;
+  runtime_backend: "langgraph";
+  artifact_directory: Record<string, unknown>;
+  llm: Record<string, unknown>;
+  registered_skills: Record<string, unknown>[];
+  browser: Record<string, unknown>;
+  config: Record<string, unknown>;
+};
+
 export type RuntimeArtifactRef = {
   artifact_name: string;
   ref_id?: string | null;
