@@ -21,6 +21,9 @@ from webscoper.api.resume import (
 from webscoper.api.runner_factory import build_api_task, build_handler
 from webscoper.api.schemas import (
     ApprovalDecisionResponse,
+    ConversationDetailResponse,
+    ConversationResponse,
+    MessageResponse,
     RuntimeInspectorResponse,
     RuntimeTimelineResponse,
     TaskArtifactContentResponse,
@@ -35,6 +38,7 @@ from webscoper.api.task_state import (
     status_from_transcript,
 )
 from webscoper.browser.public_web import PublicWebRuntimeConfig, load_runtime_config
+from webscoper.runtime.persistence import SQLitePersistenceStore, resolve_default_db_path
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.runtime.inspector import RunArtifactLoader, RuntimeTimelineBuilder
 from webscoper.runtime.safety.approvals import ApprovalStore
@@ -58,6 +62,7 @@ class TaskService:
         web_config: PublicWebRuntimeConfig | None = None,
         runtime_config_path: str | Path | None = None,
         runtime_example_config_path: str | Path | None = None,
+        persistence_path: str | Path | None = None,
     ) -> None:
         self.runs_dir = runs_dir
         self.web_config = web_config or load_runtime_config(
@@ -68,8 +73,47 @@ class TaskService:
         self.event_bus = InMemoryTaskEventBus()
         self.approval_store = ApprovalStore()
         self.pending_manager = PendingApprovalManager()
+        self.persistence = SQLitePersistenceStore(
+            persistence_path
+            or resolve_default_db_path(
+                runtime_config_path=runtime_config_path,
+                fallback_runs_dir=runs_dir,
+            )
+        )
         self._task_states: dict[str, _TaskState] = {}
         self._langgraph_adapters: dict[str, Any] = {}
+
+    def create_conversation(
+        self,
+        title: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> ConversationResponse:
+        return _conversation_response(
+            self.persistence.create_conversation(title=title, metadata=metadata)
+        )
+
+    def list_conversations(self) -> list[ConversationResponse]:
+        return [
+            _conversation_response(record)
+            for record in self.persistence.list_conversations()
+        ]
+
+    def get_conversation(self, conversation_id: str) -> ConversationDetailResponse:
+        conversation = self.persistence.get_conversation(conversation_id)
+        if conversation is None:
+            raise FileNotFoundError(f"Conversation not found: {conversation_id}")
+        return ConversationDetailResponse(
+            **_conversation_response(conversation).model_dump(mode="json"),
+            messages=self.list_messages(conversation_id),
+        )
+
+    def list_messages(self, conversation_id: str) -> list[MessageResponse]:
+        if self.persistence.get_conversation(conversation_id) is None:
+            raise FileNotFoundError(f"Conversation not found: {conversation_id}")
+        return [
+            _message_response(record)
+            for record in self.persistence.list_messages(conversation_id)
+        ]
 
     def create_and_run_task(
         self,
@@ -80,6 +124,7 @@ class TaskService:
         run_dir.mkdir(parents=True, exist_ok=True)
         handler = build_handler(self, task_id, request)
         task = build_api_task(task_id, request)
+        self._persist_task_started(request, task, task_id, run_dir)
 
         try:
             self._run_langgraph_workflow(handler, task, task_id)
@@ -88,6 +133,7 @@ class TaskService:
                 raise RuntimeError("Task completed without run context.")
             status = status_from_context_state(context.state.status)
             self._write_task_artifacts(context.run_id)
+            self._persist_task_finished(request, context.run_id, status, context.run_dir, None)
             return TaskCreateResponse(
                 task_id=context.run_id,
                 status=status,
@@ -107,6 +153,14 @@ class TaskService:
                 else "failed"
             )
             self._write_task_artifacts(failed_task_id)
+            self._persist_task_finished(
+                request,
+                failed_task_id,
+                status if status != "succeeded" else "failed",
+                failed_run_dir,
+                str(exc),
+                error_type=type(exc).__name__,
+            )
             return TaskCreateResponse(
                 task_id=failed_task_id,
                 status=status if status != "succeeded" else "failed",
@@ -126,6 +180,7 @@ class TaskService:
         task_id = self._new_task_id()
         run_dir = self._run_dir(task_id)
         run_dir.mkdir(parents=True, exist_ok=True)
+        task = build_api_task(task_id, request)
         self._task_states[task_id] = _TaskState(
             task_id=task_id,
             status="running",
@@ -139,6 +194,7 @@ class TaskService:
             "Task created",
             {"run_dir": str(run_dir)},
         )
+        self._persist_task_started(request, task, task_id, run_dir)
         asyncio.create_task(self._run_async_task(task_id, request))
         return TaskCreateResponse(
             task_id=task_id,
@@ -274,6 +330,13 @@ class TaskService:
         finally:
             state.artifacts = list_existing_artifacts(state.run_dir)
             write_task_artifacts(self, task_id)
+            self._persist_task_finished(
+                request,
+                task_id,
+                state.status,
+                state.run_dir,
+                state.error,
+            )
 
     def _make_event_sink(self, task_id: str):
         def sink(
@@ -370,6 +433,8 @@ class TaskService:
 
     def _write_task_artifacts(self, task_id: str) -> None:
         write_task_artifacts(self, task_id)
+        self._persist_artifact_metadata(task_id)
+        self._persist_approval_metadata(task_id)
 
     def _run_langgraph_workflow(
         self,
@@ -417,6 +482,114 @@ class TaskService:
 
     def _status_from_transcript(self, run_dir: Path) -> tuple[str, str | None]:
         return status_from_transcript(run_dir)
+
+    def _persist_task_started(
+        self,
+        request: TaskCreateRequest,
+        task: TaskSpec,
+        task_id: str,
+        run_dir: Path,
+    ) -> None:
+        try:
+            conversation_id = request.conversation_id
+            if conversation_id and self.persistence.get_conversation(conversation_id) is None:
+                conversation_id = self.persistence.create_conversation(
+                    title=_conversation_title(request),
+                    metadata={"source": "task_create"},
+                ).id
+            if conversation_id:
+                self.persistence.add_message(
+                    conversation_id=conversation_id,
+                    role="user",
+                    content=request.goal or request.research_goal or request.query or task.raw_input,
+                    task_id=task_id,
+                    metadata={"url": request.url, "mode": request.mode},
+                )
+            self.persistence.upsert_task(
+                task_id=task_id,
+                conversation_id=conversation_id,
+                status="running",
+                task_type=task.task_type,
+                skill_id=task.skill_id,
+                input_json=request.model_dump(mode="json"),
+                run_dir=str(run_dir),
+            )
+        except Exception:
+            return
+
+    def _persist_task_finished(
+        self,
+        request: TaskCreateRequest,
+        task_id: str,
+        status: str,
+        run_dir: Path,
+        error: str | None,
+        error_type: str | None = None,
+    ) -> None:
+        try:
+            task = build_api_task(task_id, request)
+            self.persistence.upsert_task(
+                task_id=task_id,
+                conversation_id=request.conversation_id,
+                status=status,
+                task_type=task.task_type,
+                skill_id=task.skill_id,
+                input_json=request.model_dump(mode="json"),
+                run_dir=str(run_dir),
+                error=error,
+                error_type=error_type,
+            )
+            self._persist_artifact_metadata(task_id)
+            self._persist_approval_metadata(task_id)
+            if request.conversation_id and status in {"succeeded", "failed", "blocked", "rejected"}:
+                self.persistence.add_message(
+                    conversation_id=request.conversation_id,
+                    role="assistant",
+                    content=_assistant_task_message(status, task_id, error),
+                    task_id=task_id,
+                    metadata={"status": status, "run_dir": str(run_dir)},
+                )
+        except Exception:
+            return
+
+    def _persist_artifact_metadata(self, task_id: str) -> None:
+        run_dir = self._run_dir(task_id)
+        if not run_dir.exists():
+            return
+        for artifact_name in list_existing_artifacts(run_dir):
+            path = run_dir / artifact_name
+            try:
+                size = path.stat().st_size
+            except OSError:
+                size = None
+            try:
+                self.persistence.upsert_artifact(
+                    task_id=task_id,
+                    name=artifact_name,
+                    kind=_artifact_kind(artifact_name),
+                    path=str(path),
+                    size=size,
+                )
+            except Exception:
+                continue
+
+    def _persist_approval_metadata(self, task_id: str) -> None:
+        for approval in self.approval_store.list_for_task(task_id):
+            try:
+                self.persistence.upsert_approval(
+                    approval_id=approval.approval_id,
+                    task_id=task_id,
+                    status=approval.status,
+                    risk_level=approval.risk_level,
+                    reason=approval.reason,
+                    decision=approval.decision.model_dump(mode="json")
+                    if approval.decision is not None
+                    else None,
+                    created_at=approval.created_at,
+                    decided_at=approval.decided_at,
+                )
+            except Exception:
+                continue
 
 
 def _load_events_from_jsonl(path: Path) -> list[TaskEvent]:
@@ -512,3 +685,46 @@ def _event_step(event: TaskEvent) -> int | None:
         if isinstance(value, str) and value.isdigit():
             return int(value)
     return None
+
+
+def _conversation_response(record) -> ConversationResponse:
+    return ConversationResponse(
+        id=record.id,
+        title=record.title,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        last_task_id=record.last_task_id,
+        metadata_json=record.metadata_json or {},
+    )
+
+
+def _message_response(record) -> MessageResponse:
+    return MessageResponse(
+        id=record.id,
+        conversation_id=record.conversation_id,
+        role=record.role,
+        content=record.content,
+        task_id=record.task_id,
+        metadata_json=record.metadata_json,
+        created_at=record.created_at,
+    )
+
+
+def _conversation_title(request: TaskCreateRequest) -> str:
+    title = request.goal or request.research_goal or request.query or request.url
+    return title[:80]
+
+
+def _assistant_task_message(status: str, task_id: str, error: str | None) -> str:
+    if status == "succeeded":
+        return f"Task {task_id} completed successfully."
+    return f"Task {task_id} ended with status {status}: {error or 'no error message'}"
+
+
+def _artifact_kind(name: str) -> str:
+    suffix = Path(name).suffix.lower().lstrip(".")
+    if name.endswith(".jsonl"):
+        return "jsonl"
+    if name.endswith(".md"):
+        return "markdown"
+    return suffix or "artifact"

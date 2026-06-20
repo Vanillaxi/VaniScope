@@ -1,5 +1,6 @@
 export type PlannerMode = "deterministic" | "fake_llm" | "llm";
 export type BackendPlannerMode = "deterministic" | "fake_llm" | "real_llm";
+export type TaskMode = "auto_explore" | "guided" | "skill";
 export type TaskType = "browser_task" | "docs_research" | "github_issue_research";
 export type SkillId = "auto" | "docs_research" | "github_issue_research";
 export type TaskLanguage = "auto" | "zh" | "en";
@@ -16,6 +17,9 @@ export type TaskStatus =
 
 export type TaskCreateRequest = {
   url: string;
+  conversation_id?: string;
+  goal?: string;
+  mode?: TaskMode;
   click?: string;
   expect?: string;
   task_type?: TaskType;
@@ -29,6 +33,7 @@ export type TaskCreateRequest = {
   risk_mode?: string;
   dry_run?: boolean;
   public_web_config?: string;
+  max_steps?: number;
 };
 
 export type TaskCreateApiRequest = Omit<TaskCreateRequest, "planner"> & {
@@ -152,6 +157,7 @@ export type ArtifactPresentation = {
 
 export type RuntimeTimelineItem = {
   id: string;
+  source?: string | null;
   timestamp?: string | null;
   kind: string;
   category: string;
@@ -164,6 +170,29 @@ export type RuntimeTimelineItem = {
   artifact_refs: RuntimeArtifactRef[];
   raw_ref?: RuntimeArtifactRef | null;
   raw: Record<string, unknown>;
+};
+
+export type ConversationResponse = {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  last_task_id?: string | null;
+  metadata_json: Record<string, unknown>;
+};
+
+export type MessageResponse = {
+  id: string;
+  conversation_id: string;
+  role: string;
+  content: string;
+  task_id?: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+};
+
+export type ConversationDetailResponse = ConversationResponse & {
+  messages: MessageResponse[];
 };
 
 export type RuntimeInspectorSummary = {

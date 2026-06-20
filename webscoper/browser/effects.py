@@ -155,6 +155,47 @@ class EffectVerifier:
                     ),
                 )
 
+            if effect_type == "content_or_url_changes":
+                satisfied = False
+                async for snapshot in _poll_page(page, timeout_ms, interval_ms):
+                    url_after = snapshot.url
+                    if snapshot.error is not None:
+                        return _read_failed_result(
+                            effect_type,
+                            expected.value,
+                            url_before,
+                            url_after,
+                            snapshot.error,
+                        )
+                    body_changed = (
+                        body_text_before is not None
+                        and snapshot.body_text != body_text_before
+                    )
+                    url_changed = bool(url_before) and snapshot.url != url_before
+                    expected_seen = False
+                    if expected.value:
+                        expected_value = expected.value.lower()
+                        expected_seen = (
+                            expected_value in snapshot.body_text.lower()
+                            or expected_value in (snapshot.url or "").lower()
+                        )
+                    if url_changed or body_changed or expected_seen:
+                        satisfied = True
+                        break
+                return EffectVerificationResult(
+                    status="success" if satisfied else "failed",
+                    effect_type=effect_type,
+                    expected_value=expected.value,
+                    satisfied=satisfied,
+                    url_before=url_before,
+                    url_after=url_after,
+                    message=(
+                        "Expected content or URL/page change was observed."
+                        if satisfied
+                        else "No expected content or URL/page change was observed."
+                    ),
+                )
+
             return EffectVerificationResult(
                 status="failed",
                 effect_type=effect_type,

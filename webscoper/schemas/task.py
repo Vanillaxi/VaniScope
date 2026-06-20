@@ -10,8 +10,10 @@ class TaskSpec(BaseModel):
     task_id: str
     raw_input: str
     task_type: str = "browser_task"
+    mode: str = "guided"
     skill_id: str | None = None
     target_url: str
+    goal: str | None = None
     query: str | None = None
     research_goal: str | None = None
     expected_output: str | None = None

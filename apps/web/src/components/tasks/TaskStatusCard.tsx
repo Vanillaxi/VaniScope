@@ -131,7 +131,7 @@ export function TaskStatusCard({ task, latestEvent }: TaskStatusCardProps) {
 function friendlyTaskError(error: string) {
   if (!error) return "";
   if (publicWebBlocked(error)) {
-    const detail = error.replace(/^.*PUBLIC_WEB_BLOCKED:\s*/s, "").trim();
+    const detail = error.replace(/^[\s\S]*PUBLIC_WEB_BLOCKED:\s*/, "").trim();
     const hints = [];
     if (error.includes("disabled")) {
       hints.push("Enable public web mode in configs/runtime.local.toml and restart the API.");

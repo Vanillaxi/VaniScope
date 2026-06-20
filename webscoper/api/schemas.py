@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -28,10 +28,14 @@ TaskStatus = Literal[
     "rejected",
     "not_found",
 ]
+TaskMode = Literal["auto_explore", "guided", "skill"]
 
 
 class TaskCreateRequest(BaseModel):
     url: str
+    conversation_id: str | None = None
+    goal: str | None = None
+    mode: TaskMode = "guided"
     click: str | None = None
     expect: str | None = None
     skill_id: str | None = None
@@ -51,6 +55,7 @@ class TaskCreateRequest(BaseModel):
     model: str | None = None
     dry_run: bool = False
     public_web_config: str | None = None
+    max_steps: int | None = None
 
 
 class TaskCreateResponse(BaseModel):
@@ -120,3 +125,31 @@ class DiagnosticsResponse(BaseModel):
     registered_skills: list[dict[str, object]] = Field(default_factory=list)
     browser: dict[str, object] = Field(default_factory=dict)
     config: dict[str, object] = Field(default_factory=dict)
+
+
+class ConversationCreateRequest(BaseModel):
+    title: str | None = None
+    metadata_json: dict[str, Any] = Field(default_factory=dict)
+
+
+class ConversationResponse(BaseModel):
+    id: str
+    title: str
+    created_at: str
+    updated_at: str
+    last_task_id: str | None = None
+    metadata_json: dict[str, Any] = Field(default_factory=dict)
+
+
+class MessageResponse(BaseModel):
+    id: str
+    conversation_id: str
+    role: str
+    content: str
+    task_id: str | None = None
+    metadata_json: dict[str, Any] = Field(default_factory=dict)
+    created_at: str
+
+
+class ConversationDetailResponse(ConversationResponse):
+    messages: list[MessageResponse] = Field(default_factory=list)

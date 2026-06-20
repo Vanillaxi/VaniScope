@@ -42,15 +42,20 @@ def build_handler(service, task_id: str, request: TaskCreateRequest) -> WebAgent
 
 
 def build_api_task(task_id: str, request: TaskCreateRequest) -> TaskSpec:
-    return build_task_spec(
+    task = build_task_spec(
         url=request.url,
         click=request.click,
         expect=request.expect,
         task_type=request.task_type or "browser_task",
+        mode=request.mode,
         skill_id=request.skill_id,
+        goal=request.goal,
         query=request.query,
         research_goal=request.research_goal,
         expected_output=request.expect,
         language=request.language,
         task_id=task_id,
     )
+    if request.max_steps is not None:
+        task.budget.max_steps = request.max_steps
+    return task

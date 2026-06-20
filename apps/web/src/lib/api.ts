@@ -3,6 +3,8 @@ import type {
   ApprovalDecisionResponse,
   ApprovalRequest,
   BackendPlannerMode,
+  ConversationDetailResponse,
+  ConversationResponse,
   DiagnosticsResponse,
   HealthResponse,
   PlannerMode,
@@ -92,6 +94,24 @@ export function getHealth() {
 
 export function getDiagnostics() {
   return requestJson<DiagnosticsResponse>("/diagnostics", { cache: "no-store" });
+}
+
+export function createConversation(payload: { title?: string; metadata_json?: Record<string, unknown> }) {
+  return requestJson<ConversationResponse>("/conversations", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listConversations() {
+  return requestJson<ConversationResponse[]>("/conversations", { cache: "no-store" });
+}
+
+export function getConversation(conversationId: string) {
+  return requestJson<ConversationDetailResponse>(
+    `/conversations/${encodeURIComponent(conversationId)}`,
+    { cache: "no-store" },
+  );
 }
 
 export function createTask(payload: TaskCreateRequest) {

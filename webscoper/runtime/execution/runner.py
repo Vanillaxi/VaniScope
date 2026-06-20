@@ -130,7 +130,9 @@ def build_task_spec(
     click: str | None = None,
     expect: str | None = None,
     task_type: str = "browser_task",
+    mode: str = "guided",
     skill_id: str | None = None,
+    goal: str | None = None,
     query: str | None = None,
     research_goal: str | None = None,
     expected_output: str | None = None,
@@ -140,10 +142,12 @@ def build_task_spec(
 ) -> TaskSpec:
     return TaskSpec(
         task_id=task_id,
-        raw_input=raw_input(url, click, expect, query or research_goal),
+        raw_input=raw_input(url, click, expect, goal or query or research_goal),
         task_type=task_type,
+        mode=mode,
         skill_id=skill_id,
         target_url=as_url(url),
+        goal=goal,
         query=query,
         research_goal=research_goal,
         expected_output=expected_output,

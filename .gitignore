@@ -3,6 +3,10 @@ __pycache__/
 *.pyc
 *.tsbuildinfo
 .env
+data/*.db
+.vaniscope/*.db
+*.sqlite
+*.sqlite3
 configs/llm.toml
 configs/llm.local.toml
 configs/*.local.toml

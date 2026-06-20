@@ -586,6 +586,8 @@ class WebAgentExecutionHandler:
         context: WebAgentContext,
         prompt_result: PromptBuildResult,
     ) -> ExecutionPlan:
+        if context.task.mode == "auto_explore":
+            return DeterministicTaskPlanner().build_plan(context.task)
         if self.planner_mode == "deterministic":
             return DeterministicTaskPlanner().build_plan(context.task)
 

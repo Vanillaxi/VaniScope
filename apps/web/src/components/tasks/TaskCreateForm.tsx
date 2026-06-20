@@ -11,7 +11,7 @@ import { createTask } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { type ConsoleSkill, type ConsoleSkillId, skillById } from "@/lib/skills";
 import { upsertTaskHistory } from "@/lib/taskHistory";
-import type { PlannerMode, TaskLanguage } from "@/lib/types";
+import type { PlannerMode, TaskLanguage, TaskMode } from "@/lib/types";
 
 export function TaskCreateForm() {
   const searchParams = useSearchParams();
@@ -29,6 +29,11 @@ function TaskCreateFormBody({ selectedSkill }: { selectedSkill: ConsoleSkill }) 
   const [url, setUrl] = useState(initialPreset?.values.url ?? "");
   const [click, setClick] = useState(initialPreset?.values.click ?? "");
   const [expect, setExpect] = useState(initialPreset?.values.expect ?? "");
+  const [goal, setGoal] = useState(
+    initialPreset?.values.researchGoal ||
+      initialPreset?.values.query ||
+      "Summarize the page and collect evidence for the main useful information.",
+  );
   const [query, setQuery] = useState(initialPreset?.values.query ?? "");
   const [researchGoal, setResearchGoal] = useState(
     initialPreset?.values.researchGoal ?? "",
@@ -36,7 +41,13 @@ function TaskCreateFormBody({ selectedSkill }: { selectedSkill: ConsoleSkill }) 
   const [taskLanguage, setTaskLanguage] = useState<TaskLanguage>(
     initialPreset?.values.language ?? "auto",
   );
-  const [planner, setPlanner] = useState<PlannerMode>("deterministic");
+  const [mode, setMode] = useState<TaskMode>(
+    selectedSkill.id === "browser_task" ? "auto_explore" : "skill",
+  );
+  const [planner, setPlanner] = useState<PlannerMode>(
+    selectedSkill.id === "browser_task" ? "fake_llm" : "deterministic",
+  );
+  const [maxSteps, setMaxSteps] = useState(8);
   const [workspace, setWorkspace] = useState("tests/fixtures/workspace");
   const [reminder, setReminder] = useState(
     initialPreset ? t.taskCreate[initialPreset.values.reminderKey] : "",
@@ -52,6 +63,7 @@ function TaskCreateFormBody({ selectedSkill }: { selectedSkill: ConsoleSkill }) 
     setUrl(preset.values.url);
     setClick(preset.values.click);
     setExpect(preset.values.expect);
+    setGoal(preset.values.researchGoal || preset.values.query || "");
     setQuery(preset.values.query);
     setResearchGoal(preset.values.researchGoal);
     setTaskLanguage(preset.values.language);
@@ -65,8 +77,12 @@ function TaskCreateFormBody({ selectedSkill }: { selectedSkill: ConsoleSkill }) 
     try {
       const task = await createTask({
         url,
-        click: selectedSkill.id === "browser_task" ? click : undefined,
-        expect,
+        goal: selectedSkill.id === "browser_task" ? goal : undefined,
+        mode,
+        click:
+          selectedSkill.id === "browser_task" && mode === "guided" ? click : undefined,
+        expect:
+          selectedSkill.id === "browser_task" && mode !== "guided" ? undefined : expect,
         task_type: selectedSkill.taskType,
         skill_id: selectedSkill.skillId,
         query,
@@ -76,12 +92,13 @@ function TaskCreateFormBody({ selectedSkill }: { selectedSkill: ConsoleSkill }) 
         workspace: selectedSkill.id === "browser_task" ? workspace : undefined,
         reminder,
         risk_mode: selectedSkill.id === "browser_task" ? riskMode : undefined,
+        max_steps: selectedSkill.id === "browser_task" ? maxSteps : undefined,
         dry_run: dryRun,
       });
       const now = new Date().toISOString();
       upsertTaskHistory({
         task_id: task.task_id,
-        title: taskTitle(selectedSkill.id, query || click || url),
+        title: taskTitle(selectedSkill.id, goal || query || click || url),
         task_type: task.task_type ?? selectedSkill.taskType,
         skill_id: task.skill_id ?? selectedSkill.skillId,
         status: task.status,
@@ -125,16 +142,27 @@ function TaskCreateFormBody({ selectedSkill }: { selectedSkill: ConsoleSkill }) 
 
             {selectedSkill.id === "browser_task" ? (
               <>
-                <Input
-                  label={t.taskCreate.click}
-                  value={click}
-                  onChange={(e) => setClick(e.target.value)}
-                />
-                <Input
-                  label={t.taskCreate.expect}
-                  value={expect}
-                  onChange={(e) => setExpect(e.target.value)}
-                />
+                <label className="flex flex-col gap-1.5 text-sm font-medium text-[#344054]">
+                  {t.taskCreate.mode}
+                  <select
+                    value={mode}
+                    onChange={(event) => setMode(event.target.value as TaskMode)}
+                    className="min-h-10 rounded-md border border-[var(--line)] bg-white px-3 text-[var(--foreground)] outline-none focus:border-[var(--brand)] focus:ring-2 focus:ring-[#0f6f7826]"
+                  >
+                    <option value="auto_explore">{t.taskCreate.autoExplore}</option>
+                    <option value="guided">{t.taskCreate.guided}</option>
+                    <option value="skill">{t.taskCreate.skillMode}</option>
+                  </select>
+                </label>
+                <div className="lg:col-span-2">
+                  <Textarea
+                    label={t.taskCreate.goal}
+                    value={goal}
+                    onChange={(e) => setGoal(e.target.value)}
+                    placeholder={t.taskCreate.goalPlaceholder}
+                    required={mode === "auto_explore"}
+                  />
+                </div>
               </>
             ) : null}
 
@@ -184,10 +212,32 @@ function TaskCreateFormBody({ selectedSkill }: { selectedSkill: ConsoleSkill }) 
 
             {selectedSkill.id === "browser_task" ? (
               <>
+                {mode === "guided" ? (
+                  <>
+                    <Input
+                      label={t.taskCreate.click}
+                      value={click}
+                      onChange={(e) => setClick(e.target.value)}
+                    />
+                    <Input
+                      label={t.taskCreate.expect}
+                      value={expect}
+                      onChange={(e) => setExpect(e.target.value)}
+                    />
+                  </>
+                ) : null}
                 <Input
                   label={t.taskCreate.workspace}
                   value={workspace}
                   onChange={(e) => setWorkspace(e.target.value)}
+                />
+                <Input
+                  label={t.taskCreate.maxSteps}
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={maxSteps}
+                  onChange={(e) => setMaxSteps(Number(e.target.value) || 8)}
                 />
                 <label className="flex flex-col gap-1.5 text-sm font-medium text-[#344054]">
                   {t.taskCreate.riskMode}

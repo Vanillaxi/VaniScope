@@ -18,6 +18,9 @@ class BaseLLMClient(ABC):
 
 class FakeLLMClient(BaseLLMClient):
     async def generate(self, request: LLMRequest) -> LLMResponse:
+        if request.metadata.get("response_format") == "auto_explore_action":
+            return _fake_auto_explore_response(request)
+
         task_id = str(request.metadata.get("task_id") or "task")
         target_url = str(request.metadata.get("target_url") or "")
         action = request.metadata.get("action")
@@ -94,6 +97,71 @@ class FakeLLMClient(BaseLLMClient):
             },
             raw={"client": "FakeLLMClient"},
         )
+
+
+def _fake_auto_explore_response(request: LLMRequest) -> LLMResponse:
+    goal = str(request.metadata.get("goal") or "").lower()
+    history = request.metadata.get("history")
+    history_items = history if isinstance(history, list) else []
+    action_types = [
+        str(item.get("action_type") or item.get("tool_id") or "")
+        for item in history_items
+        if isinstance(item, dict)
+    ]
+
+    if "invalid_action" in goal or "非法 action" in goal:
+        payload: dict[str, Any] = {
+            "reasoning_summary": "Return an invalid action for schema validation tests.",
+            "action": {"type": "navigate", "target_hint": "invalid"},
+        }
+    elif "delete" in goal or "删除" in goal:
+        payload = {
+            "reasoning_summary": "The goal asks for a risky delete-like action.",
+            "action": {
+                "type": "click_intent",
+                "target_hint": "Delete",
+                "expected_effect": {"type": "content_or_url_changes", "value": "delete"},
+                "risk_level": "sensitive",
+            },
+        }
+    elif (
+        ("click" in goal or "repositories" in goal or "仓库" in goal)
+        and "browser_click_intent" not in action_types
+    ):
+        target = "Repositories" if "repositories" in goal or "仓库" in goal else "Quickstart"
+        payload = {
+            "reasoning_summary": "A related navigation target is available and useful.",
+            "action": {
+                "type": "click_intent",
+                "target_hint": target,
+                "expected_effect": {
+                    "type": "content_or_url_changes",
+                    "value": target.lower(),
+                },
+                "risk_level": "read_only",
+            },
+        }
+    elif "browser_extract" not in action_types:
+        payload = {
+            "reasoning_summary": "The visible page contains enough information to extract.",
+            "action": {"type": "extract", "risk_level": "read_only"},
+        }
+    else:
+        payload = {
+            "reasoning_summary": "Enough evidence has been collected to finish.",
+            "action": {
+                "type": "finish",
+                "summary": "Auto exploration completed with collected evidence.",
+                "risk_level": "read_only",
+            },
+        }
+
+    return LLMResponse(
+        content=json.dumps(payload, indent=2, ensure_ascii=False),
+        model="fake-llm",
+        usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        raw={"client": "FakeLLMClient", "mode": "auto_explore"},
+    )
 
 
 class OpenAICompatibleLLMClient(BaseLLMClient):

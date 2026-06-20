@@ -10,6 +10,9 @@ max_pages_per_task = 3
 request_delay_ms = 250
 navigation_timeout_ms = 8000
 
+[persistence]
+sqlite_path = "data/vaniscope.db"
+
 # public_safe example:
 # [web]
 # mode = "public_safe"

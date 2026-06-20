@@ -93,6 +93,17 @@ NEXT_PUBLIC_VANISCOPE_API_BASE_URL=http://localhost:8000
 Browser task:
 
 ```text
+mode: auto_explore
+url: tests/fixtures/mock_site/basic.html
+goal: Summarize the visible page information and collect evidence.
+planner: fake_llm
+workspace: tests/fixtures/workspace
+```
+
+Guided browser debug task:
+
+```text
+mode: guided
 url: tests/fixtures/mock_site/basic.html
 click: Quickstart
 expect: pip install playwright
@@ -139,6 +150,38 @@ expect: pip install playwright
 planner: deterministic
 workspace: tests/fixtures/workspace
 ```
+
+## Conversation Persistence and Auto Explore
+
+VaniScope stores local conversation and task metadata in SQLite. The default path is `data/vaniscope.db`, configurable with `[persistence].sqlite_path` in `configs/runtime.local.toml` or `VANISCOPE_DB_PATH`. SQLite stores conversations, messages, task metadata, artifact paths/sizes, and approval metadata. Large artifacts such as traces, screenshots, prompts, and reports stay under `runs/task_xxx/`.
+
+FastAPI includes:
+
+```text
+POST /conversations
+GET /conversations
+GET /conversations/{conversation_id}
+GET /conversations/{conversation_id}/messages
+POST /tasks
+```
+
+Browser tasks now support URL + natural-language goal through `mode: auto_explore`. Guided mode is still available for deterministic demos and debugging with explicit `click` / `expect` fields. Skill mode remains available for registered skills such as `docs_research` and `github_issue_research`.
+
+The auto-explore loop lets an LLM choose structured action intents only:
+
+```text
+observe
+click_intent
+extract
+ask_human
+finish
+```
+
+The LLM never chooses CSS selectors, XPath, JavaScript, or DOM handles. It may provide a `target_hint`; Browser Runtime still resolves the target, and ToolGateway, PublicWebPolicy, RiskGate, Approval, PageReadinessDetector, TargetResolver, EffectVerifier, RecoveryManager, EvidenceStore, and task budgets continue to govern execution.
+
+Webpage content is untrusted evidence, not instructions. Prompt-injection text on a page, such as instructions to ignore previous rules or click a destructive control, must still satisfy the user goal and safety policy before any action is attempted.
+
+Fake/deterministic planning remains the test and CI default path. Real LLM execution is opt-in through local configuration such as `configs/llm.local.toml`; do not commit real keys. Pytest and workflow eval do not depend on real public web access or real LLM providers.
 
 ## Web Runtime Modes
 

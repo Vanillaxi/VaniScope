@@ -10,7 +10,11 @@ from fastapi.responses import StreamingResponse
 from webscoper.api.schemas import (
     ApprovalDecisionRequest,
     ApprovalDecisionResponse,
+    ConversationCreateRequest,
+    ConversationDetailResponse,
+    ConversationResponse,
     DiagnosticsResponse,
+    MessageResponse,
     RuntimeInspectorResponse,
     RuntimeTimelineResponse,
     TaskArtifactContentResponse,
@@ -52,6 +56,35 @@ def health() -> dict[str, str]:
 @app.get("/diagnostics", response_model=DiagnosticsResponse)
 def diagnostics() -> DiagnosticsResponse:
     return build_diagnostics(task_service.runs_dir, task_service.web_config)
+
+
+@app.post("/conversations", response_model=ConversationResponse)
+def create_conversation(request: ConversationCreateRequest) -> ConversationResponse:
+    return task_service.create_conversation(
+        title=request.title,
+        metadata=request.metadata_json,
+    )
+
+
+@app.get("/conversations", response_model=list[ConversationResponse])
+def list_conversations() -> list[ConversationResponse]:
+    return task_service.list_conversations()
+
+
+@app.get("/conversations/{conversation_id}", response_model=ConversationDetailResponse)
+def get_conversation(conversation_id: str) -> ConversationDetailResponse:
+    try:
+        return task_service.get_conversation(conversation_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/conversations/{conversation_id}/messages", response_model=list[MessageResponse])
+def list_conversation_messages(conversation_id: str) -> list[MessageResponse]:
+    try:
+        return task_service.list_messages(conversation_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 # 创建并同步运行任务
 @app.post("/tasks", response_model=TaskCreateResponse)

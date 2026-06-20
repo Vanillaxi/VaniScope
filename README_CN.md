@@ -103,6 +103,17 @@ NEXT_PUBLIC_VANISCOPE_API_BASE_URL=http://localhost:8000
 浏览器任务：
 
 ```text
+mode: auto_explore
+url: tests/fixtures/mock_site/basic.html
+goal: Summarize the visible page information and collect evidence.
+planner: fake_llm
+workspace: tests/fixtures/workspace
+```
+
+确定性浏览器调试任务：
+
+```text
+mode: guided
 url: tests/fixtures/mock_site/basic.html
 click: Quickstart
 expect: pip install playwright
@@ -149,6 +160,51 @@ expect: pip install playwright
 planner: deterministic
 workspace: tests/fixtures/workspace
 ```
+
+## 会话持久化与 Auto Explore
+
+VaniScope 使用本地 SQLite 保存 conversation 和 task metadata。默认路径是
+`data/vaniscope.db`，可以通过 `configs/runtime.local.toml` 中的
+`[persistence].sqlite_path` 或 `VANISCOPE_DB_PATH` 配置。SQLite 只保存
+conversation、message、task metadata、artifact 路径/大小和 approval metadata；
+trace、screenshot、prompt、report 等大型 artifact 仍保存在 `runs/task_xxx/`。
+
+FastAPI 包含：
+
+```text
+POST /conversations
+GET /conversations
+GET /conversations/{conversation_id}
+GET /conversations/{conversation_id}/messages
+POST /tasks
+```
+
+Browser Task 现在支持 `mode: auto_explore`，用户只需要输入 URL 和自然语言目标。
+`guided` 模式仍保留，用于 deterministic demo 和显式 `click` / `expect` 调试。
+`skill` 模式继续用于 `docs_research`、`github_issue_research` 等注册 skill。
+
+auto-explore 循环中，LLM 只能选择结构化 action intent：
+
+```text
+observe
+click_intent
+extract
+ask_human
+finish
+```
+
+LLM 不允许直接选择 CSS selector、XPath、JavaScript 或 DOM handle。它只能给
+`target_hint`；真正的目标解析和执行仍由 Browser Runtime 完成，并继续受
+ToolGateway、PublicWebPolicy、RiskGate、Approval、PageReadinessDetector、
+TargetResolver、EffectVerifier、RecoveryManager、EvidenceStore 和 task budget
+约束。
+
+网页内容是不可信 evidence，不是系统指令。页面里的 prompt injection 文本，例如
+要求忽略规则或点击破坏性按钮，仍必须符合用户目标和安全策略，才可能被执行。
+
+fake / deterministic 路径仍是测试和 CI 默认路径。真实 LLM 只能通过
+`configs/llm.local.toml` 等本地配置显式启用；不要提交真实 key。pytest 和
+workflow eval 不依赖真实公网或真实 LLM。
 
 ## Web Runtime 模式
 

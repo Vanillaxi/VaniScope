@@ -4,13 +4,18 @@ from typing import Any, Callable
 
 from webscoper.runtime.execution.context import WebAgentContext
 from webscoper.runtime.execution.handler import WebAgentRuntimeComponents
+from webscoper.runtime.llm.auto_explore import (
+    AutoExploreActionPlanner,
+    decision_to_tool_call,
+)
+from webscoper.runtime.llm.router import LLMProviderRouter
 from webscoper.runtime.execution.results import merge_final_output, record_evidence
 from webscoper.runtime.execution.state import state_payload, status_from_loop_error
 from webscoper.schemas.browser import PageObservation
 from webscoper.schemas.runtime import SkillPromptContext
 from webscoper.schemas.tool import ExecutionLoopResult, ExecutionPlan
 from webscoper.schemas.task import TaskSpec
-from webscoper.schemas.tool import ToolExecutionRecord, ToolResult
+from webscoper.schemas.tool import ToolCall, ToolExecutionRecord, ToolResult
 from webscoper.tools.gateway import ToolInvocationRequest, ToolInvocationResult
 from webscoper.schemas.workflow import LangGraphResumePayload
 from webscoper.skills.router import SkillRouter
@@ -159,9 +164,18 @@ class LangGraphWorkflowNodes:
         runtime = self.workflow.require_runtime()
         if self.workflow.plan is None:
             raise RuntimeError("Plan missing before execute_plan.")
-        self.workflow.final_observation = self.workflow.run_async(
-            self._execute_plan_with_interrupts(context, self.workflow.plan, runtime)
-        )
+        if context.task.mode == "auto_explore" and context.task.task_type == "browser_task":
+            self.workflow.final_observation = self.workflow.run_async(
+                self._execute_auto_explore_with_interrupts(
+                    context,
+                    self.workflow.plan,
+                    runtime,
+                )
+            )
+        else:
+            self.workflow.final_observation = self.workflow.run_async(
+                self._execute_plan_with_interrupts(context, self.workflow.plan, runtime)
+            )
         if self.workflow.handler.last_loop_result is not None:
             state["execution_result"] = (
                 self.workflow.handler.last_loop_result.model_dump(mode="json")
@@ -452,6 +466,264 @@ class LangGraphWorkflowNodes:
             )
         return observation
 
+    async def _execute_auto_explore_with_interrupts(
+        self,
+        context: WebAgentContext,
+        seed_plan: ExecutionPlan,
+        runtime: WebAgentRuntimeComponents,
+    ) -> PageObservation:
+        context.transcript_store.append(
+            "browser_tool_runtime_started",
+            state_payload(context),
+        )
+        context.state.current_step = 4
+        records: list[ToolExecutionRecord] = []
+        final_output: dict[str, Any] = {}
+        history: list[dict[str, Any]] = []
+
+        for step in seed_plan.steps:
+            tool_result = await self._invoke_auto_tool(context, runtime, step.tool_call)
+            record = ToolExecutionRecord(call=step.tool_call, result=tool_result)
+            records.append(record)
+            history.append(_history_item(step.tool_call, tool_result))
+            merge_final_output(final_output, tool_result.output)
+            evidence_item = record_evidence(context, step.step_id, step.tool_call, tool_result)
+            if evidence_item is not None:
+                context.transcript_store.append(
+                    "evidence_recorded",
+                    evidence_item.model_dump(mode="json"),
+                )
+            if tool_result.status in {"failed", "blocked"}:
+                return self._finish_auto_explore_failure(
+                    context,
+                    runtime,
+                    records,
+                    final_output,
+                    tool_result.error_type,
+                    tool_result.error_message,
+                )
+
+        planner = AutoExploreActionPlanner(
+            self._auto_explore_llm_client(context),
+            repair_attempts=self.workflow.handler.repair_attempts,
+        )
+
+        for step_index in range(len(records) + 1, context.task.budget.max_steps + 1):
+            try:
+                decision = await planner.decide(
+                    context=context.snapshot(),
+                    observation=runtime.browser_runtime.last_observation,
+                    history=history,
+                    step_index=step_index,
+                )
+            except RuntimeError as exc:
+                context.transcript_store.append(
+                    "auto_explore_validation_failed",
+                    {"error": str(exc), "step_index": step_index},
+                )
+                return self._finish_auto_explore_failure(
+                    context,
+                    runtime,
+                    records,
+                    final_output,
+                    "LLM_ACTION_SCHEMA_INVALID",
+                    str(exc),
+                )
+
+            context.transcript_store.append(
+                "auto_explore_decision",
+                decision.model_dump(mode="json"),
+            )
+            self.workflow.handler._emit_event(
+                "planner_finished",
+                "Auto explore action selected",
+                {
+                    "run_id": context.run_id,
+                    "step_index": step_index,
+                    "action_type": decision.action.type,
+                    "target_hint": decision.action.target_hint,
+                },
+            )
+
+            try:
+                tool_call = decision_to_tool_call(decision, f"auto_call_{step_index:03d}")
+            except RuntimeError as exc:
+                return self._finish_auto_explore_failure(
+                    context,
+                    runtime,
+                    records,
+                    final_output,
+                    "LLM_ACTION_SCHEMA_INVALID",
+                    str(exc),
+                )
+
+            tool_result = await self._invoke_auto_tool(context, runtime, tool_call)
+            record = ToolExecutionRecord(call=tool_call, result=tool_result)
+            records.append(record)
+            history.append(_history_item(tool_call, tool_result))
+            merge_final_output(final_output, tool_result.output)
+            evidence_item = record_evidence(
+                context,
+                f"auto_step_{step_index:03d}",
+                tool_call,
+                tool_result,
+            )
+            if evidence_item is not None:
+                context.transcript_store.append(
+                    "evidence_recorded",
+                    evidence_item.model_dump(mode="json"),
+                )
+                self.workflow.event_emitter.emit_tool_event(
+                    context,
+                    "evidence_added",
+                    f"Evidence added: {evidence_item.evidence_id}",
+                    {
+                        "evidence_id": evidence_item.evidence_id,
+                        "kind": evidence_item.kind,
+                        "tool_name": tool_call.tool_id,
+                    },
+                )
+
+            if tool_result.error_type == "RISK_APPROVAL_REQUIRED":
+                context.state.status = "requires_approval"
+                context.state.error_type = tool_result.error_type
+                context.state.error_message = tool_result.error_message
+                self.workflow.handler.last_loop_result = ExecutionLoopResult(
+                    task_id=context.task.task_id,
+                    status="failed",
+                    records=records,
+                    final_output=final_output,
+                    error_type=tool_result.error_type,
+                    error_message=tool_result.error_message,
+                )
+                context.transcript_store.append("task_paused", _state_payload(context))
+                return _require_last_observation(runtime)
+
+            if tool_result.status in {"failed", "blocked"}:
+                return self._finish_auto_explore_failure(
+                    context,
+                    runtime,
+                    records,
+                    final_output,
+                    tool_result.error_type,
+                    tool_result.error_message,
+                )
+
+            if tool_call.tool_id == "finish_task":
+                loop_result = ExecutionLoopResult(
+                    task_id=context.task.task_id,
+                    status="success",
+                    records=records,
+                    final_output=final_output,
+                )
+                self.workflow.handler.last_loop_result = loop_result
+                context.transcript_store.append(
+                    "execution_loop_completed",
+                    loop_result.model_dump(mode="json"),
+                )
+                return _require_last_observation(runtime)
+
+        return self._finish_auto_explore_failure(
+            context,
+            runtime,
+            records,
+            final_output,
+            "MAX_STEPS_EXCEEDED",
+            "auto_explore exceeded task budget max_steps.",
+        )
+
+    async def _invoke_auto_tool(
+        self,
+        context: WebAgentContext,
+        runtime: WebAgentRuntimeComponents,
+        tool_call: ToolCall,
+    ) -> ToolResult:
+        context.transcript_store.append(
+            "tool_call_started",
+            {"call": tool_call.model_dump(mode="json")},
+        )
+        self.workflow.event_emitter.emit_tool_event(
+            context,
+            "tool_call_started",
+            f"Tool call started: {tool_call.tool_id}",
+            {
+                "step_id": tool_call.call_id,
+                "tool_name": tool_call.tool_id,
+                "call_id": tool_call.call_id,
+            },
+        )
+        gateway_result = await runtime.tool_gateway.invoke(
+            _gateway_request(
+                context=context,
+                runtime=runtime,
+                tool_name=tool_call.tool_id,
+                arguments=tool_call.arguments,
+                call_id=tool_call.call_id,
+                workflow_backend="langgraph",
+            )
+        )
+        tool_result = _tool_result_from_gateway(gateway_result)
+        record = ToolExecutionRecord(call=tool_call, result=tool_result)
+        context.transcript_store.append(
+            "tool_call_completed",
+            record.model_dump(mode="json"),
+        )
+        self.workflow.event_emitter.emit_tool_event(
+            context,
+            "tool_call_finished",
+            f"Tool call finished: {tool_call.tool_id}",
+            {
+                "step_id": tool_call.call_id,
+                "tool_name": tool_call.tool_id,
+                "call_id": tool_call.call_id,
+                "ok": tool_result.status == "success",
+                "status": tool_result.status,
+                "error_type": tool_result.error_type,
+            },
+        )
+        return tool_result
+
+    def _finish_auto_explore_failure(
+        self,
+        context: WebAgentContext,
+        runtime: WebAgentRuntimeComponents,
+        records: list[ToolExecutionRecord],
+        final_output: dict[str, Any],
+        error_type: str | None,
+        error_message: str | None,
+    ) -> PageObservation:
+        loop_result = ExecutionLoopResult(
+            task_id=context.task.task_id,
+            status="failed",
+            records=records,
+            final_output=final_output,
+            error_type=error_type,
+            error_message=error_message,
+        )
+        self.workflow.handler.last_loop_result = loop_result
+        context.transcript_store.append(
+            "execution_loop_failed",
+            loop_result.model_dump(mode="json"),
+        )
+        runtime_status = status_from_loop_error(error_type)
+        context.state.status = runtime_status or "failed"
+        context.state.error_type = error_type
+        context.state.error_message = error_message
+        context.transcript_store.append("execution_failed", state_payload(context))
+        if runtime.browser_runtime.last_observation is not None and runtime_status is not None:
+            return runtime.browser_runtime.last_observation
+        return _require_last_observation(runtime)
+
+    def _auto_explore_llm_client(self, context: WebAgentContext):
+        if self.workflow.handler.planner_mode in {"fake_llm", "real_llm"}:
+            return self.workflow.handler._create_llm_client(context, purpose="auto_explore")
+        return LLMProviderRouter(None).create_client(
+            run_dir=context.run_dir,
+            task_id=context.run_id,
+            purpose="auto_explore",
+            budget=context.task.budget,
+        )
+
     def build_report(self, state: VaniScopeGraphState) -> VaniScopeGraphState:
         return self._node("build_report", state, self._do_build_report)
 
@@ -633,3 +905,22 @@ def _tool_result_from_gateway(result: ToolInvocationResult) -> ToolResult:
         started_at=result.started_at,
         ended_at=result.ended_at,
     )
+
+
+def _history_item(tool_call: ToolCall, tool_result: ToolResult) -> dict[str, Any]:
+    return {
+        "tool_id": tool_call.tool_id,
+        "action_type": tool_call.tool_id,
+        "target_hint": _action_target_hint(tool_call),
+        "status": tool_result.status,
+        "error_type": tool_result.error_type,
+        "error_message": tool_result.error_message,
+    }
+
+
+def _action_target_hint(tool_call: ToolCall) -> str | None:
+    action = tool_call.arguments.get("action")
+    if not isinstance(action, dict):
+        return None
+    target_hint = action.get("target_hint")
+    return str(target_hint) if target_hint is not None else None

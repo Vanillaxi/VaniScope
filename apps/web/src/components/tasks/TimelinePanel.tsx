@@ -27,11 +27,22 @@ export function TimelinePanel({ items, summary }: TimelinePanelProps) {
       </div>
       <div className="overflow-hidden rounded-md border border-[var(--line)]">
         {items.length ? (
-          items.map((item) => <TimelineItem key={item.id} item={item} />)
+          items.map((item, index) => (
+            <TimelineItem key={timelineItemKey(item, index)} item={item} />
+          ))
         ) : (
           <div className="p-4 text-sm text-[var(--muted)]">{t.inspector.noTimeline}</div>
         )}
       </div>
     </Card>
   );
+}
+
+function timelineItemKey(item: RuntimeTimelineItem, index: number) {
+  const source =
+    item.source ??
+    item.raw_ref?.artifact_name ??
+    item.artifact_refs[0]?.artifact_name ??
+    "timeline";
+  return `${source}-${item.kind ?? "item"}-${item.id ?? "no-id"}-${index}`;
 }

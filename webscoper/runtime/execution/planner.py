@@ -23,6 +23,13 @@ class DeterministicTaskPlanner:
             )
         ]
 
+        if task.mode == "auto_explore":
+            return ExecutionPlan(
+                plan_id=f"auto_explore_seed_{task.task_id}",
+                task_id=task.task_id,
+                steps=steps,
+            )
+
         if task.action is None:
             steps.extend(
                 [
