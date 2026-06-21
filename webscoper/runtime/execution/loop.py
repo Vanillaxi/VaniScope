@@ -134,6 +134,18 @@ class AgentExecutionLoop:
                         "tool_name": step.tool_call.tool_id,
                     },
                 )
+                if evidence_item.kind == "text_excerpt":
+                    self._emit(
+                        context,
+                        "text_evidence_added",
+                        f"Text evidence added: {evidence_item.evidence_id}",
+                        {
+                            "evidence_id": evidence_item.evidence_id,
+                            "kind": evidence_item.kind,
+                            "tool_name": step.tool_call.tool_id,
+                            "source_url": evidence_item.source_url,
+                        },
+                    )
 
             _merge_final_output(final_output, tool_result.output)
 

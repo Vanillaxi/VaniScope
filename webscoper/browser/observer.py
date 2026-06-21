@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from playwright.async_api import ElementHandle, Page
 
@@ -37,9 +38,12 @@ async def observe_page(
     risk_signals = await detect_risks(page)
 
     return PageObservation(
+        observation_id=f"obs_{uuid4().hex[:12]}",
+        observation_mode="dom_with_screenshot" if screenshot_path_str else "dom_only",
         url=url,
         title=title,
         visible_text_summary=visible_text_summary,
+        main_content_summary=visible_text_summary,
         interactive_elements=interactive_elements,
         risk_signals=risk_signals,
         screenshot_path=screenshot_path_str,

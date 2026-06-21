@@ -329,6 +329,28 @@ The smoke runner uses soft assertions and reports task status, final URL/title, 
 
 Dry-run tasks generate `prompt_preview.md`, `prompt_context.json`, and `dry_run_result.json`, then stop before browser or LLM execution.
 
+## Interview Demo Path
+
+Use this path when showing VaniScope as a real Web Agent runtime, not just a log viewer.
+
+Example task:
+
+```text
+URL: https://github.com/Vanillaxi
+Goal: Summarize this user's open-source experience, main repositories, technical direction, and activity.
+```
+
+Demo flow:
+
+1. Start the API and Console, then create a new task with `public_safe` web access, `auto_explore`, and `real_llm`.
+2. Open `Timeline` first. Point out `planner_started`, `llm_call_finished`, `llm_action_proposed`, `tool_call_started`, browser open/navigation, readiness wait, extract/click, evidence, and report events.
+3. Open `Graph`. Show the chain as `Task -> LLM -> ToolGateway -> Browser -> Readiness -> Evidence -> Report`.
+4. Click the `browser_open` / `browser_open_observe` node. Show before/after URL, duration, screenshot evidence, readiness confidence, and signals such as DOM complete, skeleton/spinner/overlay absent, layout stability, and soft network quiet.
+5. Click the LLM node. Show provider/model, proposed action, validation result, and whether repair was attempted. Confirm that API keys are not present in the payload.
+6. Click `Evidence`. Show page screenshot evidence, text evidence, source URL, page title, and evidence ids used by the report.
+7. Open `Report`. Explain that the final answer is built from `evidence.jsonl`, not from a hidden browser state.
+8. If the task fails, switch back to `Graph` or `Timeline` and inspect recovery, failure screenshot, error node, and related trace payload.
+
 ## Tests and Eval
 
 Run pytest:
@@ -369,6 +391,7 @@ uv run python scripts/run_workflow_eval.py \
 * `trace.jsonl`: browser/runtime trace.
 * `transcript.jsonl`: runtime transcript.
 * `events.jsonl`: task events.
+* `graph.json`: execution graph for offline replay.
 * `tool_audit.jsonl`: ToolGateway audit.
 * `recovery.jsonl`: recovery strategy records.
 * `approvals.jsonl` / `pending.jsonl` / `risk_report.json`: approval-related artifacts.

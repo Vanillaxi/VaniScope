@@ -1,14 +1,16 @@
 "use client";
 
 import { Card } from "@/components/ui/Card";
+import { screenshotUrl } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { RuntimeEvidenceLink } from "@/lib/types";
 
 type EvidencePanelProps = {
+  taskId: string;
   evidence: RuntimeEvidenceLink[];
 };
 
-export function EvidencePanel({ evidence }: EvidencePanelProps) {
+export function EvidencePanel({ taskId, evidence }: EvidencePanelProps) {
   const { t } = useI18n();
 
   return (
@@ -44,6 +46,7 @@ export function EvidencePanel({ evidence }: EvidencePanelProps) {
                   {item.text_preview}
                 </div>
               ) : null}
+              <ScreenshotPreview taskId={taskId} item={item} />
               <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
                 <Meta label={t.inspector.reportSections} values={item.report_sections} />
                 <Meta label={t.inspector.reviewIssues} values={item.review_issue_ids} />
@@ -57,6 +60,28 @@ export function EvidencePanel({ evidence }: EvidencePanelProps) {
         </div>
       )}
     </Card>
+  );
+}
+
+function ScreenshotPreview({
+  taskId,
+  item,
+}: {
+  taskId: string;
+  item: RuntimeEvidenceLink;
+}) {
+  const path = typeof item.raw.screenshot_path === "string" ? item.raw.screenshot_path : null;
+  const src = screenshotUrl(taskId, path);
+  if (!src) return null;
+  return (
+    <a
+      href={src}
+      target="_blank"
+      rel="noreferrer"
+      className="mt-3 block overflow-hidden rounded-md border border-[var(--line)] bg-white"
+    >
+      <img src={src} alt={item.evidence_id} className="aspect-video w-full object-cover" />
+    </a>
   );
 }
 

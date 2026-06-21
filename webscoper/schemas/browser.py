@@ -86,12 +86,21 @@ class RiskSignal(BaseModel):
 
 
 class PageObservation(BaseModel):
+    observation_id: str | None = None
+    observation_mode: Literal["dom_only", "dom_with_screenshot", "dom_with_vision"] = (
+        "dom_with_screenshot"
+    )
     url: str
     title: str
     visible_text_summary: str
+    main_content_summary: str | None = None
     interactive_elements: list[InteractiveElement]
     risk_signals: list[RiskSignal]
+    readiness: dict[str, Any] | None = None
     screenshot_path: str | None = None
+    screenshot_evidence_id: str | None = None
+    visual_summary: str | None = None
+    visual_model: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

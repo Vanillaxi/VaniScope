@@ -13,6 +13,10 @@ EvidenceKind = Literal[
     "text_excerpt",
     "action_result",
     "screenshot",
+    "page_screenshot",
+    "before_action_screenshot",
+    "after_action_screenshot",
+    "failure_screenshot",
     "tool_result",
 ]
 
@@ -31,6 +35,10 @@ class EvidenceItem(BaseModel):
     page_title: str | None = None
     text: str | None = None
     screenshot_path: str | None = None
+    thumbnail_path: str | None = None
+    step_id: str | None = None
+    tool_name: str | None = None
+    observation_id: str | None = None
     trace_event_id: str | None = None
     transcript_event_id: str | None = None
     created_at: str

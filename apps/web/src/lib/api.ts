@@ -8,6 +8,7 @@ import type {
   DiagnosticsResponse,
   HealthResponse,
   PlannerMode,
+  RuntimeExecutionGraphResponse,
   RuntimeInspectorResponse,
   RuntimeTimelineResponse,
   TaskArtifactContentResponse,
@@ -148,6 +149,13 @@ export function getTaskInspector(taskId: string) {
   );
 }
 
+export function getTaskGraph(taskId: string) {
+  return requestJson<RuntimeExecutionGraphResponse>(
+    `/tasks/${encodeURIComponent(taskId)}/graph`,
+    { cache: "no-store" },
+  );
+}
+
 export function listArtifacts(taskId: string) {
   return requestJson<TaskArtifactListResponse>(
     `/tasks/${encodeURIComponent(taskId)}/artifacts`,
@@ -189,4 +197,11 @@ export function submitApprovalDecision(
       }),
     },
   );
+}
+
+export function screenshotUrl(taskId: string, screenshotPath?: string | null) {
+  if (!screenshotPath) return null;
+  const name = screenshotPath.split(/[\\/]/).filter(Boolean).at(-1);
+  if (!name) return null;
+  return `${API_BASE_URL}/tasks/${encodeURIComponent(taskId)}/screenshots/${encodeURIComponent(name)}`;
 }

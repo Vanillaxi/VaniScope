@@ -68,6 +68,15 @@ class ToolGateway:
         started = perf_counter()
         started_at = utc_now()
         descriptor, provider = self._resolve(request.tool_name)
+        self._emit(
+            "risk_check_started",
+            "Risk check started",
+            {
+                "task_id": request.task_id,
+                "tool_name": request.tool_name,
+                "call_id": request.call_id,
+            },
+        )
         policy_decision = self.policy.check(
             descriptor=descriptor,
             task_id=request.task_id,
@@ -75,6 +84,34 @@ class ToolGateway:
             arguments=request.arguments,
             page_observation=request.page_observation,
             approval_override_id=request.approval_override_id,
+        )
+        self._emit(
+            "tool_policy_checked",
+            "Tool policy checked",
+            {
+                "task_id": request.task_id,
+                "tool_name": request.tool_name,
+                "call_id": request.call_id,
+                "decision": policy_decision.decision,
+                "error_type": policy_decision.error_type,
+                "error_message": policy_decision.error_message,
+                "risk_check": policy_decision.risk_check.model_dump(mode="json")
+                if policy_decision.risk_check is not None
+                else None,
+            },
+        )
+        self._emit(
+            "risk_check_finished",
+            "Risk check finished",
+            {
+                "task_id": request.task_id,
+                "tool_name": request.tool_name,
+                "call_id": request.call_id,
+                "status": policy_decision.decision,
+                "risk_check": policy_decision.risk_check.model_dump(mode="json")
+                if policy_decision.risk_check is not None
+                else None,
+            },
         )
 
         if policy_decision.decision == "blocked" or descriptor is None or provider is None:
@@ -97,6 +134,19 @@ class ToolGateway:
                 descriptor,
                 policy_decision.risk_check,
                 policy_decision.error_message,
+            )
+            self._emit(
+                "approval_required",
+                "Approval required before tool execution",
+                {
+                    "task_id": request.task_id,
+                    "tool_name": request.tool_name,
+                    "call_id": request.call_id,
+                    "approval_id": approval_id,
+                    "risk_check": policy_decision.risk_check.model_dump(mode="json")
+                    if policy_decision.risk_check is not None
+                    else None,
+                },
             )
             result = ToolInvocationResult(
                 task_id=request.task_id,
@@ -137,6 +187,21 @@ class ToolGateway:
         result.approval_id = request.approval_override_id
         result.started_at = result.started_at or started_at
         return self._finish(request, descriptor, result, started, policy_decision.risk_check)
+
+    def _emit(
+        self,
+        kind: str,
+        message: str,
+        payload: dict[str, Any],
+    ) -> None:
+        if self.event_sink is None:
+            return
+        try:
+            event_payload = {"run_id": payload.get("task_id")}
+            event_payload.update(payload)
+            self.event_sink(kind, message, event_payload)
+        except Exception:
+            return
 
     def _resolve(self, tool_name: str) -> tuple[ToolDescriptor | None, ToolProvider | None]:
         for provider in self.providers:

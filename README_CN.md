@@ -366,6 +366,28 @@ LLM call count、artifact 存在情况、failure reason 和 run_dir。
 dry-run 任务会生成 `prompt_preview.md`、`prompt_context.json` 和 `dry_run_result.json`，
 然后在浏览器或 LLM 执行前停止。
 
+## 面试演示路径
+
+这条路径用于展示 VaniScope 是真实 Web Agent runtime，而不是普通日志列表。
+
+示例任务：
+
+```text
+URL: https://github.com/Vanillaxi
+Goal: 总结这个用户的开源经历、主要仓库、技术方向和活跃情况。
+```
+
+演示顺序：
+
+1. 启动 API 和 Console，新建任务，选择 `public_safe` 公网访问、`auto_explore` 和 `real_llm`。
+2. 先打开 `Timeline`。展示 `planner_started`、`llm_call_finished`、`llm_action_proposed`、`tool_call_started`、浏览器 open/navigation、readiness wait、extract/click、evidence 和 report 事件。
+3. 打开 `Graph`。展示链路：`Task -> LLM -> ToolGateway -> Browser -> Readiness -> Evidence -> Report`。
+4. 点击 `browser_open` / `browser_open_observe` 节点。展示 before/after URL、耗时、截图 evidence、readiness confidence，以及 DOM complete、skeleton/spinner/overlay absent、layout stable、soft network quiet 等信号。
+5. 点击 LLM 节点。展示 provider/model、proposed action、validation result，以及是否发生 repair；同时说明 payload 里没有 API key。
+6. 点击 `Evidence`。展示页面截图 evidence、文本 evidence、source URL、page title，以及 report 使用的 evidence id。
+7. 打开 `Report`。说明最终报告基于 `evidence.jsonl` 生成，不依赖隐藏的浏览器状态。
+8. 如果任务失败，回到 `Graph` 或 `Timeline`，检查 recovery、failure screenshot、error node 和相关 trace payload。
+
 ## 测试和 Eval
 
 运行 pytest：
@@ -407,6 +429,7 @@ uv run python scripts/run_workflow_eval.py \
 - `trace.jsonl`：浏览器/runtime trace。
 - `transcript.jsonl`：运行转录。
 - `events.jsonl`：任务事件。
+- `graph.json`：用于离线复盘的执行图。
 - `tool_audit.jsonl`：ToolGateway 审计。
 - `recovery.jsonl`：恢复策略记录。
 - `approvals.jsonl` / `pending.jsonl` / `risk_report.json`：审批相关 artifact。

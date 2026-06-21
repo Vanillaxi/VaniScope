@@ -217,6 +217,7 @@ def _item_from_event(record: dict[str, Any], order: int) -> RuntimeTimelineItem:
         title=_title_from_kind(kind),
         summary=_string_or_none(record.get("message")) or _summary_from_payload(payload),
         status=_status_from_record(record, payload),
+        duration_ms=_duration_ms(payload),
         step_id=_string_or_none(payload.get("step_id") or payload.get("step")),
         tool_name=_string_or_none(payload.get("tool_name") or payload.get("tool_id")),
         evidence_ids=evidence_ids_from_payload(record),
@@ -237,6 +238,7 @@ def _item_from_trace(record: dict[str, Any], order: int) -> RuntimeTimelineItem:
         title=_title_from_kind(action_type),
         summary=_trace_summary(record),
         status=_string_or_none(record.get("status")),
+        duration_ms=_duration_ms(record) or record.get("latency_ms"),
         step_id=step_id,
         tool_name=action_type,
         evidence_ids=evidence_ids_from_payload(record),
@@ -256,6 +258,7 @@ def _item_from_tool_audit(record: dict[str, Any], order: int) -> RuntimeTimeline
         title=f"Tool audit: {tool_name}",
         summary=_tool_summary(record),
         status=_string_or_none(record.get("status") or record.get("decision")),
+        duration_ms=_duration_ms(record),
         tool_name=tool_name,
         evidence_ids=evidence_ids_from_payload(record),
         artifact_refs=[_ref("tool_audit.jsonl", record)],
@@ -278,6 +281,7 @@ def _item_from_llm_call(record: dict[str, Any], order: int) -> RuntimeTimelineIt
             f"({record.get('budget_decision') or 'budget unknown'})"
         ),
         status=_string_or_none(record.get("status")),
+        duration_ms=_duration_ms(record),
         evidence_ids=evidence_ids_from_payload(record),
         artifact_refs=[_ref("llm_calls.jsonl", record)],
         raw_ref=_ref("llm_calls.jsonl", record),
@@ -295,6 +299,7 @@ def _item_from_recovery(record: dict[str, Any], order: int) -> RuntimeTimelineIt
         title=_title_from_kind(kind),
         summary=_summary_from_payload(record),
         status=_string_or_none(record.get("status") or record.get("outcome")),
+        duration_ms=_duration_ms(record),
         step_id=_string_or_none(record.get("step_id") or record.get("failed_step_id")),
         tool_name=_string_or_none(record.get("tool_name") or record.get("action_type")),
         evidence_ids=evidence_ids_from_payload(record),
@@ -314,6 +319,7 @@ def _item_from_approval(record: dict[str, Any], order: int) -> RuntimeTimelineIt
         title=f"Approval: {record.get('status') or 'pending'}",
         summary=_string_or_none(record.get("reason")) or _summary_from_payload(record),
         status=_string_or_none(record.get("status")),
+        duration_ms=_duration_ms(record),
         tool_name=_string_or_none(record.get("tool_name")),
         evidence_ids=evidence_ids_from_payload(record),
         artifact_refs=[_ref("approvals.jsonl", record)],
@@ -332,6 +338,7 @@ def _item_from_evidence(record: dict[str, Any], order: int) -> RuntimeTimelineIt
         title=f"Evidence collected: {evidence_id or order}",
         summary=_preview(record.get("text")) or _string_or_none(record.get("source_url")),
         status="collected",
+        duration_ms=_duration_ms(record),
         step_id=_string_or_none(record.get("trace_event_id")),
         evidence_ids=[evidence_id] if evidence_id else [],
         artifact_refs=[_ref("evidence.jsonl", record)],
@@ -373,6 +380,12 @@ def _item_from_report(report_text: str, order: int) -> RuntimeTimelineItem:
 def _event_category(kind: str) -> str:
     if kind.startswith("workflow_") or kind in {"task_started", "task_finished", "task_failed"}:
         return "workflow"
+    if kind.startswith("browser_") or kind.startswith("navigation_") or kind.startswith("action_") or kind.startswith("post_action_"):
+        return "browser"
+    if kind.startswith("readiness_") or kind == "readiness_check":
+        return "readiness"
+    if kind.startswith("effect_verification"):
+        return "verification"
     if kind.startswith("tool_"):
         return "tool"
     if kind.startswith("llm_") or kind in {"planner_started", "planner_finished"}:
@@ -387,6 +400,8 @@ def _event_category(kind: str) -> str:
         return "review"
     if "report" in kind:
         return "report"
+    if "failed" in kind or "error" in kind or "timeout" in kind:
+        return "error"
     return "workflow"
 
 
@@ -723,6 +738,16 @@ def _int_value(value: Any) -> int:
     if isinstance(value, float):
         return int(value)
     return 0
+
+
+def _duration_ms(record: dict[str, Any]) -> int | float | None:
+    for key in ("duration_ms", "latency_ms", "elapsed_ms"):
+        value = record.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            return value
+    return None
 
 
 def _preview(value: Any, limit: int = 240) -> str | None:

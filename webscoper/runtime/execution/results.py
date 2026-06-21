@@ -37,10 +37,14 @@ def record_evidence(
                 page_title=_str_or_none(observation.get("title")),
                 text=_str_or_none(observation.get("visible_text_summary")),
                 screenshot_path=_str_or_none(observation.get("screenshot_path")),
+                step_id=step_id,
+                tool_name=tool_call.tool_id,
+                observation_id=_str_or_none(observation.get("observation_id")),
                 trace_event_id=step_id,
                 metadata={
                     "tool_id": tool_call.tool_id,
                     "call_id": tool_call.call_id,
+                    "screenshot_evidence_id": observation.get("screenshot_evidence_id"),
                     "interactive_element_count": len(
                         observation.get("interactive_elements") or []
                     ),
@@ -65,10 +69,14 @@ def record_evidence(
                 page_title=_str_or_none(observation.get("title")),
                 text=_action_text(target_hint, verified, verification_result),
                 screenshot_path=_str_or_none(observation.get("screenshot_path")),
+                step_id=step_id,
+                tool_name=tool_call.tool_id,
+                observation_id=_str_or_none(observation.get("observation_id")),
                 trace_event_id=step_id,
                 metadata={
                     "tool_id": tool_call.tool_id,
                     "call_id": tool_call.call_id,
+                    "screenshot_evidence_id": observation.get("screenshot_evidence_id"),
                     "target_hint": target_hint,
                     "verified": verified,
                 },
@@ -80,6 +88,8 @@ def record_evidence(
             source_url=_str_or_none(output.get("url")),
             page_title=_str_or_none(output.get("title")),
             text=_str_or_none(output.get("visible_text_summary")),
+            step_id=step_id,
+            tool_name=tool_call.tool_id,
             trace_event_id=step_id,
             metadata={
                 "tool_id": tool_call.tool_id,

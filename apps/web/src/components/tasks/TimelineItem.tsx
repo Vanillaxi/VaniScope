@@ -8,17 +8,26 @@ import type { RuntimeTimelineItem } from "@/lib/types";
 
 type TimelineItemProps = {
   item: RuntimeTimelineItem;
+  selected?: boolean;
+  onSelect?: (item: RuntimeTimelineItem) => void;
 };
 
-export function TimelineItem({ item }: TimelineItemProps) {
+export function TimelineItem({ item, selected = false, onSelect }: TimelineItemProps) {
   const { language, t } = useI18n();
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="border-b border-[var(--line)] bg-white p-4 last:border-b-0">
+    <div
+      className={`border-b border-[var(--line)] bg-white p-4 last:border-b-0 ${
+        selected ? "shadow-[inset_3px_0_0_var(--brand)]" : ""
+      }`}
+    >
       <button
         type="button"
-        onClick={() => setExpanded((value) => !value)}
+        onClick={() => {
+          onSelect?.(item);
+          setExpanded((value) => !value);
+        }}
         className="flex w-full flex-col gap-3 text-left"
       >
         <div className="flex flex-wrap items-center gap-2">
@@ -27,6 +36,11 @@ export function TimelineItem({ item }: TimelineItemProps) {
           <span className="text-xs text-[var(--muted)]">
             {formatDateTime(item.timestamp, language, "")}
           </span>
+          {item.duration_ms !== null && item.duration_ms !== undefined ? (
+            <span className="text-xs font-semibold text-[#344054]">
+              {formatDuration(item.duration_ms)}
+            </span>
+          ) : null}
         </div>
         <div>
           <div className="font-semibold text-[#26323f]">{item.title}</div>
@@ -62,6 +76,11 @@ export function TimelineItem({ item }: TimelineItemProps) {
       ) : null}
     </div>
   );
+}
+
+function formatDuration(value: number) {
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}s`;
+  return `${Math.round(value)}ms`;
 }
 
 function Meta({ label, value }: { label: string; value?: string | null }) {

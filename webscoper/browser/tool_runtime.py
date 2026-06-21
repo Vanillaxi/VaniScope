@@ -114,10 +114,51 @@ class StatefulBrowserToolRuntime:
             if self.page is None:
                 await self.start()
             page = self._require_page()
+            self._emit(
+                "browser_open_started",
+                "Browser open started",
+                {
+                    "step_id": step_id,
+                    "tool_name": "browser_open_observe",
+                    "url": url,
+                    "navigation_timeout_ms": self.public_web_config.navigation_timeout_ms,
+                },
+            )
+            self._emit(
+                "navigation_started",
+                "Navigation started",
+                {
+                    "step_id": step_id,
+                    "url_before": page.url,
+                    "url_after": url,
+                    "navigation_timeout_ms": self.public_web_config.navigation_timeout_ms,
+                },
+            )
+            url_before = page.url
             await page.goto(
                 url,
                 wait_until="domcontentloaded",
                 timeout=self.public_web_config.navigation_timeout_ms,
+            )
+            if page.url != url_before:
+                self._emit(
+                    "url_changed",
+                    "Browser URL changed",
+                    {
+                        "step_id": step_id,
+                        "url_before": url_before,
+                        "url_after": page.url,
+                    },
+                )
+            self._emit(
+                "navigation_finished",
+                "Navigation finished",
+                {
+                    "step_id": step_id,
+                    "url_before": url_before,
+                    "url_after": page.url,
+                    "elapsed_ms": _elapsed_ms(start),
+                },
             )
             readiness = await self._wait_and_record_readiness(
                 page,
@@ -128,9 +169,23 @@ class StatefulBrowserToolRuntime:
             )
             observation = await observe_page(page, screenshot_path=screenshot_path)
             observation.metadata["readiness"] = readiness.model_dump(mode="json")
+            observation.readiness = readiness.model_dump(mode="json")
             observation.metadata["public_web_policy"] = policy_decision.model_dump(
                 mode="json"
             )
+            screenshot_evidence = self._add_screenshot_evidence(
+                kind="page_screenshot",
+                screenshot_path=str(screenshot_path),
+                step_id=step_id,
+                tool_name="browser_open_observe",
+                source_url=observation.url,
+                page_title=observation.title,
+                observation_id=observation.observation_id,
+                metadata={"readiness": readiness.model_dump(mode="json")},
+            )
+            if screenshot_evidence is not None:
+                observation.screenshot_evidence_id = screenshot_evidence.evidence_id
+                observation.metadata["screenshot_evidence_id"] = screenshot_evidence.evidence_id
             page_url = observation.url
             self.last_observation = observation
             self.trace_recorder.record(
@@ -149,8 +204,38 @@ class StatefulBrowserToolRuntime:
                     latency_ms=_elapsed_ms(start),
                 )
             )
+            self._emit(
+                "browser_open_finished",
+                "Browser open finished",
+                {
+                    "step_id": step_id,
+                    "tool_name": "browser_open_observe",
+                    "status": "success",
+                    "url_after": observation.url,
+                    "title_after": observation.title,
+                    "screenshot_path": str(screenshot_path),
+                    "screenshot_evidence_id": observation.screenshot_evidence_id,
+                    "duration_ms": _elapsed_ms(start),
+                    "readiness": readiness.model_dump(mode="json"),
+                },
+            )
             return observation
         except Exception as exc:
+            self._emit(
+                "navigation_timeout"
+                if type(exc).__name__ in {"TimeoutError", "PlaywrightTimeoutError"}
+                else "browser_open_finished",
+                "Browser open failed",
+                {
+                    "step_id": step_id,
+                    "tool_name": "browser_open_observe",
+                    "status": "failed",
+                    "url_after": page_url,
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                    "duration_ms": _elapsed_ms(start),
+                },
+            )
             self.trace_recorder.record(
                 TraceStep(
                     step_id=step_id,
@@ -191,10 +276,69 @@ class StatefulBrowserToolRuntime:
             return _failed_output("PAGE_NOT_OPENED", "Open a page before clicking.")
 
         page = self.page
+        before_step_id = self._next_step_id()
+        before_screenshot_path = (
+            self.trace_recorder.run_dir / f"{before_step_id}_before_click.png"
+        )
+        before_title = await _safe_title(page)
+        before_url = page.url
+        try:
+            await page.screenshot(path=str(before_screenshot_path), full_page=True)
+            self._add_screenshot_evidence(
+                kind="before_action_screenshot",
+                screenshot_path=str(before_screenshot_path),
+                step_id=before_step_id,
+                tool_name="browser_click_intent",
+                source_url=before_url,
+                page_title=before_title,
+                metadata={"target_hint": action.target_hint},
+            )
+        except Exception:
+            pass
         body_text_before = await _body_text(page)
         action_step_id = self._next_step_id()
         action_start = perf_counter()
+        self._emit(
+            "action_precondition_checked",
+            "Action precondition checked",
+            {
+                "step_id": action_step_id,
+                "tool_name": "browser_click_intent",
+                "action_type": action.action_type,
+                "target_hint": action.target_hint,
+                "preconditions": action.preconditions,
+            },
+        )
+        self._emit(
+            "action_started",
+            "Browser action started",
+            {
+                "step_id": action_step_id,
+                "tool_name": "browser_click_intent",
+                "action_type": action.action_type,
+                "target_hint": action.target_hint,
+                "expected_effect": action.expected_effect.model_dump(mode="json"),
+                "url_before": before_url,
+                "screenshot_before": str(before_screenshot_path),
+            },
+        )
         action_result = await self.action_executor.click(page, action)
+        self._emit(
+            "action_finished",
+            "Browser action finished",
+            {
+                "step_id": action_step_id,
+                "tool_name": "browser_click_intent",
+                "action_type": action.action_type,
+                "target_hint": action.target_hint,
+                "status": action_result.status,
+                "url_before": action_result.url_before,
+                "url_after": action_result.url_after,
+                "error_type": action_result.error_type,
+                "error_message": action_result.error_message,
+                "duration_ms": _elapsed_ms(action_start),
+            },
+        )
         self.trace_recorder.record(
             TraceStep(
                 step_id=action_step_id,
@@ -223,12 +367,44 @@ class StatefulBrowserToolRuntime:
 
         verify_step_id = self._next_step_id()
         verify_start = perf_counter()
+        self._emit(
+            "effect_verification_started",
+            "Effect verification started",
+            {
+                "step_id": verify_step_id,
+                "tool_name": "browser_click_intent",
+                "expected_effect": action.expected_effect.model_dump(mode="json"),
+                "url_before": action_result.url_before,
+                "title_before": before_title,
+                "screenshot_before": str(before_screenshot_path),
+            },
+        )
         verification_result = await self._verify_after_transition(
             page=page,
             action=action,
             action_result=action_result,
             body_text_before=body_text_before,
             initial_readiness=transition_readiness,
+        )
+        self._emit(
+            "effect_verification_finished",
+            "Effect verification finished",
+            {
+                "step_id": verify_step_id,
+                "tool_name": "browser_click_intent",
+                "expected_effect": action.expected_effect.model_dump(mode="json"),
+                "url_before": verification_result.url_before,
+                "url_after": verification_result.url_after,
+                "title_before": before_title,
+                "title_after": await _safe_title(page),
+                "text_changed": body_text_before != await _body_text(page),
+                "screenshot_before": str(before_screenshot_path),
+                "satisfied": verification_result.satisfied,
+                "status": verification_result.status,
+                "error_type": verification_result.error_type,
+                "message": verification_result.message,
+                "duration_ms": _elapsed_ms(verify_start),
+            },
         )
         self.trace_recorder.record(
             TraceStep(
@@ -317,6 +493,27 @@ class StatefulBrowserToolRuntime:
         observation.metadata["readiness"] = (
             await self.readiness_detector.wait_for_readiness(page, timeout_ms=1000)
         ).model_dump(mode="json")
+        observation.readiness = observation.metadata["readiness"]
+        after_screenshot_evidence = self._add_screenshot_evidence(
+            kind="after_action_screenshot",
+            screenshot_path=str(screenshot_path),
+            step_id=observe_step_id,
+            tool_name="browser_click_intent",
+            source_url=observation.url,
+            page_title=observation.title,
+            observation_id=observation.observation_id,
+            metadata={
+                "target_hint": action.target_hint,
+                "action_step_id": action_step_id,
+                "verification_step_id": verify_step_id,
+                "satisfied": verification_result.satisfied,
+            },
+        )
+        if after_screenshot_evidence is not None:
+            observation.screenshot_evidence_id = after_screenshot_evidence.evidence_id
+            observation.metadata["screenshot_evidence_id"] = (
+                after_screenshot_evidence.evidence_id
+            )
         self.last_observation = observation
         self.trace_recorder.record(
             TraceStep(
@@ -346,6 +543,22 @@ class StatefulBrowserToolRuntime:
         )
         if recovery_result is not None and recovery_result.blocked:
             status = "blocked"
+        if status != "success":
+            self._add_screenshot_evidence(
+                kind="failure_screenshot",
+                screenshot_path=str(screenshot_path),
+                step_id=observe_step_id,
+                tool_name="browser_click_intent",
+                source_url=observation.url,
+                page_title=observation.title,
+                observation_id=observation.observation_id,
+                metadata={
+                    "target_hint": action.target_hint,
+                    "error_type": action_result.error_type
+                    or verification_result.error_type,
+                    "verification": verification_result.model_dump(mode="json"),
+                },
+            )
         error_type = action_result.error_type or verification_result.error_type
         error_message = action_result.error_message
         if error_message is None and not verification_result.satisfied:
@@ -446,10 +659,67 @@ class StatefulBrowserToolRuntime:
         timeout_ms: int,
     ) -> ReadinessResult:
         start = perf_counter()
+        self._emit(
+            "readiness_wait_started",
+            "Waiting for page readiness",
+            {
+                "action_type": action_type,
+                "url_before": url_before,
+                "target_hint": target_hint,
+                "timeout_ms": timeout_ms,
+            },
+        )
+        self._emit(
+            "post_action_wait_started",
+            "Post action wait started",
+            {
+                "action_type": action_type,
+                "url_before": url_before,
+                "target_hint": target_hint,
+                "timeout_ms": timeout_ms,
+            },
+        )
         readiness = await wait_after_navigation_or_action(
             page,
             target_hint=target_hint,
             timeout_ms=timeout_ms,
+        )
+        readiness_payload = _readiness_event_payload(readiness)
+        self._emit(
+            "readiness_sampled",
+            "Readiness signals sampled",
+            {
+                **readiness_payload,
+                "action_type": action_type,
+                "url_after": page.url,
+                "target_hint": target_hint,
+            },
+        )
+        finished_kind = (
+            "readiness_timeout" if readiness.status == "timeout" else "readiness_wait_finished"
+        )
+        self._emit(
+            finished_kind,
+            "Readiness wait finished",
+            {
+                **readiness_payload,
+                "action_type": action_type,
+                "status": readiness.status,
+                "url_after": page.url,
+                "target_hint": target_hint,
+                "duration_ms": _elapsed_ms(start),
+            },
+        )
+        self._emit(
+            "post_action_wait_finished",
+            "Post action wait finished",
+            {
+                "action_type": action_type,
+                "status": readiness.status,
+                "url_after": page.url,
+                "target_hint": target_hint,
+                "duration_ms": _elapsed_ms(start),
+            },
         )
         self.trace_recorder.record(
             TraceStep(
@@ -468,20 +738,16 @@ class StatefulBrowserToolRuntime:
                 latency_ms=_elapsed_ms(start),
             )
         )
-        if self.event_sink is not None:
-            try:
-                self.event_sink(
-                    "readiness_check",
-                    "Browser readiness checked",
-                    {
-                        "status": readiness.status,
-                        "confidence": readiness.confidence,
-                        "warnings": readiness.warnings,
-                        "signals": readiness.signals,
-                    },
-                )
-            except Exception:
-                pass
+        self._emit(
+            "readiness_check",
+            "Browser readiness checked",
+            {
+                "status": readiness.status,
+                "confidence": readiness.confidence,
+                "warnings": readiness.warnings,
+                "signals": readiness.signals,
+            },
+        )
         return readiness
 
     async def _verify_after_transition(
@@ -571,9 +837,110 @@ class StatefulBrowserToolRuntime:
             )
         )
 
+    def _add_screenshot_evidence(
+        self,
+        *,
+        kind: str,
+        screenshot_path: str,
+        step_id: str,
+        tool_name: str,
+        source_url: str | None,
+        page_title: str | None,
+        observation_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ):
+        if self.evidence_store is None:
+            return None
+        item = self.evidence_store.add_item(
+            kind=kind,
+            source_url=source_url,
+            page_title=page_title,
+            screenshot_path=screenshot_path,
+            step_id=step_id,
+            tool_name=tool_name,
+            observation_id=observation_id,
+            trace_event_id=step_id,
+            metadata=metadata or {},
+        )
+        self._emit(
+            "screenshot_evidence_added",
+            f"Screenshot evidence added: {item.evidence_id}",
+            {
+                "evidence_id": item.evidence_id,
+                "kind": item.kind,
+                "step_id": step_id,
+                "tool_name": tool_name,
+                "source_url": source_url,
+                "screenshot_path": screenshot_path,
+                "observation_id": observation_id,
+            },
+        )
+        self._emit(
+            "evidence_added",
+            f"Evidence added: {item.evidence_id}",
+            {
+                "evidence_id": item.evidence_id,
+                "kind": item.kind,
+                "step_id": step_id,
+                "tool_name": tool_name,
+            },
+        )
+        return item
+
+    def _emit(
+        self,
+        kind: str,
+        message: str,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        if self.event_sink is None:
+            return
+        try:
+            self.event_sink(
+                kind,
+                message,
+                {"run_id": self.trace_recorder.run_id, **(payload or {})},
+            )
+        except Exception:
+            return
+
 
 def _elapsed_ms(start: float) -> int:
     return int((perf_counter() - start) * 1000)
+
+
+def _readiness_event_payload(readiness: ReadinessResult) -> dict[str, Any]:
+    signals = readiness.signals
+    payload = {name: bool(signals.get(name, False)) for name in _READINESS_SIGNAL_KEYS}
+    payload.update(
+        {
+            "status": readiness.status,
+            "confidence": readiness.confidence,
+            "elapsed_ms": readiness.elapsed_ms,
+            "warnings": readiness.warnings,
+            "metadata": readiness.metadata,
+            "sample_count": readiness.metadata.get("sample_count"),
+            "final_ready_state": readiness.metadata.get("ready_state"),
+        }
+    )
+    return payload
+
+
+_READINESS_SIGNAL_KEYS = [
+    "dom_complete",
+    "url_stable",
+    "title_stable",
+    "text_stable",
+    "interactive_elements_stable",
+    "spinner_absent",
+    "skeleton_absent",
+    "overlay_absent",
+    "layout_stable",
+    "soft_network_quiet",
+    "target_visible",
+    "target_enabled",
+    "target_stable",
+]
 
 
 def _blocked_policy_observation(url: str, decision) -> PageObservation:

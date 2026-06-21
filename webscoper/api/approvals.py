@@ -40,6 +40,15 @@ def decide_approval(
             "Approval decision recorded",
             {"approval_request": approval.model_dump(mode="json")},
         )
+        service._publish_task_event(
+            approval.task_id,
+            "approval_resolved",
+            "Approval resolved",
+            {
+                "approval_request": approval.model_dump(mode="json"),
+                "approved": approved,
+            },
+        )
     except Exception:
         pass
 

@@ -9,6 +9,7 @@ from webscoper.schemas.workflow import LangGraphResumeResult, WorkflowBackend
 from webscoper.runtime.inspector.schemas import (
     RuntimeArtifactRef,
     RuntimeEvidenceLink,
+    RuntimeExecutionGraphResponse,
     RuntimeInspectorResponse,
     RuntimeInspectorSummary,
     RuntimeTimelineItem,

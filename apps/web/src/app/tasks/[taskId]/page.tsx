@@ -5,19 +5,26 @@ import { ApprovalPanel } from "@/components/tasks/ApprovalPanel";
 import { ArtifactList } from "@/components/tasks/ArtifactList";
 import { ArtifactViewer } from "@/components/tasks/ArtifactViewer";
 import { EvidencePanel } from "@/components/tasks/EvidencePanel";
+import { ExecutionGraphPanel } from "@/components/tasks/ExecutionGraphPanel";
 import { LlmCallsPanel } from "@/components/tasks/LlmCallsPanel";
-import { ReviewPanel } from "@/components/tasks/ReviewPanel";
 import { RuntimeInspectorTabs } from "@/components/tasks/RuntimeInspectorTabs";
 import { TaskStatusCard } from "@/components/tasks/TaskStatusCard";
 import { TimelinePanel } from "@/components/tasks/TimelinePanel";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { ApiRequestError, getTask, getTaskInspector, listArtifacts } from "@/lib/api";
+import {
+  ApiRequestError,
+  getTask,
+  getTaskGraph,
+  getTaskInspector,
+  listArtifacts,
+} from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { skillIdFromTask } from "@/lib/skills";
 import { updateTaskHistoryOpened } from "@/lib/taskHistory";
 import type {
   RuntimeInspectorResponse,
+  RuntimeExecutionGraphResponse,
   TaskArtifactListResponse,
   TaskStatusResponse,
 } from "@/lib/types";
@@ -35,23 +42,27 @@ export default function TaskPage({ params }: TaskPageProps) {
   const [artifacts, setArtifacts] = useState<string[]>([]);
   const [selectedArtifact, setSelectedArtifact] = useState<string | null>(null);
   const [inspector, setInspector] = useState<RuntimeInspectorResponse | null>(null);
+  const [graph, setGraph] = useState<RuntimeExecutionGraphResponse | null>(null);
   const [error, setError] = useState<LoadError | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       setError(null);
-      const [taskResult, artifactResult, inspectorResult]: [
+      const [taskResult, artifactResult, inspectorResult, graphResult]: [
         TaskStatusResponse,
         TaskArtifactListResponse,
         RuntimeInspectorResponse | null,
+        RuntimeExecutionGraphResponse | null,
       ] = await Promise.all([
         getTask(taskId),
         listArtifacts(taskId).catch(() => ({ task_id: taskId, artifacts: [] })),
         getTaskInspector(taskId).catch(() => null),
+        getTaskGraph(taskId).catch(() => null),
       ]);
       setTask(taskResult);
       setArtifacts(artifactResult.artifacts);
       setInspector(inspectorResult);
+      setGraph(graphResult);
       setSelectedArtifact((current) => current ?? artifactResult.artifacts[0] ?? null);
     } catch (reason) {
       setError(loadErrorFromReason(reason, t));
@@ -137,8 +148,19 @@ export default function TaskPage({ params }: TaskPageProps) {
           if (activeTab === "timeline") {
             return (
               <TimelinePanel
+                taskId={taskId}
                 items={inspector?.timeline_items ?? []}
                 summary={inspector?.summary}
+                evidence={inspector?.evidence_links ?? []}
+              />
+            );
+          }
+          if (activeTab === "graph") {
+            return (
+              <ExecutionGraphPanel
+                taskId={taskId}
+                graph={graph}
+                evidence={inspector?.evidence_links ?? []}
               />
             );
           }
@@ -159,13 +181,6 @@ export default function TaskPage({ params }: TaskPageProps) {
               <ArtifactViewer taskId={taskId} artifactName="final_report.md" title={t.inspector.report} />
             ) : (
               <EmptyState title={t.inspector.report} message={t.inspector.reportUnavailable} />
-            );
-          }
-          if (activeTab === "tools") {
-            return artifacts.includes("tool_audit.jsonl") ? (
-              <ArtifactViewer taskId={taskId} artifactName="tool_audit.jsonl" title={t.inspector.tools} />
-            ) : (
-              <EmptyState title={t.inspector.tools} message={t.inspector.toolAuditUnavailable} />
             );
           }
           if (activeTab === "debug") {
@@ -193,7 +208,7 @@ export default function TaskPage({ params }: TaskPageProps) {
             );
           }
           if (activeTab === "evidence") {
-            return <EvidencePanel evidence={inspector?.evidence_links ?? []} />;
+            return <EvidencePanel taskId={taskId} evidence={inspector?.evidence_links ?? []} />;
           }
           if (activeTab === "llm") {
             return (
@@ -201,15 +216,6 @@ export default function TaskPage({ params }: TaskPageProps) {
                 taskId={taskId}
                 artifacts={artifacts}
                 llmSummary={inspector?.llm_summary}
-              />
-            );
-          }
-          if (activeTab === "review") {
-            return (
-              <ReviewPanel
-                taskId={taskId}
-                artifacts={artifacts}
-                reviewSummary={inspector?.review_summary}
               />
             );
           }

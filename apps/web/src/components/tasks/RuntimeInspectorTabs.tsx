@@ -5,11 +5,10 @@ import { useI18n } from "@/lib/i18n";
 
 export type InspectorTabId =
   | "overview"
-  | "report"
   | "timeline"
+  | "graph"
+  | "report"
   | "evidence"
-  | "review"
-  | "tools"
   | "llm"
   | "debug";
 
@@ -23,10 +22,9 @@ export function RuntimeInspectorTabs({ children }: RuntimeInspectorTabsProps) {
   const tabs: { id: InspectorTabId; label: string }[] = [
     { id: "overview", label: t.inspector.overview },
     { id: "timeline", label: t.inspector.timeline },
+    { id: "graph", label: "Graph" },
     { id: "report", label: t.inspector.report },
     { id: "evidence", label: t.inspector.evidence },
-    { id: "review", label: t.inspector.review },
-    { id: "tools", label: t.inspector.tools },
     { id: "llm", label: t.inspector.llmPrompt },
     { id: "debug", label: t.inspector.debug },
   ];

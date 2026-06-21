@@ -30,6 +30,7 @@ from webscoper.api.schemas import (
     MessageResponse,
     RuntimeInspectorResponse,
     RuntimeTimelineResponse,
+    RuntimeExecutionGraphResponse,
     TaskArtifactContentResponse,
     TaskArtifactListResponse,
     TaskCreateRequest,
@@ -44,7 +45,11 @@ from webscoper.api.task_state import (
 from webscoper.browser.public_web import PublicWebRuntimeConfig, load_runtime_config
 from webscoper.runtime.persistence import SQLitePersistenceStore, resolve_default_db_path
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
-from webscoper.runtime.inspector import RunArtifactLoader, RuntimeTimelineBuilder
+from webscoper.runtime.inspector import (
+    RunArtifactLoader,
+    RuntimeGraphBuilder,
+    RuntimeTimelineBuilder,
+)
 from webscoper.runtime.safety.approvals import ApprovalStore
 from webscoper.runtime.execution.events import (
     InMemoryTaskEventBus,
@@ -283,6 +288,15 @@ class TaskService:
         loader = RunArtifactLoader(self.runs_dir, task_id)
         return RuntimeTimelineBuilder(loader, status=status.status).build_inspector_response(
             status=status.status,
+        )
+
+    def get_graph(self, task_id: str) -> RuntimeExecutionGraphResponse:
+        status = self.get_task_status(task_id)
+        if status.status == "not_found":
+            raise FileNotFoundError(f"Task not found: {task_id}")
+        loader = RunArtifactLoader(self.runs_dir, task_id)
+        return RuntimeGraphBuilder(loader, status=status.status).build_graph_response(
+            persist=True,
         )
 
     def get_events(self, task_id: str) -> list[TaskEvent]:

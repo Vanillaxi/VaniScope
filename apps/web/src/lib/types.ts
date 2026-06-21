@@ -166,12 +166,40 @@ export type RuntimeTimelineItem = {
   title: string;
   summary?: string | null;
   status?: string | null;
+  duration_ms?: number | null;
   step_id?: string | null;
   tool_name?: string | null;
   evidence_ids: string[];
   artifact_refs: RuntimeArtifactRef[];
   raw_ref?: RuntimeArtifactRef | null;
   raw: Record<string, unknown>;
+};
+
+export type RuntimeGraphNode = {
+  id: string;
+  type: string;
+  label: string;
+  status: string;
+  timestamp?: string | null;
+  duration_ms?: number | null;
+  summary?: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type RuntimeGraphEdge = {
+  id: string;
+  source: string;
+  target: string;
+  type: string;
+  label?: string | null;
+};
+
+export type RuntimeExecutionGraphResponse = {
+  task_id: string;
+  nodes: RuntimeGraphNode[];
+  edges: RuntimeGraphEdge[];
+  fallback: boolean;
+  error?: string | null;
 };
 
 export type ConversationResponse = {

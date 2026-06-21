@@ -145,6 +145,17 @@ def persist_evidence_and_final_report(
             "evidence_count": len(evidence_items),
         },
     )
+    emit_report_event(
+        event_sink,
+        "report_generated",
+        "Report generated",
+        {
+            "run_id": context.run_id,
+            "report_path": str(report_path),
+            "evidence_count": len(evidence_items),
+            "evidence_ids": [item.evidence_id for item in evidence_items],
+        },
+    )
     return evidence_items, report_text
 
 

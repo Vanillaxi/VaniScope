@@ -6,6 +6,7 @@ from webscoper.api.schemas import (
     TaskArtifactContentResponse,
     TaskArtifactListResponse,
 )
+from webscoper.runtime.inspector import RunArtifactLoader, RuntimeGraphBuilder
 
 
 ARTIFACT_ALLOWLIST = {
@@ -18,6 +19,7 @@ ARTIFACT_ALLOWLIST = {
     "trace.jsonl",
     "transcript.jsonl",
     "evidence.jsonl",
+    "graph.json",
     "compact_context.json",
     "compact_summary.md",
     "final_report.md",
@@ -92,5 +94,13 @@ def write_task_artifacts(service, task_id: str) -> None:
                 task_id,
                 run_dir / "langgraph_interrupts.jsonl",
             )
+    except Exception:
+        pass
+    try:
+        status = service.get_task_status(task_id).status
+        RuntimeGraphBuilder(
+            RunArtifactLoader(service.runs_dir, task_id),
+            status=status,
+        ).build_graph_response(persist=True)
     except Exception:
         pass

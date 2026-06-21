@@ -41,6 +41,7 @@ class RuntimeTimelineItem(BaseModel):
     title: str
     summary: str | None = None
     status: str | None = None
+    duration_ms: int | float | None = None
     step_id: str | None = None
     tool_name: str | None = None
     evidence_ids: list[str] = Field(default_factory=list)
@@ -68,6 +69,33 @@ class RuntimeStepDetail(BaseModel):
     item: RuntimeTimelineItem
     related_items: list[RuntimeTimelineItem] = Field(default_factory=list)
     evidence: list[RuntimeEvidenceLink] = Field(default_factory=list)
+
+
+class RuntimeGraphNode(BaseModel):
+    id: str
+    type: str
+    label: str
+    status: str
+    timestamp: str | None = None
+    duration_ms: int | float | None = None
+    summary: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RuntimeGraphEdge(BaseModel):
+    id: str
+    source: str
+    target: str
+    type: str
+    label: str | None = None
+
+
+class RuntimeExecutionGraphResponse(BaseModel):
+    task_id: str
+    nodes: list[RuntimeGraphNode] = Field(default_factory=list)
+    edges: list[RuntimeGraphEdge] = Field(default_factory=list)
+    fallback: bool = False
+    error: str | None = None
 
 
 class RuntimeTimelineResponse(BaseModel):

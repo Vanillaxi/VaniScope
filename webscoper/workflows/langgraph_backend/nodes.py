@@ -404,6 +404,18 @@ class LangGraphWorkflowNodes:
                         "tool_name": step.tool_call.tool_id,
                     },
                 )
+                if evidence_item.kind == "text_excerpt":
+                    self.workflow.event_emitter.emit_tool_event(
+                        context,
+                        "text_evidence_added",
+                        f"Text evidence added: {evidence_item.evidence_id}",
+                        {
+                            "evidence_id": evidence_item.evidence_id,
+                            "kind": evidence_item.kind,
+                            "tool_name": step.tool_call.tool_id,
+                            "source_url": evidence_item.source_url,
+                        },
+                    )
 
             merge_final_output(final_output, tool_result.output)
 
@@ -430,6 +442,17 @@ class LangGraphWorkflowNodes:
                     self.workflow.handler._emit_event(
                         "task_failed",
                         "Task stopped by risk gate",
+                        {
+                            "run_id": context.run_id,
+                            "status": runtime_status,
+                            "error_type": loop_result.error_type,
+                            "error": loop_result.error_message,
+                            "run_dir": str(context.run_dir),
+                        },
+                    )
+                    self.workflow.handler._emit_event(
+                        "task_blocked",
+                        "Task blocked",
                         {
                             "run_id": context.run_id,
                             "status": runtime_status,
@@ -512,15 +535,66 @@ class LangGraphWorkflowNodes:
 
         for step_index in range(len(records) + 1, context.task.budget.max_steps + 1):
             try:
+                self.workflow.handler._emit_event(
+                    "llm_call_started",
+                    "LLM call started",
+                    {
+                        "run_id": context.run_id,
+                        "purpose": "auto_explore",
+                        "step_index": step_index,
+                        "planner_mode": self.workflow.handler.planner_mode,
+                        "provider": self.workflow.handler.llm_provider,
+                        "model": context.version.model,
+                    },
+                )
                 decision = await planner.decide(
                     context=context.snapshot(),
                     observation=runtime.browser_runtime.last_observation,
                     history=history,
                     step_index=step_index,
                 )
+                self.workflow.handler._emit_event(
+                    "llm_call_finished",
+                    "LLM call finished",
+                    {
+                        "run_id": context.run_id,
+                        "purpose": "auto_explore",
+                        "step_index": step_index,
+                        "status": "success",
+                        "model": planner.last_response.model
+                        if planner.last_response is not None
+                        else context.version.model,
+                        "usage": planner.last_response.usage
+                        if planner.last_response is not None
+                        else {},
+                    },
+                )
             except RuntimeError as exc:
                 validation_artifact_path = self._write_action_validation_artifact(
                     context, planner
+                )
+                self.workflow.handler._emit_event(
+                    "llm_call_finished",
+                    "LLM call finished",
+                    {
+                        "run_id": context.run_id,
+                        "purpose": "auto_explore",
+                        "step_index": step_index,
+                        "status": "failed",
+                        "error_type": "LLM_ACTION_SCHEMA_INVALID",
+                        "error_message": str(exc),
+                    },
+                )
+                self.workflow.handler._emit_event(
+                    "llm_action_rejected",
+                    "LLM action rejected",
+                    {
+                        "run_id": context.run_id,
+                        "step_index": step_index,
+                        "error_type": "LLM_ACTION_SCHEMA_INVALID",
+                        "error_message": str(exc),
+                        "validation_errors": planner.validation_errors,
+                    },
                 )
                 context.transcript_store.append(
                     "auto_explore_validation_failed",
@@ -560,6 +634,32 @@ class LangGraphWorkflowNodes:
                 decision.model_dump(mode="json"),
             )
             self._write_action_validation_artifact(context, planner)
+            self.workflow.handler._emit_event(
+                "llm_action_proposed",
+                "LLM action proposed",
+                {
+                    "run_id": context.run_id,
+                    "step_index": step_index,
+                    "action": decision.action.model_dump(mode="json"),
+                    "action_type": decision.action.type,
+                    "target_hint": decision.action.target_hint,
+                    "reasoning_summary": decision.reasoning_summary,
+                },
+            )
+            repaired = bool(planner.repair_requests) and planner.last_decision is not None
+            self.workflow.handler._emit_event(
+                "llm_action_repaired" if repaired else "llm_action_validated",
+                "LLM action repaired" if repaired else "LLM action validated",
+                {
+                    "run_id": context.run_id,
+                    "step_index": step_index,
+                    "status": "success",
+                    "repair_attempted": bool(planner.repair_requests),
+                    "repair_success": repaired,
+                    "validation_records": planner.validation_records[-3:],
+                    "action": decision.action.model_dump(mode="json"),
+                },
+            )
             self.workflow.handler._emit_event(
                 "planner_finished",
                 "Auto explore action selected",
@@ -612,6 +712,18 @@ class LangGraphWorkflowNodes:
                         "tool_name": tool_call.tool_id,
                     },
                 )
+                if evidence_item.kind == "text_excerpt":
+                    self.workflow.event_emitter.emit_tool_event(
+                        context,
+                        "text_evidence_added",
+                        f"Text evidence added: {evidence_item.evidence_id}",
+                        {
+                            "evidence_id": evidence_item.evidence_id,
+                            "kind": evidence_item.kind,
+                            "tool_name": tool_call.tool_id,
+                            "source_url": evidence_item.source_url,
+                        },
+                    )
 
             if tool_result.error_type == "RISK_APPROVAL_REQUIRED":
                 context.state.status = "requires_approval"

@@ -186,6 +186,23 @@ def emit_recovery_result(
             "message": result.message,
         },
     )
+    emit_recovery_event(
+        event_sink,
+        transcript_store,
+        "recovery_finished",
+        "Recovery finished",
+        task_id,
+        {
+            "status": event_type.replace("recovery_", ""),
+            "recovered": result.recovered,
+            "blocked": result.blocked,
+            "attempts": len(result.attempts),
+            "final_error_type": result.final_error_type.value
+            if result.final_error_type is not None
+            else None,
+            "message": result.message,
+        },
+    )
 
 
 def add_recovery_evidence(

@@ -440,6 +440,17 @@ class WebAgentExecutionHandler:
                         "run_dir": str(context.run_dir),
                     },
                 )
+                self._emit_event(
+                    "task_blocked",
+                    "Task blocked",
+                    {
+                        "run_id": context.run_id,
+                        "status": runtime_status,
+                        "error_type": loop_result.error_type,
+                        "error": loop_result.error_message,
+                        "run_dir": str(context.run_dir),
+                    },
+                )
             if runtime_status is not None:
                 observation = runtime.browser_runtime.last_observation
                 if observation is not None:
@@ -531,6 +542,15 @@ class WebAgentExecutionHandler:
         self._emit_event(
             "task_finished",
             "Task finished",
+            {
+                "run_id": context.run_id,
+                "status": "succeeded",
+                "run_dir": str(context.run_dir),
+            },
+        )
+        self._emit_event(
+            "task_succeeded",
+            "Task succeeded",
             {
                 "run_id": context.run_id,
                 "status": "succeeded",

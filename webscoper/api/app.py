@@ -5,7 +5,7 @@ import os
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from webscoper.api.schemas import (
     ApprovalDecisionRequest,
@@ -15,6 +15,7 @@ from webscoper.api.schemas import (
     ConversationResponse,
     DiagnosticsResponse,
     MessageResponse,
+    RuntimeExecutionGraphResponse,
     RuntimeInspectorResponse,
     RuntimeTimelineResponse,
     TaskArtifactContentResponse,
@@ -122,6 +123,16 @@ def get_task_timeline(task_id: str) -> RuntimeTimelineResponse:
 def get_task_inspector(task_id: str) -> RuntimeInspectorResponse:
     try:
         return task_service.get_inspector(task_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/tasks/{task_id}/graph", response_model=RuntimeExecutionGraphResponse)
+def get_task_graph(task_id: str) -> RuntimeExecutionGraphResponse:
+    try:
+        return task_service.get_graph(task_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:
@@ -247,3 +258,19 @@ def read_artifact(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/tasks/{task_id}/screenshots/{screenshot_name}")
+def read_screenshot(task_id: str, screenshot_name: str) -> FileResponse:
+    try:
+        run_dir = task_service._existing_run_dir(task_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if not screenshot_name.lower().endswith((".png", ".jpg", ".jpeg")):
+        raise HTTPException(status_code=400, detail="Screenshot type is not allowed.")
+    if "/" in screenshot_name or "\\" in screenshot_name:
+        raise HTTPException(status_code=400, detail="Screenshot name is invalid.")
+    path = (run_dir / screenshot_name).resolve()
+    if path.parent != run_dir.resolve() or not path.is_file():
+        raise HTTPException(status_code=404, detail=f"Screenshot not found: {screenshot_name}")
+    return FileResponse(path)
