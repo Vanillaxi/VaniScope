@@ -106,6 +106,15 @@ def load_llm_router_config(path: Path | None = None) -> LLMRouterConfig:
     return load_llm_router_config_from_file(path)
 
 
+def default_llm_config_path() -> Path | None:
+    configured = os.getenv("VANISCOPE_LLM_CONFIG")
+    if configured:
+        path = Path(configured)
+        return path if path.exists() else None
+    default_path = Path("configs/llm.local.toml")
+    return default_path if default_path.exists() else None
+
+
 def resolve_llm_provider_config(
     router_config: LLMRouterConfig,
     provider_id: str | None = None,

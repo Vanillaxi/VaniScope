@@ -239,6 +239,8 @@ class ToolGateway:
             if result.status != "approval_required":
                 self.approval_store.record_check(request.task_id, risk_check)
                 self._write_approval_artifacts(request)
+        if result.error_message:
+            result.metadata.setdefault("error_message", result.error_message)
         self.audit_store.append(
             ToolAuditEvent(
                 timestamp=result.ended_at,
@@ -251,6 +253,7 @@ class ToolGateway:
                 decision=result.decision,
                 status=result.status,
                 error_type=result.error_type,
+                error_message=result.error_message,
                 duration_ms=duration_ms,
                 approval_id=result.approval_id,
                 metadata=result.metadata,

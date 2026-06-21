@@ -32,6 +32,7 @@ from webscoper.runtime.execution.loop import AgentExecutionLoop
 from webscoper.runtime.llm.client import (
     BaseLLMClient,
 )
+from webscoper.runtime.llm.config import load_llm_router_config
 from webscoper.runtime.llm.planner import LLMTaskPlanner
 from webscoper.runtime.llm.reviewer import (
     BaseLLMReportReviewer,
@@ -292,6 +293,7 @@ class WebAgentExecutionHandler:
         prompt_result: PromptBuildResult,
     ) -> ExecutionPlan:
         context.state.current_step = 3
+        planner_metadata = self._planner_metadata()
         context.transcript_store.append(
             "planner_selected",
             {
@@ -299,8 +301,9 @@ class WebAgentExecutionHandler:
                 "llm_config_path": str(self.llm_config_path)
                 if self.llm_config_path is not None
                 else None,
-                "llm_provider": self.llm_provider,
-                "model": self.version.model,
+                "llm_provider": planner_metadata.get("provider"),
+                "provider": planner_metadata.get("provider"),
+                "model": planner_metadata.get("model"),
             },
         )
         self._emit_event(
@@ -309,7 +312,8 @@ class WebAgentExecutionHandler:
             {
                 "run_id": context.run_id,
                 "planner_mode": self.planner_mode,
-                "model": self.version.model,
+                "provider": planner_metadata.get("provider"),
+                "model": planner_metadata.get("model"),
             },
         )
         try:
@@ -627,6 +631,23 @@ class WebAgentExecutionHandler:
             )
             return client
         raise ValueError(f"Unsupported planner mode: {self.planner_mode}")
+
+    def _planner_metadata(self) -> dict[str, str | None]:
+        if self.llm_client is not None:
+            return {
+                "provider": "mock",
+                "model": self.model_override or self.version.model or "mock",
+            }
+        if self.planner_mode not in {"fake_llm", "real_llm"}:
+            return {"provider": None, "model": self.version.model}
+        router = load_llm_router_config(self.llm_config_path)
+        provider_id = self.llm_provider or router.default_provider
+        provider = router.providers.get(provider_id)
+        model = self.model_override or (
+            provider.model if provider is not None else router.default_model
+        )
+        self.version.model = model
+        return {"provider": provider_id, "model": model}
 
     def build_context(self, task: TaskSpec) -> WebAgentContext:
         run_id = self.run_id_override or f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}"

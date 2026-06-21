@@ -380,6 +380,7 @@ class LangGraphWorkflowNodes:
                     "ok": tool_result.status == "success",
                     "status": tool_result.status,
                     "error_type": tool_result.error_type,
+                    "error_message": tool_result.error_message,
                 },
             )
             evidence_item = record_evidence(
@@ -518,13 +519,31 @@ class LangGraphWorkflowNodes:
                     step_index=step_index,
                 )
             except RuntimeError as exc:
-                self._write_action_validation_artifact(context, planner)
+                validation_artifact_path = self._write_action_validation_artifact(
+                    context, planner
+                )
                 context.transcript_store.append(
                     "auto_explore_validation_failed",
                     {
                         "error": str(exc),
                         "step_index": step_index,
                         "validation_errors": planner.validation_errors,
+                        "validation_artifact_path": validation_artifact_path,
+                        "repair_attempted": bool(planner.repair_requests),
+                        "repair_success": planner.last_decision is not None,
+                    },
+                )
+                self.workflow.handler._emit_event(
+                    "planner_finished",
+                    "Auto explore action validation failed",
+                    {
+                        "run_id": context.run_id,
+                        "step_index": step_index,
+                        "error_type": "LLM_ACTION_SCHEMA_INVALID",
+                        "error": str(exc),
+                        "validation_artifact_path": validation_artifact_path,
+                        "repair_attempted": bool(planner.repair_requests),
+                        "repair_success": planner.last_decision is not None,
                     },
                 )
                 return self._finish_auto_explore_failure(
@@ -540,8 +559,7 @@ class LangGraphWorkflowNodes:
                 "auto_explore_decision",
                 decision.model_dump(mode="json"),
             )
-            if planner.validation_errors:
-                self._write_action_validation_artifact(context, planner)
+            self._write_action_validation_artifact(context, planner)
             self.workflow.handler._emit_event(
                 "planner_finished",
                 "Auto explore action selected",
@@ -556,14 +574,16 @@ class LangGraphWorkflowNodes:
             try:
                 tool_call = decision_to_tool_call(decision, f"auto_call_{step_index:03d}")
             except RuntimeError as exc:
-                self._write_action_validation_artifact(context, planner)
+                validation_artifact_path = self._write_action_validation_artifact(
+                    context, planner
+                )
                 return self._finish_auto_explore_failure(
                     context,
                     runtime,
                     records,
                     final_output,
                     "LLM_ACTION_SCHEMA_INVALID",
-                    str(exc),
+                    f"{exc} validation_artifact_path={validation_artifact_path}",
                 )
 
             tool_result = await self._invoke_auto_tool(context, runtime, tool_call)
@@ -645,23 +665,63 @@ class LangGraphWorkflowNodes:
         self,
         context: WebAgentContext,
         planner: AutoExploreActionPlanner,
-    ) -> None:
+    ) -> str:
+        artifact_path = context.run_dir / "action_validation.json"
+        repair_attempted = bool(planner.repair_requests)
+        repair_success = repair_attempted and planner.last_decision is not None
+        status = (
+            "failed"
+            if planner.last_decision is None
+            else ("repaired" if repair_attempted else "success")
+        )
         payload = {
             "task_id": context.run_id,
-            "status": "failed" if planner.last_decision is None else "repaired",
+            "status": status,
+            "call_id": _last_validation_call_id(planner),
+            "raw_response_preview": _last_validation_value(
+                planner, "raw_response_preview"
+            ),
+            "extracted_json": _last_validation_value(planner, "extracted_json"),
+            "normalized_action": _last_validation_value(planner, "normalized_action"),
+            "validation_status": _last_validation_value(
+                planner, "validation_status"
+            ),
             "validation_errors": planner.validation_errors,
+            "validation_records": planner.validation_records,
+            "repair_attempted": repair_attempted,
+            "repair_success": repair_success,
             "repair_attempt_count": len(planner.repair_requests),
             "last_decision": planner.last_decision.model_dump(mode="json")
             if planner.last_decision is not None
             else None,
+            "final_action": planner.last_decision.model_dump(mode="json")
+            if planner.last_decision is not None
+            else None,
         }
         try:
-            (context.run_dir / "action_validation.json").write_text(
+            artifact_path.write_text(
                 json.dumps(payload, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
         except Exception:
-            return
+            return str(artifact_path)
+        try:
+            with (context.run_dir / "action_validation.jsonl").open(
+                "w",
+                encoding="utf-8",
+            ) as file:
+                for record in planner.validation_records:
+                    file.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+        except Exception:
+            pass
+        try:
+            (context.run_dir / "auto_explore_prompt_preview.md").write_text(
+                _auto_explore_prompt_preview(planner),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
+        return str(artifact_path)
 
     async def _invoke_auto_tool(
         self,
@@ -710,6 +770,7 @@ class LangGraphWorkflowNodes:
                 "ok": tool_result.status == "success",
                 "status": tool_result.status,
                 "error_type": tool_result.error_type,
+                "error_message": tool_result.error_message,
             },
         )
         return tool_result
@@ -743,7 +804,10 @@ class LangGraphWorkflowNodes:
         context.transcript_store.append("execution_failed", state_payload(context))
         if runtime.browser_runtime.last_observation is not None and runtime_status is not None:
             return runtime.browser_runtime.last_observation
-        return _require_last_observation(runtime)
+        raise RuntimeError(
+            f"{error_type or 'EXECUTION_FAILED'}: "
+            f"{error_message or 'Execution failed before a page observation was available.'}"
+        )
 
     def _auto_explore_llm_client(self, context: WebAgentContext):
         if self.workflow.handler.planner_mode in {"fake_llm", "real_llm"}:
@@ -877,17 +941,31 @@ class LangGraphWorkflowNodes:
         except graph_interrupt_type():
             raise
         except Exception as exc:
+            existing_error_type = (
+                self.workflow.context.state.error_type
+                if self.workflow.context is not None
+                else None
+            )
+            existing_error_message = (
+                self.workflow.context.state.error_message
+                if self.workflow.context is not None
+                else None
+            )
             next_state["status"] = "failed"
-            next_state["error"] = str(exc)
+            next_state["error"] = existing_error_message or str(exc)
             if self.workflow.context is not None:
                 self.workflow.context.state.status = "failed"
-                self.workflow.context.state.error_type = type(exc).__name__
-                self.workflow.context.state.error_message = str(exc)
+                self.workflow.context.state.error_type = (
+                    existing_error_type or type(exc).__name__
+                )
+                self.workflow.context.state.error_message = (
+                    existing_error_message or str(exc)
+                )
             self.workflow.event_emitter.emit_node_finished(
                 next_state,
                 node_name,
                 status="failed",
-                error=str(exc),
+                error=next_state["error"],
             )
         return next_state
 
@@ -943,10 +1021,47 @@ def _history_item(tool_call: ToolCall, tool_result: ToolResult) -> dict[str, Any
         "tool_id": tool_call.tool_id,
         "action_type": tool_call.tool_id,
         "target_hint": _action_target_hint(tool_call),
+        "output": tool_result.output,
         "status": tool_result.status,
         "error_type": tool_result.error_type,
         "error_message": tool_result.error_message,
     }
+
+
+def _last_validation_call_id(planner: AutoExploreActionPlanner) -> str | None:
+    value = _last_validation_value(planner, "call_id")
+    return str(value) if value is not None else None
+
+
+def _last_validation_value(planner: AutoExploreActionPlanner, key: str):
+    if not planner.validation_records:
+        return None
+    return planner.validation_records[-1].get(key)
+
+
+def _auto_explore_prompt_preview(planner: AutoExploreActionPlanner) -> str:
+    sections: list[str] = ["# Auto Explore Action Prompt"]
+    if planner.last_request is not None:
+        sections.append(_request_markdown("Initial request", planner.last_request))
+    for index, request in enumerate(planner.repair_requests, start=1):
+        sections.append(_request_markdown(f"Repair request {index}", request))
+    return "\n\n".join(sections) + "\n"
+
+
+def _request_markdown(title: str, request) -> str:
+    lines = [f"## {title}", "", f"Model: `{request.model}`", ""]
+    for message in request.messages:
+        lines.extend(
+            [
+                f"### {message.role}",
+                "",
+                "```text",
+                message.content,
+                "```",
+                "",
+            ]
+        )
+    return "\n".join(lines).rstrip()
 
 
 def _action_target_hint(tool_call: ToolCall) -> str | None:

@@ -19,6 +19,7 @@ class ToolAuditEvent(BaseModel):
     decision: str
     status: str
     error_type: str | None = None
+    error_message: str | None = None
     duration_ms: float | None = None
     approval_id: str | None = None
     metadata: dict[str, Any] = {}

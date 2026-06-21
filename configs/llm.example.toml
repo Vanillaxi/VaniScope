@@ -27,3 +27,12 @@ base_url = "https://api.openai.com/v1"
 api_key = "YOUR_API_KEY_HERE"
 model = "gpt-4.1-mini"
 timeout_seconds = 30
+
+# Alibaba Cloud DashScope / Qwen. Set DASHSCOPE_API_KEY before selecting this
+# provider in [router].
+[providers.qwen]
+type = "openai_compatible"
+base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+api_key_env = "DASHSCOPE_API_KEY"
+model = "qwen-plus"
+timeout_seconds = 30

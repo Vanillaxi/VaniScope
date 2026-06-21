@@ -21,6 +21,7 @@ const rendererByName: Record<string, ArtifactRendererKind> = {
   "tool_audit.jsonl": "toolAudit",
   "llm_calls.jsonl": "llmCalls",
   "prompt_preview.md": "prompt",
+  "auto_explore_prompt_preview.md": "prompt",
   "prompt_context.json": "prompt",
   "trace.jsonl": "trace",
   "transcript.jsonl": "transcript",

@@ -115,12 +115,14 @@ export function getConversation(conversationId: string) {
 }
 
 export function createTask(payload: TaskCreateRequest) {
+  const backendPlanner = plannerToApiMode(payload.planner);
   return requestJson<TaskCreateResponse>("/tasks/async", {
     method: "POST",
     body: JSON.stringify(
       compactPayload({
         ...payload,
-        planner: plannerToApiMode(payload.planner),
+        planner: backendPlanner,
+        planner_mode: payload.planner_mode ?? backendPlanner,
       }),
     ),
   });

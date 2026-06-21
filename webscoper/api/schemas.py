@@ -16,7 +16,7 @@ from webscoper.runtime.inspector.schemas import (
 )
 
 
-PlannerMode = Literal["deterministic", "fake_llm", "real_llm"]
+PlannerMode = Literal["deterministic", "fake", "fake_llm", "llm", "real_llm"]
 ReviewerMode = Literal["deterministic", "fake_llm", "real_llm"]
 TaskStatus = Literal[
     "running",
@@ -50,6 +50,8 @@ class TaskCreateRequest(BaseModel):
     reminder: str | None = None
     repair_attempts: int = 0
     revise_attempts: int = 0
+    planner_mode: PlannerMode | None = None
+    use_real_llm: bool = False
     llm_config: str | None = None
     llm_provider: str | None = None
     model: str | None = None

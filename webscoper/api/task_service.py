@@ -18,7 +18,11 @@ from webscoper.api.resume import (
     resume_langgraph_after_approval as resume_langgraph_after_approval_for_service,
     run_langgraph_workflow,
 )
-from webscoper.api.runner_factory import build_api_task, build_handler
+from webscoper.api.runner_factory import (
+    build_api_task,
+    build_handler,
+    validate_request_planner_configuration,
+)
 from webscoper.api.schemas import (
     ApprovalDecisionResponse,
     ConversationDetailResponse,
@@ -177,6 +181,7 @@ class TaskService:
         self,
         request: TaskCreateRequest,
     ) -> TaskCreateResponse:
+        validate_request_planner_configuration(request)
         task_id = self._new_task_id()
         run_dir = self._run_dir(task_id)
         run_dir.mkdir(parents=True, exist_ok=True)

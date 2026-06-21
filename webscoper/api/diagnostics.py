@@ -8,6 +8,7 @@ from typing import Any
 from webscoper.api.schemas import DiagnosticsResponse
 from webscoper.browser.public_web import PublicWebRuntimeConfig, load_runtime_config
 from webscoper.runtime.llm.config import (
+    default_llm_config_path,
     default_fake_router_config,
     load_llm_router_config_from_file,
 )
@@ -50,14 +51,16 @@ def _artifact_directory_status(runs_path: Path) -> dict[str, object]:
 
 
 def _llm_status() -> dict[str, object]:
-    local_config = Path(os.getenv("VANISCOPE_LLM_CONFIG", "configs/llm.local.toml"))
+    configured_path = os.getenv("VANISCOPE_LLM_CONFIG")
+    local_config = default_llm_config_path()
+    expected_config = Path(configured_path or "configs/llm.local.toml")
     committed_example = Path("configs/llm.example.toml")
     warnings: list[str] = []
     config_source = None
     router = default_fake_router_config()
     real_enabled = False
     selected_provider = router.providers.get(router.default_provider)
-    if local_config.exists():
+    if local_config is not None:
         config_source = str(local_config)
         try:
             router = load_llm_router_config_from_file(local_config)
@@ -76,7 +79,7 @@ def _llm_status() -> dict[str, object]:
             selected_provider = router.providers.get(router.default_provider)
             warnings.append(f"Failed to load local LLM config: {type(exc).__name__}")
     else:
-        warnings.append("No configs/llm.local.toml found; fake LLM provider is active.")
+        warnings.append(f"No {expected_config} found; fake LLM provider is active.")
 
     return {
         "mode": router.mode,
@@ -86,7 +89,7 @@ def _llm_status() -> dict[str, object]:
         "provider_type": selected_provider.provider_type if selected_provider is not None else None,
         "real_enabled": real_enabled,
         "real_llm_enabled_by_default": False,
-        "local_config_present": local_config.exists(),
+        "local_config_present": local_config is not None,
         "example_config_present": committed_example.exists(),
         "config_source": config_source,
         "budget": _redacted_budget(router.budget),

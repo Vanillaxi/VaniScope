@@ -4,7 +4,11 @@ from webscoper.schemas.tool import ExecutionPlan, PlannedStep
 from webscoper.schemas.task import TaskSpec
 from webscoper.schemas.tool import ToolCall
 
-SUPPORTED_PLANNER_MODES = {"deterministic", "fake_llm", "real_llm"}
+SUPPORTED_PLANNER_MODES = {"deterministic", "fake", "fake_llm", "llm", "real_llm"}
+PLANNER_MODE_ALIASES = {
+    "fake": "fake_llm",
+    "llm": "real_llm",
+}
 
 
 class DeterministicTaskPlanner:
@@ -114,4 +118,4 @@ def normalize_planner_mode(mode: str | None) -> str:
         raise ValueError(
             f"Unsupported planner mode: {mode}. Supported modes: {supported}."
         )
-    return normalized
+    return PLANNER_MODE_ALIASES.get(normalized, normalized)

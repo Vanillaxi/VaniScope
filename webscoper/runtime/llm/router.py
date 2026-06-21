@@ -93,14 +93,17 @@ class AuditedBudgetedLLMClient(BaseLLMClient):
         prompt_tokens = _estimate_request_tokens(request)
         budget_decision = self._budget_decision(prompt_tokens)
         started = perf_counter()
+        call_id = f"{self.purpose}_{self.calls_made + 1:04d}"
         if budget_decision != "allowed":
             self._write_audit(
+                call_id=call_id,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=0,
                 duration_ms=0,
                 status="skipped",
                 error_type="LLM_BUDGET_EXCEEDED",
                 budget_decision=budget_decision,
+                response_preview=None,
             )
             raise RuntimeError(f"LLM budget exceeded: {budget_decision}")
 
@@ -110,23 +113,27 @@ class AuditedBudgetedLLMClient(BaseLLMClient):
             self.calls_made += 1
             self.total_tokens += prompt_tokens + completion_tokens
             self._write_audit(
+                call_id=call_id,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 duration_ms=int((perf_counter() - started) * 1000),
                 status="success",
                 error_type=None,
                 budget_decision=budget_decision,
+                response_preview=_preview_text(response.content),
             )
             return response
         except Exception as exc:
             self.calls_made += 1
             self._write_audit(
+                call_id=call_id,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=0,
                 duration_ms=int((perf_counter() - started) * 1000),
                 status="failed",
                 error_type=type(exc).__name__,
                 budget_decision=budget_decision,
+                response_preview=None,
             )
             raise
 
@@ -142,12 +149,14 @@ class AuditedBudgetedLLMClient(BaseLLMClient):
     def _write_audit(
         self,
         *,
+        call_id: str,
         prompt_tokens: int,
         completion_tokens: int,
         duration_ms: int,
         status: str,
         error_type: str | None,
         budget_decision: str,
+        response_preview: str | None,
     ) -> None:
         if self.audit_path is None:
             return
@@ -155,6 +164,7 @@ class AuditedBudgetedLLMClient(BaseLLMClient):
         record = {
             "timestamp": _utc_now(),
             "task_id": self.task_id,
+            "call_id": call_id,
             "provider": self.provider,
             "model": self.model,
             "mode": self.mode,
@@ -165,6 +175,8 @@ class AuditedBudgetedLLMClient(BaseLLMClient):
             "status": status,
             "error_type": error_type,
             "budget_decision": budget_decision,
+            "response_preview": response_preview,
+            "response_redacted": response_preview is not None,
         }
         with self.audit_path.open("a", encoding="utf-8") as file:
             file.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -216,6 +228,10 @@ def _estimate_request_tokens(request: LLMRequest) -> int:
 
 def _estimate_text_tokens(value: str) -> int:
     return max(1, (len(value) + 3) // 4) if value else 0
+
+
+def _preview_text(value: str, limit: int = 2000) -> str:
+    return value if len(value) <= limit else value[:limit] + "...[truncated]"
 
 
 def _existing_call_count(path: Path | None) -> int:

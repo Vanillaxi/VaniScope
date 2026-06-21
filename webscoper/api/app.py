@@ -89,12 +89,18 @@ def list_conversation_messages(conversation_id: str) -> list[MessageResponse]:
 # 创建并同步运行任务
 @app.post("/tasks", response_model=TaskCreateResponse)
 def create_task(request: TaskCreateRequest) -> TaskCreateResponse:
-    return task_service.create_and_run_task(request)
+    try:
+        return task_service.create_and_run_task(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 # 创建并异步运行任务
 @app.post("/tasks/async", response_model=TaskCreateResponse)
 async def create_task_async(request: TaskCreateRequest) -> TaskCreateResponse:
-    return await task_service.create_and_run_task_async(request)
+    try:
+        return await task_service.create_and_run_task_async(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 # 查看任务状态
 @app.get("/tasks/{task_id}", response_model=TaskStatusResponse)

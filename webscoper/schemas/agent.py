@@ -25,7 +25,6 @@ FORBIDDEN_ACTION_PATTERNS = (
     "css=",
     "xpath",
     "//",
-    "page.",
     "locator(",
     "click(",
     "evaluate(",

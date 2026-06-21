@@ -6,6 +6,9 @@ from pathlib import Path
 import pytest
 
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
+from webscoper.api.runner_factory import build_handler, resolve_request_planner_mode
+from webscoper.api.schemas import TaskCreateRequest
+from webscoper.api.task_service import TaskService
 from webscoper.api.diagnostics import build_diagnostics
 from webscoper.runtime.llm.client import BaseLLMClient, FakeLLMClient
 from webscoper.runtime.llm.auto_explore import AutoExploreActionPlanner
@@ -86,6 +89,115 @@ timeout_seconds = 10
     assert payload["llm"]["default_provider"] == "openai_compatible"
     assert payload["llm"]["model"] == "test-model"
     assert "super-secret-test-key" not in json.dumps(payload)
+
+
+def test_default_auto_explore_planner_stays_deterministic_without_real_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VANISCOPE_LLM_CONFIG", str(tmp_path / "missing.toml"))
+
+    request = TaskCreateRequest(
+        url="tests/fixtures/mock_site/basic.html",
+        mode="auto_explore",
+        task_type="browser_task",
+    )
+
+    assert resolve_request_planner_mode(request) == "deterministic"
+
+
+def test_request_planner_mode_real_llm_selects_real_planner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = _write_real_llm_config(tmp_path)
+    monkeypatch.setenv("VANISCOPE_LLM_CONFIG", str(config_path))
+    service = TaskService(runs_dir=tmp_path / "runs")
+
+    handler = build_handler(
+        service,
+        "task_real_explicit",
+        TaskCreateRequest(
+            url="tests/fixtures/mock_site/basic.html",
+            mode="auto_explore",
+            task_type="browser_task",
+            planner_mode="real_llm",
+        ),
+    )
+
+    assert handler.planner_mode == "real_llm"
+    assert handler.llm_config_path == config_path
+
+
+def test_auto_explore_uses_real_llm_when_diagnostics_configured(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = _write_real_llm_config(tmp_path)
+    monkeypatch.setenv("VANISCOPE_LLM_CONFIG", str(config_path))
+    request = TaskCreateRequest(
+        url="tests/fixtures/mock_site/basic.html",
+        mode="auto_explore",
+        task_type="browser_task",
+    )
+
+    diagnostics = build_diagnostics(runs_dir=tmp_path / "runs").model_dump(mode="json")
+
+    assert diagnostics["llm"]["mode"] == "real"
+    assert diagnostics["llm"]["api_key_configured"] is True
+    assert resolve_request_planner_mode(request) == "real_llm"
+
+
+@pytest.mark.asyncio
+async def test_planner_started_event_includes_real_provider_model_without_key(
+    tmp_path: Path,
+) -> None:
+    config_path = _write_real_llm_config(tmp_path)
+    events: list[dict] = []
+    task = TaskSpec(
+        task_id="real_event_task",
+        raw_input="Summarize the page.",
+        target_url=Path("tests/fixtures/mock_site/basic.html").resolve().as_uri(),
+        mode="auto_explore",
+        goal="Summarize the page.",
+    )
+    handler = WebAgentExecutionHandler(
+        output_root=tmp_path,
+        planner_mode="real_llm",
+        llm_config_path=config_path,
+        event_sink=lambda kind, message, payload: events.append(
+            {"kind": kind, "message": message, "payload": payload}
+        ),
+    )
+    context = handler.build_context(task)
+    prompt_result = handler.build_prompt(context)
+
+    await handler.plan_task(context, prompt_result)
+
+    planner_started = [event for event in events if event["kind"] == "planner_started"][0]
+    assert planner_started["payload"]["planner_mode"] == "real_llm"
+    assert planner_started["payload"]["provider"] == "qwen"
+    assert planner_started["payload"]["model"] == "qwen3.6-plus"
+    assert "super-secret-test-key" not in json.dumps(events)
+
+
+def test_real_llm_request_without_config_returns_clear_error(
+    api_client,
+) -> None:
+    response = api_client.post(
+        "/tasks/async",
+        json={
+            "url": "tests/fixtures/mock_site/basic.html",
+            "mode": "auto_explore",
+            "task_type": "browser_task",
+            "planner_mode": "real_llm",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Real LLM requested but default provider is not configured."
+    )
 
 
 @pytest.mark.asyncio
@@ -207,3 +319,23 @@ async def test_dry_run_writes_prompt_preview_and_skips_llm(tmp_path: Path) -> No
     assert (context.run_dir / "prompt_context.json").exists()
     assert (context.run_dir / "dry_run_result.json").exists()
     assert not (context.run_dir / "llm_calls.jsonl").exists()
+
+
+def _write_real_llm_config(tmp_path: Path) -> Path:
+    config_path = tmp_path / "llm.local.toml"
+    config_path.write_text(
+        """
+[router]
+default_provider = "qwen"
+mode = "real"
+
+[providers.qwen]
+type = "openai_compatible"
+base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+api_key = "super-secret-test-key"
+model = "qwen3.6-plus"
+timeout_seconds = 10
+""",
+        encoding="utf-8",
+    )
+    return config_path

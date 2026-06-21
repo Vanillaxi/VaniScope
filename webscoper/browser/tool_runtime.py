@@ -179,6 +179,7 @@ class StatefulBrowserToolRuntime:
                     "run_id": self.trace_recorder.run_id,
                     "tool_name": "browser_open_observe",
                     "error_type": "PUBLIC_WEB_BLOCKED",
+                    "error_message": decision.reason,
                     "public_web_policy": decision.model_dump(mode="json"),
                 },
             )

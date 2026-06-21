@@ -5,6 +5,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from webscoper.browser.public_web import PublicWebRuntimeConfig
+from webscoper.runtime.llm.config import default_llm_config_path
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.runtime.prompt.reminders import RuntimeReminderStore
 from webscoper.schemas.browser import ActionContract, ExpectedEffect, PageObservation
@@ -208,5 +209,4 @@ def llm_config_path(
         return None
     if value:
         return Path(value)
-    default_path = Path("configs/llm.local.toml")
-    return default_path if default_path.exists() else None
+    return default_llm_config_path()

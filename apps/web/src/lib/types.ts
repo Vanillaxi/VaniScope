@@ -28,6 +28,8 @@ export type TaskCreateRequest = {
   research_goal?: string;
   language?: TaskLanguage;
   planner: PlannerMode;
+  planner_mode?: BackendPlannerMode;
+  use_real_llm?: boolean;
   reminder?: string;
   workspace?: string;
   risk_mode?: string;
