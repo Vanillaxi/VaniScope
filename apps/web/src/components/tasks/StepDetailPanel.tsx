@@ -91,6 +91,7 @@ export function StepDetailPanel({
                       <div className="border-b border-[var(--line)] px-3 py-2 text-xs font-semibold text-[#344054]">
                         {shot.label}
                       </div>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={src}
                         alt={shot.label}

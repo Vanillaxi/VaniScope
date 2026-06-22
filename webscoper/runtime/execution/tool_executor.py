@@ -123,6 +123,36 @@ class LocalToolExecutor:
             )
 
     async def _execute_local(self, call: ToolCall) -> dict[str, Any]:
+        if call.tool_id == "browser_open":
+            return await self.browser_runtime.open(
+                str(call.arguments.get("url") or ""),
+                session_id=_str_or_none(call.arguments.get("session_id")),
+                wait_until=_str_or_none(call.arguments.get("wait_until")),
+                reason=_str_or_none(call.arguments.get("reason")),
+            )
+
+        if call.tool_id == "browser_observe":
+            return await self.browser_runtime.observe(
+                session_id=_str_or_none(call.arguments.get("session_id")),
+                include_screenshot=_bool_arg(call.arguments, "include_screenshot", True),
+                include_accessibility=_bool_arg(
+                    call.arguments,
+                    "include_accessibility",
+                    True,
+                ),
+                reason=_str_or_none(call.arguments.get("reason")),
+            )
+
+        if call.tool_id == "browser_click":
+            return await self.browser_runtime.click(
+                target_hint=str(call.arguments.get("target_hint") or ""),
+                expected_effect=call.arguments.get("expected_effect")
+                if isinstance(call.arguments.get("expected_effect"), dict)
+                else None,
+                session_id=_str_or_none(call.arguments.get("session_id")),
+                reason=_str_or_none(call.arguments.get("reason")),
+            )
+
         if call.tool_id == "browser_open_observe":
             observation = await self.browser_runtime.open_observe(
                 str(call.arguments.get("url") or "")
@@ -144,7 +174,50 @@ class LocalToolExecutor:
             return await self.browser_runtime.click_intent(action)
 
         if call.tool_id == "browser_extract":
-            return await self.browser_runtime.extract()
+            return await self.browser_runtime.extract(
+                instruction=_str_or_none(call.arguments.get("instruction")),
+                evidence_mode=_str_or_none(call.arguments.get("evidence_mode")),
+            )
+
+        if call.tool_id == "browser_type":
+            return await self.browser_runtime.type_text(
+                target_hint=str(call.arguments.get("target_hint") or ""),
+                text=str(call.arguments.get("text") or ""),
+                session_id=_str_or_none(call.arguments.get("session_id")),
+                reason=_str_or_none(call.arguments.get("reason")),
+            )
+
+        if call.tool_id == "browser_select":
+            return await self.browser_runtime.select_option(
+                target_hint=str(call.arguments.get("target_hint") or ""),
+                option_text=_str_or_none(call.arguments.get("option_text")),
+                option_value=_str_or_none(call.arguments.get("option_value")),
+                session_id=_str_or_none(call.arguments.get("session_id")),
+                reason=_str_or_none(call.arguments.get("reason")),
+            )
+
+        if call.tool_id == "browser_scroll":
+            return await self.browser_runtime.scroll(
+                direction=str(call.arguments.get("direction") or "down"),
+                amount=str(call.arguments.get("amount") or "medium"),
+                session_id=_str_or_none(call.arguments.get("session_id")),
+                reason=_str_or_none(call.arguments.get("reason")),
+            )
+
+        if call.tool_id == "browser_wait":
+            return await self.browser_runtime.wait(
+                condition=str(call.arguments.get("condition") or "readiness"),
+                value=_str_or_none(call.arguments.get("value")),
+                timeout_ms=_int_or_none(call.arguments.get("timeout_ms")),
+                session_id=_str_or_none(call.arguments.get("session_id")),
+                reason=_str_or_none(call.arguments.get("reason")),
+            )
+
+        if call.tool_id == "browser_screenshot":
+            return await self.browser_runtime.screenshot(
+                session_id=_str_or_none(call.arguments.get("session_id")),
+                reason=_str_or_none(call.arguments.get("reason")),
+            )
 
         if call.tool_id == "finish_task":
             summary = call.arguments.get("summary")
@@ -313,3 +386,22 @@ def _str_or_none(value: Any) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _int_or_none(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
+
+
+def _bool_arg(arguments: dict[str, Any], key: str, default: bool) -> bool:
+    value = arguments.get(key, default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() in {"1", "true", "yes", "on"}
+    return default

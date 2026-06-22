@@ -20,6 +20,7 @@ ARTIFACT_ALLOWLIST = {
     "transcript.jsonl",
     "evidence.jsonl",
     "graph.json",
+    "observation.json",
     "compact_context.json",
     "compact_summary.md",
     "final_report.md",

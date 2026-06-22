@@ -22,7 +22,7 @@ from webscoper.skills.github_issue_research import GitHubIssueResearchSkill
 
 def persist_prompt_context(run_dir: Path, prompt_result: PromptBuildResult) -> None:
     (run_dir / "prompt_preview.md").write_text(
-        prompt_result.prompt_text,
+        prompt_result.prompt_preview_text or prompt_result.prompt_text,
         encoding="utf-8",
     )
     (run_dir / "prompt_context.json").write_text(

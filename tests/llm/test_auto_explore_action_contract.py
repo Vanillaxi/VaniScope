@@ -32,7 +32,7 @@ def test_normalizer_accepts_plain_valid_json() -> None:
     )
 
     assert decision is not None
-    assert decision.action.type == "extract"
+    assert decision.action.type == "browser_extract"
     assert record["validation_status"] == "success"
 
 
@@ -45,7 +45,7 @@ def test_normalizer_accepts_markdown_fenced_json() -> None:
     )
 
     assert decision is not None
-    assert decision.action.type == "extract"
+    assert decision.action.type == "browser_extract"
     assert decision.action.instruction
 
 
@@ -56,7 +56,7 @@ def test_normalizer_extracts_json_from_prose() -> None:
 
     assert decision is not None
     assert decision.reasoning_summary == "Need repos."
-    assert decision.action.type == "click_intent"
+    assert decision.action.type == "browser_click"
     assert decision.action.target_hint == "Repositories"
 
 
@@ -66,7 +66,7 @@ def test_action_type_browser_extract_maps_to_extract() -> None:
     )
 
     assert decision is not None
-    assert decision.action.type == "extract"
+    assert decision.action.type == "browser_extract"
     assert decision.action.instruction == "Collect visible information."
 
 
@@ -76,7 +76,7 @@ def test_click_alias_maps_to_click_intent() -> None:
     )
 
     assert decision is not None
-    assert decision.action.type == "click_intent"
+    assert decision.action.type == "browser_click"
     assert decision.action.target_hint == "Repositories"
 
 
@@ -88,7 +88,7 @@ def test_action_string_extract_is_wrapped() -> None:
 
     assert decision is not None
     assert decision.reasoning_summary == "No reasoning summary provided."
-    assert decision.action.type == "extract"
+    assert decision.action.type == "browser_extract"
     assert decision.action.instruction
 
 
@@ -109,7 +109,7 @@ def test_click_intent_missing_target_hint_fails_validation() -> None:
 
     assert decision is None
     assert record["validation_status"] == "failed"
-    assert "click_intent requires target_hint" in json.dumps(record["validation_errors"])
+    assert "browser_click requires target_hint" in json.dumps(record["validation_errors"])
 
 
 def test_extract_missing_instruction_uses_user_goal() -> None:
@@ -154,7 +154,7 @@ def test_qwen_style_output_fixture_can_be_normalized() -> None:
     decision, record = parse_auto_explore_decision(content)
 
     assert decision is not None
-    assert decision.action.type == "extract"
+    assert decision.action.type == "browser_extract"
     assert decision.action.risk_level == "read_only"
     assert record["validation_status"] == "success"
 
@@ -169,7 +169,7 @@ async def test_invalid_first_output_triggers_repair_once_and_succeeds(tmp_path: 
             self.calls += 1
             if self.calls == 1:
                 return LLMResponse(content='{"action":{"type":"click_intent"}}', model="test")
-            return LLMResponse(content='{"action":"extract"}', model="test")
+            return LLMResponse(content='{"action":"finish"}', model="test")
 
     context = _context(tmp_path)
     client = RepairingClient()
@@ -182,7 +182,7 @@ async def test_invalid_first_output_triggers_repair_once_and_succeeds(tmp_path: 
         step_index=1,
     )
 
-    assert decision.action.type == "extract"
+    assert decision.action.type == "finish_task"
     assert client.calls == 2
     assert len(planner.repair_requests) == 1
     assert planner.validation_records[-1]["validation_status"] == "success"

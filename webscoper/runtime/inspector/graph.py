@@ -339,11 +339,21 @@ def _node_type_for_kind(kind: str) -> str:
         return "llm"
     if kind.startswith("tool_") or kind.startswith("risk_"):
         return "tool"
-    if kind.startswith("browser_") or kind.startswith("navigation_") or kind.startswith("action_") or kind.startswith("post_action_"):
+    if (
+        kind.startswith("browser_")
+        or kind.startswith("navigation_")
+        or kind.startswith("action_")
+        or kind.startswith("post_action_")
+        or kind.startswith("executor_")
+    ):
         return "browser"
     if kind.startswith("readiness_") or kind == "readiness_check":
         return "readiness"
-    if kind.startswith("effect_verification") or kind == "effect_verify":
+    if (
+        kind.startswith("effect_verification")
+        or kind.startswith("verifier_")
+        or kind == "effect_verify"
+    ):
         return "verifier"
     if kind.startswith("recovery_"):
         return "recovery"

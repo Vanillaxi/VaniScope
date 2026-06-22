@@ -10,6 +10,7 @@ import { LlmCallsPanel } from "@/components/tasks/LlmCallsPanel";
 import { RuntimeInspectorTabs } from "@/components/tasks/RuntimeInspectorTabs";
 import { TaskStatusCard } from "@/components/tasks/TaskStatusCard";
 import { TimelinePanel } from "@/components/tasks/TimelinePanel";
+import { ToolCatalogPanel } from "@/components/tasks/ToolCatalogPanel";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import {
@@ -204,6 +205,9 @@ export default function TaskPage({ params }: TaskPageProps) {
                   artifactName={selectedArtifact ?? debugArtifacts(artifacts, inspector)[0]}
                   title={t.inspector.rawArtifacts}
                 />
+                <div className="xl:col-span-2">
+                  <ToolCatalogPanel />
+                </div>
               </div>
             );
           }

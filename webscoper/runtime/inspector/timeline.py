@@ -380,11 +380,17 @@ def _item_from_report(report_text: str, order: int) -> RuntimeTimelineItem:
 def _event_category(kind: str) -> str:
     if kind.startswith("workflow_") or kind in {"task_started", "task_finished", "task_failed"}:
         return "workflow"
-    if kind.startswith("browser_") or kind.startswith("navigation_") or kind.startswith("action_") or kind.startswith("post_action_"):
+    if (
+        kind.startswith("browser_")
+        or kind.startswith("navigation_")
+        or kind.startswith("action_")
+        or kind.startswith("post_action_")
+        or kind.startswith("executor_")
+    ):
         return "browser"
     if kind.startswith("readiness_") or kind == "readiness_check":
         return "readiness"
-    if kind.startswith("effect_verification"):
+    if kind.startswith("effect_verification") or kind.startswith("verifier_"):
         return "verification"
     if kind.startswith("tool_"):
         return "tool"

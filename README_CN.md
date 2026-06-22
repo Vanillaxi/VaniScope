@@ -366,6 +366,32 @@ LLM call count、artifact 存在情况、failure reason 和 run_dir。
 dry-run 任务会生成 `prompt_preview.md`、`prompt_context.json` 和 `dry_run_result.json`，
 然后在浏览器或 LLM 执行前停止。
 
+## Browser Tool Contract v2
+
+VaniScope 的浏览器工具层升级为 Browser Tool Contract v2。LLM 只能选择 action intent，不能输出 selector、XPath、Playwright code、JavaScript 或 raw DOM 操作。实际执行仍然必须经过 ToolGateway、RiskGate、Approval、Evidence、Trace、Timeline 和 Graph。
+
+| Tool | 用途 | 风险 / 说明 |
+| --- | --- | --- |
+| `browser_open` | 在 task 浏览器 session 中打开 URL。 | read-only，必须经过 PublicWebPolicy。 |
+| `browser_observe` | 返回面向 LLM 的 observation：可见文本、main content、accessibility summary、交互元素、readiness、risk signals、可选截图 evidence。 | 默认不调用 vision model。 |
+| `browser_click` | 用自然语言 `target_hint` 点击，并验证 expected effect。 | TargetResolver 选元素；高风险点击走 RiskGate / Approval。 |
+| `browser_type` | 向目标输入安全 mock 文本。 | 默认 local fixture 优先；public web typing 和敏感值默认 block。 |
+| `browser_select` | 按 option text/value 选择。 | local fixture 优先；public web 可能变更状态的 select 需要人工确认。 |
+| `browser_scroll` | 上下滚动并观察结果。 | read-only，有每 task scroll 限制。 |
+| `browser_wait` | 等待 readiness、URL 变化、内容出现、network quiet 或 fixed delay。 | LLM 不能直接 sleep，必须调用工具。 |
+| `browser_extract` | 从当前可见页面提取 evidence-backed summary。 | 保留 source URL 和 evidence id。 |
+| `browser_screenshot` | 显式截图并作为 first-class evidence。 | JSONL 不写 base64。 |
+| `ask_human` | 暂停等待人工输入/决策。 | 登录、验证码、支付、删除、发布、真实提交和不安全歧义必须走这里或 block。 |
+| `finish_task` | 不做新浏览器动作，基于 evidence 结束并生成报告。 | 浏览器中立的最终步骤。 |
+
+兼容 wrapper 仍然保留：`browser_open_observe` 维持旧的 open+observe 形态，`browser_click_intent` 维持旧 click-intent 入口。新的 prompt 和 Tool Catalog 优先展示 v2 名称。
+
+浏览器 session 默认是 task scope：`browser_session_id`、`browser_context_id`、`page_id` 会写入 workflow/session metadata。默认不保存 cookies / localStorage，不跨 public web task 复用登录态，也不会绕过登录、验证码或访问控制。storage_state 只作为显式本地 opt-in 预留。
+
+预留工具 `browser_upload_file`、`browser_download`、`browser_drag` 默认 disabled。本阶段不开放 public web 上传/下载/拖拽；未来启用时必须使用受控目录和人工确认。
+
+Eval schema 已预留 BrowserGym / WebArena 风格本地 benchmark 字段，但本阶段不接真实 BrowserGym 或 WebArena benchmark。
+
 ## 面试演示路径
 
 这条路径用于展示 VaniScope 是真实 Web Agent runtime，而不是普通日志列表。
@@ -430,6 +456,7 @@ uv run python scripts/run_workflow_eval.py \
 - `transcript.jsonl`：运行转录。
 - `events.jsonl`：任务事件。
 - `graph.json`：用于离线复盘的执行图。
+- `observation.json`：最新 rich browser observation。
 - `tool_audit.jsonl`：ToolGateway 审计。
 - `recovery.jsonl`：恢复策略记录。
 - `approvals.jsonl` / `pending.jsonl` / `risk_report.json`：审批相关 artifact。

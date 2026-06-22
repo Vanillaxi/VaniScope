@@ -202,6 +202,31 @@ export type RuntimeExecutionGraphResponse = {
   error?: string | null;
 };
 
+export type ToolCatalogItem = {
+  tool_id: string;
+  name: string;
+  display_name?: string | null;
+  description: string;
+  permission: string;
+  risk_level: string;
+  input_schema: Record<string, unknown>;
+  output_schema: Record<string, unknown>;
+  requires_session: boolean;
+  produces_evidence: boolean;
+  produces_screenshot: boolean;
+  can_mutate_page: boolean;
+  can_submit_external: boolean;
+  public_web_allowed: boolean;
+  local_fixture_allowed: boolean;
+  enabled: boolean;
+  compatibility_wrapper: boolean;
+  tags: string[];
+};
+
+export type ToolCatalogResponse = {
+  tools: ToolCatalogItem[];
+};
+
 export type ConversationResponse = {
   id: string;
   title: string;

@@ -68,13 +68,18 @@ class EffectVerificationResult(BaseModel):
 
 
 class InteractiveElement(BaseModel):
+    id: str | None = None
     tag: str
     role: str | None = None
     name: str
     text: str
+    href: str | None = None
     locator_hint: str | None = None
     visible: bool
     enabled: bool
+    is_visible: bool | None = None
+    is_enabled: bool | None = None
+    risk_hint: str = "unknown"
     bbox: dict[str, float] | None = None
     confidence: float
 
@@ -94,6 +99,7 @@ class PageObservation(BaseModel):
     title: str
     visible_text_summary: str
     main_content_summary: str | None = None
+    accessibility_summary: str | None = None
     interactive_elements: list[InteractiveElement]
     risk_signals: list[RiskSignal]
     readiness: dict[str, Any] | None = None

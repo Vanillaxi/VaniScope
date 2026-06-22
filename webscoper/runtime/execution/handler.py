@@ -272,6 +272,9 @@ class WebAgentExecutionHandler:
                 "loaded_agents_md_paths": prompt_result.loaded_agents_md_paths,
                 "core_tool_ids": prompt_result.core_tool_ids,
                 "lazy_tool_ids": prompt_result.lazy_tool_ids,
+                "available_actions": prompt_result.available_actions,
+                "hidden_tools": prompt_result.hidden_tools,
+                "disabled_tools": prompt_result.disabled_tools,
             },
         )
         self._emit_event(
@@ -283,6 +286,9 @@ class WebAgentExecutionHandler:
                 "prompt_context_path": str(context.run_dir / "prompt_context.json"),
                 "core_tool_ids": prompt_result.core_tool_ids,
                 "lazy_tool_ids": prompt_result.lazy_tool_ids,
+                "available_actions": prompt_result.available_actions,
+                "hidden_tools": prompt_result.hidden_tools,
+                "disabled_tools": prompt_result.disabled_tools,
             },
         )
         return prompt_result

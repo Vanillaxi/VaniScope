@@ -136,6 +136,18 @@ def _browser_status(public_web) -> dict[str, object]:
         "runtime_mode": public_web.mode,
         "public_network_enabled": public_web.public_network_enabled,
         "allowed_domains": public_web.allowed_domains,
+        "browser_session": {
+            "default_scope": "task",
+            "persist_storage_state": False,
+            "storage_state_dir": ".vaniscope/browser_state",
+            "max_session_age_minutes": 60,
+            "allow_public_web_session_reuse": False,
+            "sensitive_values_redacted": True,
+        },
+        "browser_recording": {
+            "video_enabled": False,
+            "video_dir": "runs/videos",
+        },
     }
 
 

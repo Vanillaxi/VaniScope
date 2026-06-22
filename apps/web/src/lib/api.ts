@@ -17,6 +17,7 @@ import type {
   TaskCreateRequest,
   TaskCreateResponse,
   TaskStatusResponse,
+  ToolCatalogResponse,
 } from "@/lib/types";
 
 export const API_BASE_URL =
@@ -95,6 +96,10 @@ export function getHealth() {
 
 export function getDiagnostics() {
   return requestJson<DiagnosticsResponse>("/diagnostics", { cache: "no-store" });
+}
+
+export function getToolCatalog() {
+  return requestJson<ToolCatalogResponse>("/tools/catalog", { cache: "no-store" });
 }
 
 export function createConversation(payload: { title?: string; metadata_json?: Record<string, unknown> }) {

@@ -54,6 +54,13 @@ class LangGraphWorkflowNodes:
         state["task_id"] = self.workflow.context.run_id
         state["thread_id"] = self.workflow.thread_id or self.workflow.context.run_id
         state["run_dir"] = str(self.workflow.context.run_dir)
+        state["browser_session"] = {
+            "browser_session_id": self.workflow.runtime.browser_runtime.browser_session_id,
+            "browser_context_id": self.workflow.runtime.browser_runtime.browser_context_id,
+            "page_id": self.workflow.runtime.browser_runtime.page_id,
+            "scope": "task",
+            "persist_storage_state": False,
+        }
         return state
 
     def route_skill(self, state: VaniScopeGraphState) -> VaniScopeGraphState:
@@ -530,6 +537,7 @@ class LangGraphWorkflowNodes:
 
         planner = AutoExploreActionPlanner(
             self._auto_explore_llm_client(context),
+            tool_registry=self.workflow.handler.tool_registry,
             repair_attempts=max(1, self.workflow.handler.repair_attempts),
         )
 
@@ -1162,6 +1170,8 @@ def _auto_explore_prompt_preview(planner: AutoExploreActionPlanner) -> str:
 
 def _request_markdown(title: str, request) -> str:
     lines = [f"## {title}", "", f"Model: `{request.model}`", ""]
+    metadata = getattr(request, "metadata", {}) or {}
+    lines.extend(_request_tool_exposure_markdown(metadata))
     for message in request.messages:
         lines.extend(
             [
@@ -1174,6 +1184,47 @@ def _request_markdown(title: str, request) -> str:
             ]
         )
     return "\n".join(lines).rstrip()
+
+
+def _request_tool_exposure_markdown(metadata: dict[str, Any]) -> list[str]:
+    lines = ["Available actions:"]
+    available_actions = metadata.get("available_actions")
+    if isinstance(available_actions, list) and available_actions:
+        lines.extend(f"- {tool_id}" for tool_id in available_actions)
+    else:
+        lines.append("- none")
+
+    lines.extend(["", "Hidden tools:"])
+    hidden_tools = metadata.get("hidden_tools")
+    disabled_tools = metadata.get("disabled_tools")
+    unavailable_tools = {}
+    if isinstance(hidden_tools, dict):
+        unavailable_tools.update(hidden_tools)
+    if isinstance(disabled_tools, dict):
+        unavailable_tools.update(disabled_tools)
+    if unavailable_tools:
+        lines.extend(
+            f"- {tool_id}: {reason}" for tool_id, reason in unavailable_tools.items()
+        )
+    else:
+        lines.append("- none")
+
+    lines.extend(["", "Lazy tools:"])
+    lazy_tools = metadata.get("lazy_tool_ids") or metadata.get("lazy_tools")
+    if isinstance(lazy_tools, list) and lazy_tools:
+        lines.extend(f"- {tool_id}" for tool_id in lazy_tools)
+    else:
+        lines.append("- none")
+
+    lines.extend(["", "Disabled tools:"])
+    if isinstance(disabled_tools, dict) and disabled_tools:
+        lines.extend(
+            f"- {tool_id}: {reason}" for tool_id, reason in disabled_tools.items()
+        )
+    else:
+        lines.append("- none")
+    lines.append("")
+    return lines
 
 
 def _action_target_hint(tool_call: ToolCall) -> str | None:

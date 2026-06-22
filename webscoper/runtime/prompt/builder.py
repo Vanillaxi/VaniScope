@@ -10,6 +10,10 @@ from webscoper.schemas.runtime import (
 )
 from webscoper.schemas.tool import ToolSpec
 from webscoper.tools.registry import ToolRegistry
+from webscoper.runtime.prompt.tool_exposure import (
+    select_prompt_tools,
+    tool_selection_markdown,
+)
 
 
 class DynamicPromptBuilder:
@@ -26,7 +30,10 @@ class DynamicPromptBuilder:
     ) -> PromptBuildResult:
         agents_md_instructions = agents_md_instructions or []
         runtime_reminders = runtime_reminders or []
-        catalog = self.tool_registry.snapshot()
+        tool_selection = select_prompt_tools(
+            self.tool_registry,
+            context=context,
+        )
 
         sections = {
             "identity": _identity_section(),
@@ -35,8 +42,8 @@ class DynamicPromptBuilder:
             "skill_instruction": _skill_instruction_section(skill),
             "permission_mode": context.safety.mode,
             "runtime_version": _runtime_version_section(context),
-            "core_tools": _core_tools_section(catalog.core_tools),
-            "lazy_tools": _lazy_tools_section(catalog.lazy_tools),
+            "core_tools": _core_tools_section(tool_selection.available_tools),
+            "lazy_tools": _lazy_tools_section(tool_selection.lazy_tools),
             "agents_md": _agents_md_section(agents_md_instructions),
             "runtime_reminders": _runtime_reminders_section(runtime_reminders),
             "output_rules": _output_rules_section(),
@@ -61,12 +68,18 @@ class DynamicPromptBuilder:
 
         return PromptBuildResult(
             prompt_text=prompt_text,
+            prompt_preview_text=tool_selection_markdown(tool_selection)
+            + "\n\n"
+            + prompt_text,
             sections=sections,
             loaded_agents_md_paths=[
                 instruction.source_path for instruction in agents_md_instructions
             ],
-            core_tool_ids=[tool.tool_id for tool in catalog.core_tools],
-            lazy_tool_ids=[tool.tool_id for tool in catalog.lazy_tools],
+            core_tool_ids=tool_selection.available_actions,
+            lazy_tool_ids=tool_selection.lazy_tool_ids,
+            available_actions=tool_selection.available_actions,
+            hidden_tools=tool_selection.hidden_tools,
+            disabled_tools=tool_selection.disabled_tools,
             skill=skill,
             compact_context_metadata=context_pack.model_dump(mode="json")
             if context_pack is not None

@@ -1,13 +1,19 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+
+
+ToolExposure = Literal["core", "contextual", "lazy", "disabled", "compatibility"]
+WebExposure = Literal["allowed", "hidden", "approval_required"]
+FixtureExposure = Literal["allowed", "hidden"]
 
 
 class ToolSpec(BaseModel):
     tool_id: str
     name: str
+    display_name: str | None = None
     description: str
     prompt: str
     tool_type: str = "local"
@@ -15,7 +21,23 @@ class ToolSpec(BaseModel):
     permission: str = "read_only"
     risk_level: str = "read_only"
     timeout_ms: int = 5000
+    input_schema: dict[str, Any] = Field(default_factory=dict)
+    output_schema: dict[str, Any] = Field(default_factory=dict)
     schema_summary: dict[str, str] = Field(default_factory=dict)
+    supported_modes: list[str] = Field(default_factory=lambda: ["guided", "auto_explore"])
+    requires_session: bool = False
+    produces_evidence: bool = False
+    produces_screenshot: bool = False
+    can_mutate_page: bool = False
+    can_submit_external: bool = False
+    public_web_allowed: bool = True
+    local_fixture_allowed: bool = True
+    enabled: bool = True
+    compatibility_wrapper: bool = False
+    exposure: ToolExposure = "core"
+    public_web_exposure: WebExposure = "allowed"
+    local_fixture_exposure: FixtureExposure = "allowed"
+    real_llm_prompt_allowed: bool = True
     tags: list[str] = Field(default_factory=list)
 
 

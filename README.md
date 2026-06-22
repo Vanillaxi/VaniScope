@@ -329,6 +329,32 @@ The smoke runner uses soft assertions and reports task status, final URL/title, 
 
 Dry-run tasks generate `prompt_preview.md`, `prompt_context.json`, and `dry_run_result.json`, then stop before browser or LLM execution.
 
+## Browser Tool Contract v2
+
+VaniScope browser tools now use Browser Tool Contract v2. The LLM selects action intent only; it cannot output selectors, XPath, Playwright code, JavaScript, or raw DOM manipulation. ToolGateway, RiskGate, Approval, Evidence, Trace, Timeline, and Graph remain the execution path.
+
+| Tool | Purpose | Risk / notes |
+| --- | --- | --- |
+| `browser_open` | Open a URL in the task browser session. | Read-only, PublicWebPolicy enforced. |
+| `browser_observe` | Return LLM-ready observation with visible text, main content, accessibility summary, interactive elements, readiness, risk signals, and optional screenshot evidence. | Does not send images to a vision model by default. |
+| `browser_click` | Click by natural-language `target_hint` and verify expected effect. | TargetResolver chooses the element; risky clicks require RiskGate/Approval. |
+| `browser_type` | Type safe mock text into a target field. | Local fixture first; public web typing and sensitive values are blocked by default. |
+| `browser_select` | Select an option by text/value. | Local fixture first; public web state-changing selects require human approval. |
+| `browser_scroll` | Scroll up/down and observe the result. | Read-only with per-task scroll limit. |
+| `browser_wait` | Wait for readiness, URL change, content, network quiet, or fixed delay. | LLM must request this tool instead of raw sleeps. |
+| `browser_extract` | Extract visible information into evidence-backed summary. | Keeps source URL and evidence ids. |
+| `browser_screenshot` | Capture an explicit screenshot as first-class evidence. | No base64 is written to JSONL. |
+| `ask_human` | Pause for human decision/input. | Used for login, CAPTCHA, payment, destructive actions, real submissions, and unsafe ambiguity. |
+| `finish_task` | Finish without new browser actions and generate/report from evidence. | Browser-neutral finalization. |
+
+Compatibility wrappers remain available: `browser_open_observe` runs the old open+observe shape, and `browser_click_intent` remains the old click-intent wrapper. New prompts and Tool Catalog output prefer v2 names.
+
+Browser sessions are task-scoped by default: `browser_session_id`, `browser_context_id`, and `page_id` are recorded in workflow/session metadata. VaniScope does not save cookies or localStorage by default, does not reuse public-web login state by default, and does not bypass login, CAPTCHA, or access controls. Storage state is reserved for explicit local opt-in.
+
+Reserved tools `browser_upload_file`, `browser_download`, and `browser_drag` are disabled by default. Public web upload/download/drag is not enabled in this phase; future support must use controlled directories and human approval.
+
+The eval schema now has BrowserGym/WebArena-style local benchmark fields, but this phase does not connect to real BrowserGym or WebArena benchmarks.
+
 ## Interview Demo Path
 
 Use this path when showing VaniScope as a real Web Agent runtime, not just a log viewer.
@@ -392,6 +418,7 @@ uv run python scripts/run_workflow_eval.py \
 * `transcript.jsonl`: runtime transcript.
 * `events.jsonl`: task events.
 * `graph.json`: execution graph for offline replay.
+* `observation.json`: latest rich browser observation.
 * `tool_audit.jsonl`: ToolGateway audit.
 * `recovery.jsonl`: recovery strategy records.
 * `approvals.jsonl` / `pending.jsonl` / `risk_report.json`: approval-related artifacts.

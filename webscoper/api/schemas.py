@@ -130,6 +130,10 @@ class DiagnosticsResponse(BaseModel):
     config: dict[str, object] = Field(default_factory=dict)
 
 
+class ToolCatalogResponse(BaseModel):
+    tools: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class ConversationCreateRequest(BaseModel):
     title: str | None = None
     metadata_json: dict[str, Any] = Field(default_factory=dict)

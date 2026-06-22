@@ -93,3 +93,42 @@ class WorkflowEvalSummary(BaseModel):
     expectation_failures: int = 0
     case_results: list[WorkflowEvalCaseResult] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+BenchmarkSiteType = Literal["local_fixture", "public_web", "benchmark"]
+BenchmarkCriterionType = Literal[
+    "content_appears",
+    "url_contains",
+    "extracted_field_equals",
+    "report_contains",
+    "evidence_exists",
+]
+
+
+class BrowserBenchmarkSuccessCriterion(BaseModel):
+    type: BenchmarkCriterionType
+    value: str
+    field: str | None = None
+
+
+class BrowserBenchmarkEvalCase(BaseModel):
+    case_id: str
+    site_type: BenchmarkSiteType = "local_fixture"
+    start_url: str
+    goal: str
+    allowed_domains: list[str] = Field(default_factory=list)
+    max_steps: int = 5
+    success_criteria: list[BrowserBenchmarkSuccessCriterion] = Field(default_factory=list)
+    risk_policy: str = "read_only"
+
+
+class BrowserBenchmarkMetrics(BaseModel):
+    task_success_rate: float = 0.0
+    step_success_rate: float = 0.0
+    avg_steps: float = 0.0
+    recovery_rate: float = 0.0
+    unsafe_action_block_rate: float = 0.0
+    evidence_completeness: float = 0.0
+    screenshot_evidence_rate: float = 0.0
+    graph_artifact_rate: float = 0.0
+    report_quality_basic: float = 0.0

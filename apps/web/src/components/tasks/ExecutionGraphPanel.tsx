@@ -9,7 +9,6 @@ import { useI18n } from "@/lib/i18n";
 import type {
   RuntimeEvidenceLink,
   RuntimeExecutionGraphResponse,
-  RuntimeGraphNode,
 } from "@/lib/types";
 
 type ExecutionGraphPanelProps = {
@@ -27,7 +26,7 @@ export function ExecutionGraphPanel({
   evidence = [],
 }: ExecutionGraphPanelProps) {
   const { language } = useI18n();
-  const nodes = graph?.nodes ?? [];
+  const nodes = useMemo(() => graph?.nodes ?? [], [graph?.nodes]);
   const [selectedId, setSelectedId] = useState<string | null>(nodes[0]?.id ?? null);
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === (selectedId ?? nodes[0]?.id)) ?? nodes[0],

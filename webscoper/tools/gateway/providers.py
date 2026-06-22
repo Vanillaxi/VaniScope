@@ -44,10 +44,22 @@ class BrowserToolProvider:
             _descriptor_from_registry_tool(tool, provider_type="browser")
             for tool in self.tool_registry.list_tools()
             if tool.tool_id in {
+                "browser_open",
+                "browser_observe",
+                "browser_click",
                 "browser_open_observe",
                 "browser_click_intent",
+                "browser_type",
+                "browser_select",
+                "browser_scroll",
+                "browser_wait",
                 "browser_extract",
+                "browser_screenshot",
+                "ask_human",
                 "finish_task",
+                "browser_upload_file",
+                "browser_download",
+                "browser_drag",
             }
         ]
 
@@ -58,6 +70,60 @@ class BrowserToolProvider:
         return None
 
     async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
+        if request.tool_name == "browser_open":
+            url = _normalize_url(str(request.arguments.get("url") or ""))
+            try:
+                output = await self.browser_runtime.open(
+                    url,
+                    session_id=_optional_str(request.arguments.get("session_id")),
+                    wait_until=_optional_str(request.arguments.get("wait_until")),
+                    reason=_optional_str(request.arguments.get("reason")),
+                )
+            except PublicWebPolicyError as exc:
+                output = {"public_web_policy": exc.decision.model_dump(mode="json")}
+                if exc.observation is not None:
+                    output["observation"] = exc.observation.model_dump(mode="json")
+                return _failed(
+                    request,
+                    "browser",
+                    "PUBLIC_WEB_BLOCKED",
+                    exc.decision.reason,
+                    output=output,
+                    status="blocked",
+                    metadata={"public_web_policy": exc.decision.model_dump(mode="json")},
+                )
+            return _success(request, "browser", output)
+
+        if request.tool_name == "browser_observe":
+            output = await self.browser_runtime.observe(
+                session_id=_optional_str(request.arguments.get("session_id")),
+                include_screenshot=_bool_arg(request.arguments, "include_screenshot", True),
+                include_accessibility=_bool_arg(request.arguments, "include_accessibility", True),
+                reason=_optional_str(request.arguments.get("reason")),
+            )
+            return _success(request, "browser", output)
+
+        if request.tool_name == "browser_click":
+            output = await self.browser_runtime.click(
+                target_hint=str(request.arguments.get("target_hint") or ""),
+                expected_effect=request.arguments.get("expected_effect")
+                if isinstance(request.arguments.get("expected_effect"), dict)
+                else None,
+                session_id=_optional_str(request.arguments.get("session_id")),
+                reason=_optional_str(request.arguments.get("reason")),
+            )
+            status = str(output.get("status", "success"))
+            if status in {"failed", "blocked"}:
+                return _failed(
+                    request,
+                    "browser",
+                    str(output.get("error_type") or "BROWSER_ACTION_FAILED"),
+                    str(output.get("error_message") or "Browser action failed."),
+                    output=output,
+                    status="blocked" if status == "blocked" else "failed",
+                )
+            return _success(request, "browser", output)
+
         if request.tool_name == "browser_open_observe":
             url = _normalize_url(str(request.arguments.get("url") or ""))
             try:
@@ -100,12 +166,75 @@ class BrowserToolProvider:
                 )
             return _success(request, "browser", output)
 
+        if request.tool_name == "browser_type":
+            output = await self.browser_runtime.type_text(
+                target_hint=str(request.arguments.get("target_hint") or ""),
+                text=str(request.arguments.get("text") or ""),
+                session_id=_optional_str(request.arguments.get("session_id")),
+                reason=_optional_str(request.arguments.get("reason")),
+            )
+            return _tool_output_result(request, output)
+
+        if request.tool_name == "browser_select":
+            output = await self.browser_runtime.select_option(
+                target_hint=str(request.arguments.get("target_hint") or ""),
+                option_text=_optional_str(request.arguments.get("option_text")),
+                option_value=_optional_str(request.arguments.get("option_value")),
+                session_id=_optional_str(request.arguments.get("session_id")),
+                reason=_optional_str(request.arguments.get("reason")),
+            )
+            return _tool_output_result(request, output)
+
+        if request.tool_name == "browser_scroll":
+            output = await self.browser_runtime.scroll(
+                direction=str(request.arguments.get("direction") or "down"),
+                amount=str(request.arguments.get("amount") or "medium"),
+                session_id=_optional_str(request.arguments.get("session_id")),
+                reason=_optional_str(request.arguments.get("reason")),
+            )
+            return _tool_output_result(request, output)
+
+        if request.tool_name == "browser_wait":
+            output = await self.browser_runtime.wait(
+                condition=str(request.arguments.get("condition") or "readiness"),
+                value=_optional_str(request.arguments.get("value")),
+                timeout_ms=_optional_int(request.arguments.get("timeout_ms")),
+                session_id=_optional_str(request.arguments.get("session_id")),
+                reason=_optional_str(request.arguments.get("reason")),
+            )
+            return _tool_output_result(request, output)
+
         if request.tool_name == "browser_extract":
-            output = await self.browser_runtime.extract()
-            return _success(request, "browser", output)
+            output = await self.browser_runtime.extract(
+                instruction=_optional_str(request.arguments.get("instruction")),
+                evidence_mode=_optional_str(request.arguments.get("evidence_mode")),
+            )
+            return _tool_output_result(request, output)
+
+        if request.tool_name == "browser_screenshot":
+            output = await self.browser_runtime.screenshot(
+                session_id=_optional_str(request.arguments.get("session_id")),
+                reason=_optional_str(request.arguments.get("reason")),
+            )
+            return _tool_output_result(request, output)
+
+        if request.tool_name == "ask_human":
+            return _failed(
+                request,
+                "browser",
+                "ASK_HUMAN_REQUIRED",
+                str(request.arguments.get("reason") or "Human input is required."),
+                output={
+                    "decision": "needs_input",
+                    "selected_option": None,
+                    "comment": None,
+                    "risk_context": request.arguments.get("risk_context"),
+                },
+                status="blocked",
+            )
 
         if request.tool_name == "finish_task":
-            summary = request.arguments.get("summary")
+            summary = request.arguments.get("summary_instruction") or request.arguments.get("summary")
             output = await self.browser_runtime.finish_task(
                 summary=str(summary) if summary is not None else None
             )
@@ -241,12 +370,28 @@ def _descriptor_from_registry_tool(tool: Any, provider_type: str) -> ToolDescrip
     return ToolDescriptor(
         tool_id=tool.tool_id,
         name=tool.name,
+        display_name=tool.display_name or tool.name,
         description=tool.description,
         provider_type=provider_type,
-        permission="read_only",
-        risk_level="read_only",
+        input_schema={"schema": getattr(tool, "input_schema", {})},
+        output_schema={"schema": getattr(tool, "output_schema", {})},
+        permission=tool.permission,
+        risk_level=tool.risk_level,
+        supported_modes=list(getattr(tool, "supported_modes", [])),
+        requires_session=tool.requires_session,
+        produces_evidence=tool.produces_evidence,
+        produces_screenshot=tool.produces_screenshot,
+        can_mutate_page=tool.can_mutate_page,
+        can_submit_external=tool.can_submit_external,
+        public_web_allowed=tool.public_web_allowed,
+        local_fixture_allowed=tool.local_fixture_allowed,
+        compatibility_wrapper=tool.compatibility_wrapper,
         lazy=tool.loading_mode == "lazy",
-        enabled=True,
+        enabled=tool.enabled,
+        exposure=tool.exposure,
+        public_web_exposure=tool.public_web_exposure,
+        local_fixture_exposure=tool.local_fixture_exposure,
+        real_llm_prompt_allowed=tool.real_llm_prompt_allowed,
         tags=list(tool.tags),
     )
 
@@ -264,6 +409,49 @@ def _normalize_url(value: str) -> str:
     if urlparse(value).scheme:
         return value
     return Path(value).resolve().as_uri()
+
+
+def _optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    return text if text else None
+
+
+def _optional_int(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
+
+
+def _bool_arg(arguments: dict[str, Any], key: str, default: bool) -> bool:
+    value = arguments.get(key, default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() in {"1", "true", "yes", "on"}
+    return default
+
+
+def _tool_output_result(
+    request: ToolInvocationRequest,
+    output: dict[str, Any],
+) -> ToolInvocationResult:
+    status = str(output.get("status", "success"))
+    if status in {"failed", "blocked", "timeout"}:
+        return _failed(
+            request,
+            "browser",
+            str(output.get("error_type") or "BROWSER_TOOL_FAILED"),
+            str(output.get("error_message") or output.get("message") or "Browser tool failed."),
+            output=output,
+            status="blocked" if status == "blocked" else "failed",
+        )
+    return _success(request, "browser", output)
 
 
 def _success(

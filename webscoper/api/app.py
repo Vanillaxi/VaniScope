@@ -23,12 +23,14 @@ from webscoper.api.schemas import (
     TaskCreateRequest,
     TaskCreateResponse,
     TaskStatusResponse,
+    ToolCatalogResponse,
 )
 from webscoper.api.diagnostics import build_diagnostics
 from webscoper.api.task_service import TaskService
 from webscoper.runtime.execution.events import TERMINAL_EVENT_KINDS
 from webscoper.schemas.runtime import TaskEvent
 from webscoper.schemas.runtime import ApprovalRequest
+from webscoper.tools.registry import create_default_tool_registry
 
 # FastAPI
 
@@ -57,6 +59,18 @@ def health() -> dict[str, str]:
 @app.get("/diagnostics", response_model=DiagnosticsResponse)
 def diagnostics() -> DiagnosticsResponse:
     return build_diagnostics(task_service.runs_dir, task_service.web_config)
+
+
+@app.get("/tools/catalog", response_model=ToolCatalogResponse)
+def tool_catalog() -> ToolCatalogResponse:
+    registry = create_default_tool_registry()
+    return ToolCatalogResponse(
+        tools=[
+            tool.model_dump(mode="json")
+            for tool in registry.list_tools()
+            if "browser" in tool.tags or tool.tool_id in {"ask_human", "finish_task"}
+        ]
+    )
 
 
 @app.post("/conversations", response_model=ConversationResponse)

@@ -28,6 +28,21 @@ class RiskGate:
                 action = ActionContract.model_validate(action_payload)
                 return self.check_action_contract(task_id, action, page_observation)
 
+        if tool_name == "browser_click":
+            action = ActionContract(
+                action_type="click",
+                intent=f"Click {arguments.get('target_hint') or ''}",
+                target_hint=str(arguments.get("target_hint") or ""),
+                expected_effect=arguments.get("expected_effect") or {"type": "none"},
+            )
+            return self.check_action_contract(task_id, action, page_observation)
+
+        if tool_name == "browser_type":
+            return self._check_browser_type(arguments, page_observation)
+
+        if tool_name == "browser_select":
+            return self._check_browser_select(arguments, page_observation)
+
         action_text = _normalize_text([tool_name, json.dumps(arguments, default=str)])
         keyword_result = self._check_keywords(action_text, tool_name=tool_name)
         if keyword_result is not None:
@@ -59,6 +74,72 @@ class RiskGate:
                 )
             ],
         )
+
+    def _check_browser_type(
+        self,
+        arguments: dict[str, Any],
+        page_observation: Any | None,
+    ) -> RiskCheckResult:
+        target_hint = str(arguments.get("target_hint") or "")
+        text = str(arguments.get("text") or "")
+        combined = _normalize_text([target_hint, text])
+        if _looks_sensitive_text(combined):
+            return self._blocked(
+                "Sensitive browser_type input is blocked.",
+                [
+                    self._signal(
+                        "pii_field",
+                        "Input text or target appears sensitive.",
+                        source="browser_type",
+                    )
+                ],
+            )
+        observation_result = self._check_page_observation(page_observation)
+        if observation_result is not None:
+            return observation_result
+        if not _is_local_fixture(page_observation):
+            return self._blocked(
+                "browser_type is allowed only on local fixture pages by default.",
+                [
+                    self._signal(
+                        "unknown_risk",
+                        "Public web typing is disabled by default.",
+                        source="browser_type",
+                    )
+                ],
+            )
+        return _allowed("Safe local browser_type input is allowed.")
+
+    def _check_browser_select(
+        self,
+        arguments: dict[str, Any],
+        page_observation: Any | None,
+    ) -> RiskCheckResult:
+        combined = _normalize_text(
+            [
+                arguments.get("target_hint"),
+                arguments.get("option_text"),
+                arguments.get("option_value"),
+            ]
+        )
+        keyword_result = self._check_keywords(combined, tool_name="browser_select")
+        if keyword_result is not None:
+            return keyword_result
+        observation_result = self._check_page_observation(page_observation)
+        if observation_result is not None:
+            return observation_result
+        if not _is_local_fixture(page_observation):
+            return self._requires_approval(
+                "browser_select on public web requires human approval.",
+                [
+                    self._signal(
+                        "unknown_risk",
+                        "Public web select may change page state.",
+                        source="browser_select",
+                    )
+                ],
+            )
+        return _allowed("Safe local browser_select is allowed.")
 
     def check_action_contract(
         self,
@@ -262,6 +343,36 @@ def _get_value(value: Any, key: str) -> Any:
     if isinstance(value, dict):
         return value.get(key)
     return getattr(value, key, None)
+
+
+def _is_local_fixture(page_observation: Any | None) -> bool:
+    url = str(_get_value(page_observation, "url") or "")
+    return url.startswith("file://")
+
+
+def _looks_sensitive_text(value: str) -> bool:
+    sensitive_terms = {
+        "password",
+        "passcode",
+        "token",
+        "api key",
+        "apikey",
+        "secret",
+        "credit card",
+        "card number",
+        "ssn",
+        "身份证",
+        "密码",
+        "验证码",
+    }
+    if any(term in value for term in sensitive_terms):
+        return True
+    compact = "".join(ch for ch in value if ch.isdigit())
+    if len(compact) >= 11:
+        return True
+    if "@" in value and "." in value:
+        return True
+    return False
 
 
 def _json_safe(payload: dict[str, Any]) -> dict[str, Any]:

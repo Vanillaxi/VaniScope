@@ -9,7 +9,7 @@ def merge_final_output(final_output: dict, output: dict) -> None:
         return
     if "observation" in output:
         final_output["observation"] = output["observation"]
-    if "visible_text_summary" in output:
+    if "visible_text_summary" in output or "extracted_summary" in output:
         final_output["extract"] = output
     if "summary" in output:
         final_output["summary"] = output.get("summary")
@@ -28,8 +28,10 @@ def record_evidence(
         return None
 
     output = tool_result.output
-    if tool_call.tool_id == "browser_open_observe":
+    if tool_call.tool_id in {"browser_open_observe", "browser_observe"}:
         observation = output.get("observation")
+        if tool_call.tool_id == "browser_observe":
+            observation = output
         if isinstance(observation, dict):
             return evidence_store.add_item(
                 kind="page_observation",
@@ -52,7 +54,7 @@ def record_evidence(
                 },
             )
 
-    if tool_call.tool_id == "browser_click_intent":
+    if tool_call.tool_id in {"browser_click_intent", "browser_click"}:
         observation = output.get("observation")
         action_result = output.get("action_result")
         verification_result = output.get("verification_result")
@@ -82,12 +84,31 @@ def record_evidence(
                 },
             )
 
+    if tool_call.tool_id == "browser_screenshot":
+        if output.get("screenshot_path"):
+            return evidence_store.add_item(
+                kind="page_screenshot",
+                source_url=_str_or_none(output.get("url")),
+                page_title=_str_or_none(output.get("title")),
+                screenshot_path=_str_or_none(output.get("screenshot_path")),
+                step_id=step_id,
+                tool_name=tool_call.tool_id,
+                trace_event_id=step_id,
+                metadata={
+                    "tool_id": tool_call.tool_id,
+                    "call_id": tool_call.call_id,
+                    "screenshot_evidence_id": output.get("screenshot_evidence_id"),
+                },
+            )
+
     if tool_call.tool_id == "browser_extract":
         return evidence_store.add_item(
             kind="text_excerpt",
             source_url=_str_or_none(output.get("url")),
             page_title=_str_or_none(output.get("title")),
-            text=_str_or_none(output.get("visible_text_summary")),
+            text=_str_or_none(
+                output.get("extracted_summary") or output.get("visible_text_summary")
+            ),
             step_id=step_id,
             tool_name=tool_call.tool_id,
             trace_event_id=step_id,

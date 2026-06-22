@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Browser Tools v2 Fixture</title>
+    <style>
+      body { font-family: sans-serif; line-height: 1.5; }
+      nav, footer { color: #666; }
+      section { min-height: 620px; padding: 24px; border-bottom: 1px solid #ddd; }
+      label { display: block; margin: 12px 0; }
+    </style>
+  </head>
+  <body>
+    <nav>Navigation noise Home Docs Account</nav>
+    <main>
+      <section>
+        <h1>Browser Tool Contract v2</h1>
+        <p id="intro">This fixture supports open, observe, scroll, wait, type, select, screenshot, and extract tests.</p>
+        <button type="button" aria-label="Noop button">Noop button</button>
+        <label>
+          Search query
+          <input aria-label="Search query" name="query" />
+        </label>
+        <label>
+          Safe category
+          <select aria-label="Safe category" name="category">
+            <option value="docs">Docs</option>
+            <option value="runtime">Runtime</option>
+            <option value="agent">Agent</option>
+          </select>
+        </label>
+        <label>
+          Password
+          <input aria-label="Password" type="password" name="password" />
+        </label>
+      </section>
+      <section>
+        <h2>Deep Content</h2>
+        <p>Deep content marker appears after scrolling.</p>
+      </section>
+    </main>
+    <footer>Footer noise</footer>
+  </body>
+</html>

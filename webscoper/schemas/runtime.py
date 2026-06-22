@@ -68,6 +68,7 @@ TaskEventKind = Literal[
     "prompt_built",
     "planner_started",
     "planner_finished",
+    "planner_action_selected",
     "llm_call_started",
     "llm_call_finished",
     "llm_action_proposed",
@@ -79,8 +80,11 @@ TaskEventKind = Literal[
     "risk_check_finished",
     "tool_call_started",
     "tool_call_finished",
+    "executor_started",
+    "executor_finished",
     "browser_open_started",
     "browser_open_finished",
+    "browser_observe_finished",
     "navigation_started",
     "navigation_finished",
     "navigation_timeout",
@@ -97,6 +101,8 @@ TaskEventKind = Literal[
     "post_action_wait_finished",
     "effect_verification_started",
     "effect_verification_finished",
+    "verifier_started",
+    "verifier_finished",
     "evidence_added",
     "screenshot_evidence_added",
     "text_evidence_added",
@@ -185,10 +191,14 @@ class PromptBuildInput(BaseModel):
 
 class PromptBuildResult(BaseModel):
     prompt_text: str
+    prompt_preview_text: str | None = None
     sections: dict[str, str] = Field(default_factory=dict)
     loaded_agents_md_paths: list[str] = Field(default_factory=list)
     core_tool_ids: list[str] = Field(default_factory=list)
     lazy_tool_ids: list[str] = Field(default_factory=list)
+    available_actions: list[str] = Field(default_factory=list)
+    hidden_tools: dict[str, str] = Field(default_factory=dict)
+    disabled_tools: dict[str, str] = Field(default_factory=dict)
     skill: SkillPromptContext | None = None
     compact_context_metadata: dict[str, Any] | None = None
 
@@ -228,6 +238,9 @@ class RiskPolicy(BaseModel):
             "browser_observe",
             "browser_open_observe",
             "browser_extract",
+            "browser_scroll",
+            "browser_wait",
+            "browser_screenshot",
             "finish_task",
         }
     )
