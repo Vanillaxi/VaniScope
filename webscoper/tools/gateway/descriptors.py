@@ -10,7 +10,14 @@ ToolPermission = Literal["read_only", "sensitive", "dangerous"]
 ToolRiskLevel = Literal["read_only", "sensitive", "dangerous"]
 ToolDecision = Literal["allowed", "approval_required", "blocked"]
 ToolInvocationStatus = Literal["success", "failed", "blocked", "approval_required"]
-ToolExposure = Literal["core", "contextual", "lazy", "disabled", "compatibility"]
+ToolExposure = Literal[
+    "core",
+    "contextual",
+    "lazy",
+    "hidden",
+    "disabled",
+    "compatibility",
+]
 WebExposure = Literal["allowed", "hidden", "approval_required"]
 FixtureExposure = Literal["allowed", "hidden"]
 
@@ -27,8 +34,12 @@ class ToolDescriptor(BaseModel):
     provider_type: ToolProviderType
     input_schema: ToolSchema = Field(default_factory=ToolSchema)
     output_schema: ToolSchema = Field(default_factory=ToolSchema)
+    loading_mode: Literal["core", "contextual", "lazy", "disabled"] = "core"
+    provider: str = "local"
     permission: ToolPermission = "read_only"
     risk_level: ToolRiskLevel = "read_only"
+    required_context: list[str] = Field(default_factory=list)
+    schema_summary: dict[str, str] = Field(default_factory=dict)
     supported_modes: list[str] = Field(default_factory=list)
     requires_session: bool = False
     produces_evidence: bool = False
@@ -39,7 +50,6 @@ class ToolDescriptor(BaseModel):
     local_fixture_allowed: bool = True
     compatibility_wrapper: bool = False
     timeout_seconds: float = 10.0
-    lazy: bool = False
     enabled: bool = True
     exposure: ToolExposure = "core"
     public_web_exposure: WebExposure = "allowed"
@@ -47,6 +57,7 @@ class ToolDescriptor(BaseModel):
     real_llm_prompt_allowed: bool = True
     version: str = "1"
     tags: list[str] = Field(default_factory=list)
+    reason_if_disabled: str | None = None
 
 
 class ToolInvocationRequest(BaseModel):

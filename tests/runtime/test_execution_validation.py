@@ -20,8 +20,10 @@ class LazyToolLLMClient(BaseLLMClient):
                     "tool_calls": [
                         {
                             "call_id": "call_001",
-                            "tool_id": "web_search",
-                            "arguments": {"query": "playwright"},
+                            "tool_id": "github_fetch_issue",
+                            "arguments": {
+                                "url": "https://github.com/apache/dubbo-go/issues/4821"
+                            },
                         }
                     ]
                 }
@@ -102,8 +104,10 @@ def test_plan_validator_reports_core_invalid_plan_cases(tmp_path: Path) -> None:
             _plan(
                 ToolCall(
                     call_id="call_001",
-                    tool_id="web_search",
-                    arguments={"query": "x"},
+                    tool_id="github_fetch_issue",
+                    arguments={
+                        "url": "https://github.com/apache/dubbo-go/issues/4821"
+                    },
                 )
             ),
             "LAZY_TOOL_NOT_EXECUTABLE",

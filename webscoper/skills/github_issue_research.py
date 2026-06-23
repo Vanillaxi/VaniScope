@@ -52,12 +52,38 @@ class GitHubIssueResearchSkill:
                 "evidence-backed contribution report."
             ),
             version="0.1.0",
+            triggers=[
+                "github issue",
+                "github pr",
+                "repository issue",
+                "pull request",
+                "contribution",
+            ],
+            supported_url_patterns=["github.com/*/*/issues/*", "github.com/*/*/pull/*"],
             supported_task_types=[
                 "github_issue_research",
                 "issue_research",
                 "contribution_research",
             ],
-            required_tools=["browser_open", "browser_observe", "browser_extract"],
+            required_tools=[
+                "browser_open",
+                "browser_observe",
+                "browser_extract",
+                "github_fetch_issue",
+            ],
+            optional_tools=["github_fetch_pr", "browser_screenshot"],
+            default_report_shape={
+                "sections": [
+                    "Task",
+                    "Page Facts",
+                    "Engineering Judgment",
+                    "Affected Modules",
+                    "Difficulty Estimate",
+                    "Risks",
+                    "Evidence",
+                ]
+            },
+            budget_hint="one public/local GitHub issue or PR page",
             risk_level="read_only",
             instruction=SkillInstruction(
                 title="GitHub Issue Research Instructions",

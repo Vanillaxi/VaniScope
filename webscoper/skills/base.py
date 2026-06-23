@@ -18,8 +18,14 @@ class SkillDefinition(BaseModel):
     name: str
     description: str
     version: str
+    triggers: list[str] = Field(default_factory=list)
+    supported_url_patterns: list[str] = Field(default_factory=list)
     supported_task_types: list[str] = Field(default_factory=list)
     required_tools: list[str] = Field(default_factory=list)
+    optional_tools: list[str] = Field(default_factory=list)
+    default_report_shape: dict[str, object] = Field(default_factory=dict)
+    budget_hint: str = "standard"
+    enabled: bool = True
     risk_level: str = "safe"
     instruction: SkillInstruction
 

@@ -72,7 +72,29 @@ class LangGraphWorkflowNodes:
 
     def _do_route_skill(self, state: VaniScopeGraphState) -> VaniScopeGraphState:
         context = self.workflow.require_context()
-        route = SkillRouter().route(context.task)
+        router = SkillRouter()
+        self.workflow.handler._emit_event(
+            "skill_registry_loaded",
+            "Skill registry loaded",
+            {
+                "run_id": context.run_id,
+                "skills": [
+                    descriptor["id"]
+                    for descriptor in router.registry.list_descriptors()
+                    if descriptor.get("enabled")
+                ],
+            },
+        )
+        self.workflow.handler._emit_event(
+            "skill_selection_started",
+            "Skill selection started",
+            {
+                "run_id": context.run_id,
+                "task_type": context.task.task_type,
+                "target_url": context.task.target_url,
+            },
+        )
+        route = router.route(context.task)
         context.task = route.task
         state["request"] = route.task.model_dump(mode="json")
         state["task_type"] = route.task.task_type
@@ -84,6 +106,11 @@ class LangGraphWorkflowNodes:
             context.skill_context = None
             state["skill_context"] = None
             state["skill_plan"] = None
+            self.workflow.handler._emit_event(
+                "skill_not_selected",
+                "No skill selected",
+                {"run_id": context.run_id, "reason": route.reason},
+            )
         else:
             skill_input = route.skill.build_input(route.task)
             skill_plan = route.skill.plan(skill_input)
@@ -102,6 +129,34 @@ class LangGraphWorkflowNodes:
             state["skill_plan"] = skill_plan.model_dump(mode="json")
             context.version.skill_version = (
                 f"{route.skill.definition.skill_id}@{route.skill.definition.version}"
+            )
+            self.workflow.handler._emit_event(
+                "skill_selected",
+                "Skill selected",
+                {
+                    "run_id": context.run_id,
+                    "skill_id": route.skill.definition.skill_id,
+                    "reason": route.reason,
+                },
+            )
+            self.workflow.handler._emit_event(
+                "skill_loaded",
+                "Skill instruction loaded",
+                {
+                    "run_id": context.run_id,
+                    "skill_id": route.skill.definition.skill_id,
+                    "version": route.skill.definition.version,
+                },
+            )
+            self.workflow.handler._emit_event(
+                "skill_tool_exposure_applied",
+                "Skill tool exposure applied",
+                {
+                    "run_id": context.run_id,
+                    "skill_id": route.skill.definition.skill_id,
+                    "required_tools": route.skill.definition.required_tools,
+                    "optional_tools": route.skill.definition.optional_tools,
+                },
             )
 
         context.transcript_store.append(

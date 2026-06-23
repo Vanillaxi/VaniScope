@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from webscoper.schemas.tool import ToolCatalogSnapshot, ToolSearchResult, ToolSpec
+from webscoper.schemas.tool import ToolCatalogSnapshot, ToolDiscoveryResult, ToolSpec
 
 
 class ToolRegistry:
@@ -37,7 +37,7 @@ class ToolRegistry:
             runtime_tools=runtime_tools,
         )
 
-    def search(self, query: str, limit: int = 5) -> ToolSearchResult:
+    def search(self, query: str, limit: int = 5) -> ToolDiscoveryResult:
         normalized_query = query.lower()
         matches: list[ToolSpec] = []
 
@@ -55,7 +55,7 @@ class ToolRegistry:
             if len(matches) >= limit:
                 break
 
-        return ToolSearchResult(query=query, matches=matches)
+        return ToolDiscoveryResult(query=query, matches=matches)
 
 
 def create_default_tool_registry() -> ToolRegistry:
@@ -66,62 +66,116 @@ def create_default_tool_registry() -> ToolRegistry:
 
     registry.register(
         ToolSpec(
-            tool_id="web_search",
-            name="Web Search",
-            description="Search public web pages for relevant sources.",
-            prompt="Search public web pages for relevant sources.",
-            loading_mode="lazy",
-            exposure="lazy",
-            real_llm_prompt_allowed=False,
-            tags=["web", "search", "sources"],
+            tool_id="tool_search",
+            name="Tool Search",
+            description="Search compact lazy tool metadata before loading or using a lazy tool.",
+            prompt="Search compact lazy tool metadata. It returns descriptors only and never executes the selected tool.",
+            loading_mode="core",
+            exposure="core",
+            provider="gateway",
+            schema_summary={"query": "string", "purpose": "string optional"},
+            input_schema={"query": "string", "purpose": "string optional", "limit": "integer optional"},
+            output_schema={"matches": "array of compact executable lazy tool descriptors"},
+            tags=["tool", "search", "lazy", "discovery"],
         )
     )
     registry.register(
-        ToolSpec(
-            tool_id="github_fetch_issue",
-            name="GitHub Fetch Issue",
-            description="Fetch public GitHub issue metadata, body, comments and linked pull requests.",
-            prompt="Fetch public GitHub issue metadata, body, comments and linked pull requests.",
-            loading_mode="lazy",
-            exposure="lazy",
-            real_llm_prompt_allowed=False,
-            tags=["github", "issue", "comments"],
+        _research_tool(
+            "github_fetch_issue",
+            "GitHub Fetch Issue",
+            "Fetch a public GitHub issue URL or repo plus issue number into structured read-only fields.",
+            input_schema={
+                "url": "string optional",
+                "repo": "owner/name optional",
+                "number": "integer optional",
+            },
+            output_schema={
+                "title": "string",
+                "state": "string optional",
+                "labels": "array",
+                "author": "string optional",
+                "body_text": "string",
+                "comments_excerpt": "array",
+                "source_url": "string",
+            },
+            required_context=["public_web_enabled", "github.com_allowed"],
+            tags=["github", "issue", "comments", "research"],
         )
     )
     registry.register(
-        ToolSpec(
+        _research_tool(
             tool_id="github_fetch_pr",
             name="GitHub Fetch PR",
-            description="Fetch public GitHub pull request metadata, checks and review information.",
-            prompt="Fetch public GitHub pull request metadata, checks and review information.",
-            loading_mode="lazy",
-            exposure="lazy",
-            real_llm_prompt_allowed=False,
-            tags=["github", "pull request", "pr", "checks", "review"],
+            description="Fetch a public GitHub pull request URL or repo plus PR number into structured read-only fields.",
+            input_schema={
+                "url": "string optional",
+                "repo": "owner/name optional",
+                "number": "integer optional",
+            },
+            output_schema={
+                "title": "string",
+                "state": "string optional",
+                "labels": "array",
+                "author": "string optional",
+                "body_text": "string",
+                "comments_excerpt": "array",
+                "source_url": "string",
+            },
+            required_context=["public_web_enabled", "github.com_allowed"],
+            tags=["github", "pull request", "pr", "review", "research"],
         )
     )
     registry.register(
-        ToolSpec(
-            tool_id="docs_search",
-            name="Docs Search",
-            description="Search official documentation pages.",
-            prompt="Search official documentation pages.",
-            loading_mode="lazy",
-            exposure="lazy",
-            real_llm_prompt_allowed=False,
-            tags=["docs", "documentation", "official", "search"],
+        _research_tool(
+            tool_id="docs_extract",
+            name="Docs Extract",
+            description="Extract documentation text from the current page observation or a supplied docs HTML fragment.",
+            input_schema={
+                "html": "string optional",
+                "text": "string optional",
+                "url": "string optional",
+                "query": "string optional",
+            },
+            output_schema={
+                "source_url": "string optional",
+                "title": "string optional",
+                "content_text": "string",
+                "matched_excerpt": "string optional",
+            },
+            required_context=["page_observation_or_html"],
+            tags=["docs", "documentation", "extract", "research"],
         )
     )
     registry.register(
-        ToolSpec(
+        _research_tool(
             tool_id="table_extract",
             name="Table Extract",
-            description="Extract structured rows from visible HTML tables.",
-            prompt="Extract structured rows from visible HTML tables.",
-            loading_mode="lazy",
-            exposure="lazy",
-            real_llm_prompt_allowed=False,
+            description="Extract structured rows from visible HTML tables in supplied HTML or page observation text.",
+            input_schema={
+                "html": "string optional",
+                "text": "string optional",
+                "url": "string optional",
+            },
+            output_schema={"tables": "array of tables with headers and rows"},
+            required_context=["page_observation_or_html"],
             tags=["table", "extract", "html", "structured"],
+        )
+    )
+    registry.register(
+        ToolSpec(
+            tool_id="web_search",
+            name="Web Search",
+            description="Reserved for a configured real search provider; disabled until one exists.",
+            prompt="Disabled: no configured search provider.",
+            loading_mode="disabled",
+            exposure="disabled",
+            provider="research",
+            enabled=False,
+            reason_if_disabled="No configured public web search provider.",
+            real_llm_prompt_allowed=False,
+            public_web_exposure="hidden",
+            local_fixture_exposure="hidden",
+            tags=["web", "search", "disabled"],
         )
     )
 
@@ -470,6 +524,7 @@ def _browser_tool(
         description=description,
         prompt=description,
         loading_mode="core",
+        provider="browser",
         permission=permission,
         risk_level=risk_level,
         input_schema=input_schema,
@@ -489,6 +544,34 @@ def _browser_tool(
         local_fixture_exposure=local_fixture_exposure,
         real_llm_prompt_allowed=real_llm_prompt_allowed,
         tags=tags or ["browser", "v2"],
+    )
+
+
+def _research_tool(
+    tool_id: str,
+    name: str,
+    description: str,
+    *,
+    input_schema: dict[str, str],
+    output_schema: dict[str, str],
+    required_context: list[str] | None = None,
+    tags: list[str] | None = None,
+) -> ToolSpec:
+    return ToolSpec(
+        tool_id=tool_id,
+        name=name,
+        display_name=name,
+        description=description,
+        prompt=description,
+        loading_mode="lazy",
+        provider="research",
+        exposure="lazy",
+        input_schema=input_schema,
+        output_schema=output_schema,
+        schema_summary=input_schema,
+        required_context=required_context or [],
+        real_llm_prompt_allowed=False,
+        tags=tags or ["research", "lazy"],
     )
 
 

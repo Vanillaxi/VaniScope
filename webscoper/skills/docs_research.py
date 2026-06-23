@@ -30,13 +30,21 @@ class DocsResearchSkill:
             name="Docs Research",
             description="Read one documentation page and produce an evidence-backed report.",
             version="0.1.0",
+            triggers=["docs", "documentation", "API reference", "guide"],
+            supported_url_patterns=["/docs", "docs.", "readthedocs", "developer."],
             supported_task_types=["docs_research"],
             required_tools=[
                 "browser_open",
                 "browser_observe",
                 "browser_extract",
+                "browser_screenshot",
                 "finish_task",
             ],
+            optional_tools=["docs_extract", "table_extract"],
+            default_report_shape={
+                "sections": ["Task", "Source URL", "Summary", "Key Findings", "Evidence", "Limitations"]
+            },
+            budget_hint="one public/local documentation page",
             risk_level="safe",
             instruction=SkillInstruction(
                 title="Docs Research Instructions",

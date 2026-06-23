@@ -38,12 +38,27 @@ class ToolGatewayPolicy:
                 error_type="UNKNOWN_TOOL",
                 error_message=f"Unknown tool: {tool_name}",
             )
+        if descriptor.compatibility_wrapper or descriptor.exposure == "compatibility":
+            return ToolGatewayPolicyDecision(
+                decision="blocked",
+                status="blocked",
+                error_type="TOOL_COMPATIBILITY_WRAPPER_REJECTED",
+                error_message=f"Compatibility wrapper is not executable: {tool_name}",
+            )
+        if descriptor.exposure == "hidden":
+            return ToolGatewayPolicyDecision(
+                decision="blocked",
+                status="blocked",
+                error_type="TOOL_HIDDEN",
+                error_message=f"Tool is hidden from this runtime path: {tool_name}",
+            )
         if not descriptor.enabled:
             return ToolGatewayPolicyDecision(
                 decision="blocked",
                 status="blocked",
                 error_type="TOOL_DISABLED",
-                error_message=f"Tool is disabled: {tool_name}",
+                error_message=descriptor.reason_if_disabled
+                or f"Tool is disabled: {tool_name}",
             )
         if descriptor.risk_level == "dangerous" or descriptor.permission == "dangerous":
             return ToolGatewayPolicyDecision(

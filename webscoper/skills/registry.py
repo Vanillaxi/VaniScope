@@ -26,11 +26,31 @@ class SkillRegistry:
     def list_skills(self) -> list[Skill]:
         return list(self._skills.values())
 
+    def list_descriptors(self) -> list[dict[str, object]]:
+        descriptors: list[dict[str, object]] = []
+        for skill in self._skills.values():
+            definition = skill.definition
+            descriptors.append(
+                {
+                    "id": definition.skill_id,
+                    "description": definition.description,
+                    "triggers": definition.triggers,
+                    "supported_url_patterns": definition.supported_url_patterns,
+                    "required_tools": definition.required_tools,
+                    "optional_tools": definition.optional_tools,
+                    "default_report_shape": definition.default_report_shape,
+                    "budget_hint": definition.budget_hint,
+                    "enabled": definition.enabled,
+                }
+            )
+        return descriptors
+
     def find_by_task_type(self, task_type: str) -> list[Skill]:
         return [
             skill
             for skill in self._skills.values()
-            if task_type in skill.definition.supported_task_types
+            if skill.definition.enabled
+            and task_type in skill.definition.supported_task_types
         ]
 
 

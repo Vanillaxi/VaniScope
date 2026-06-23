@@ -5,7 +5,14 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-ToolExposure = Literal["core", "contextual", "lazy", "disabled", "compatibility"]
+ToolExposure = Literal[
+    "core",
+    "contextual",
+    "lazy",
+    "hidden",
+    "disabled",
+    "compatibility",
+]
 WebExposure = Literal["allowed", "hidden", "approval_required"]
 FixtureExposure = Literal["allowed", "hidden"]
 
@@ -18,12 +25,14 @@ class ToolSpec(BaseModel):
     prompt: str
     tool_type: str = "local"
     loading_mode: str = "core"
+    provider: str = "local"
     permission: str = "read_only"
     risk_level: str = "read_only"
     timeout_ms: int = 5000
     input_schema: dict[str, Any] = Field(default_factory=dict)
     output_schema: dict[str, Any] = Field(default_factory=dict)
     schema_summary: dict[str, str] = Field(default_factory=dict)
+    required_context: list[str] = Field(default_factory=list)
     supported_modes: list[str] = Field(default_factory=lambda: ["guided", "auto_explore"])
     requires_session: bool = False
     produces_evidence: bool = False
@@ -33,6 +42,7 @@ class ToolSpec(BaseModel):
     public_web_allowed: bool = True
     local_fixture_allowed: bool = True
     enabled: bool = True
+    reason_if_disabled: str | None = None
     compatibility_wrapper: bool = False
     exposure: ToolExposure = "core"
     public_web_exposure: WebExposure = "allowed"
@@ -41,7 +51,7 @@ class ToolSpec(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
-class ToolSearchResult(BaseModel):
+class ToolDiscoveryResult(BaseModel):
     query: str
     matches: list[ToolSpec] = Field(default_factory=list)
 

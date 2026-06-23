@@ -31,7 +31,7 @@ def test_initial_auto_explore_prompt_does_not_include_all_registered_browser_too
     )
     result = DynamicPromptBuilder(create_default_tool_registry()).build(context.snapshot())
 
-    assert result.core_tool_ids == ["browser_open", "ask_human", "finish_task"]
+    assert result.core_tool_ids == ["browser_open", "ask_human", "finish_task", "tool_search"]
     assert "browser_upload_file" not in result.prompt_text
     assert result.prompt_preview_text is not None
     assert "browser_upload_file: disabled/reserved" in result.prompt_preview_text
@@ -64,6 +64,7 @@ def test_observed_public_web_hides_disabled_and_input_tools(
         "browser_screenshot",
         "ask_human",
         "finish_task",
+        "tool_search",
     ]
     assert selection.hidden_tools["browser_type"] == "hidden on public web by default"
     assert selection.hidden_tools["browser_select"] == "hidden on public web by default"
@@ -96,7 +97,7 @@ def test_local_fixture_form_task_can_expose_type_and_select(tmp_path: Path) -> N
     assert "browser_select" not in selection.hidden_tools
 
 
-def test_lazy_tools_still_appear_only_in_lazy_tool_ids(tmp_path: Path) -> None:
+def test_lazy_tools_and_skill_catalog_are_compact_until_loaded(tmp_path: Path) -> None:
     context = _context(
         tmp_path,
         TaskSpec(
@@ -109,14 +110,17 @@ def test_lazy_tools_still_appear_only_in_lazy_tool_ids(tmp_path: Path) -> None:
     result = DynamicPromptBuilder(create_default_tool_registry()).build(context.snapshot())
 
     assert result.lazy_tool_ids == [
-        "web_search",
         "github_fetch_issue",
         "github_fetch_pr",
-        "docs_search",
+        "docs_extract",
         "table_extract",
     ]
     for tool_id in result.lazy_tool_ids:
         assert tool_id not in result.core_tool_ids
+    assert "Use the opened documentation page as the primary source." not in result.prompt_text
+    assert "Treat the opened issue or PR page as the source of truth." not in result.prompt_text
+    assert "# Skill Catalog" in result.prompt_text
+    assert "github_issue_research" in result.prompt_text
 
 
 def test_prompt_built_event_reports_selected_tools_not_full_registry(
@@ -145,6 +149,7 @@ def test_prompt_built_event_reports_selected_tools_not_full_registry(
         "browser_open",
         "ask_human",
         "finish_task",
+        "tool_search",
     ]
     assert "browser_upload_file" not in event["payload"]["core_tool_ids"]
     prompt_context = json.loads(
@@ -191,6 +196,7 @@ async def test_real_llm_auto_explore_request_uses_selected_observed_tools(
         "browser_screenshot",
         "ask_human",
         "finish_task",
+        "tool_search",
     ]
     prompt_text = "\n".join(message.content for message in request.messages)
     assert "browser_upload_file" not in prompt_text

@@ -11,14 +11,14 @@ from webscoper.tools.gateway.gateway import ToolAuditEvent, ToolGateway, ToolGat
 from webscoper.tools.gateway.policy import ToolGatewayPolicy
 from webscoper.tools.gateway.providers import (
     BrowserToolProvider,
-    FakeMCPToolProvider,
     LocalToolProvider,
+    ResearchToolProvider,
 )
 
 __all__ = [
     "BrowserToolProvider",
-    "FakeMCPToolProvider",
     "LocalToolProvider",
+    "ResearchToolProvider",
     "ToolAuditEvent",
     "ToolDescriptor",
     "ToolGateway",

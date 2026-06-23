@@ -76,22 +76,50 @@ class ToolGateway:
         self.event_sink = event_sink
 
     def list_tools(self) -> list[ToolDescriptor]:
-        tools: list[ToolDescriptor] = []
+        tools: list[ToolDescriptor] = [_tool_search_descriptor()]
         for provider in self.providers:
             tools.extend(provider.list_tools())
         return tools
 
-    def search_tools(self, query: str) -> list[ToolDescriptor]:
+    def search_tools(
+        self,
+        query: str,
+        *,
+        context: dict[str, Any] | None = None,
+        limit: int = 5,
+    ) -> list[ToolDescriptor]:
         normalized = query.lower().strip()
         if not normalized:
             return []
+        self._emit(
+            "lazy_tool_search_started",
+            "Lazy tool search started",
+            {
+                "task_id": _context_task_id(context),
+                "query": query,
+                "limit": limit,
+            },
+        )
         matches: list[ToolDescriptor] = []
         for tool in self.list_tools():
+            if not _searchable_lazy_tool(tool):
+                continue
             haystack = " ".join(
                 [tool.tool_id, tool.name, tool.description, " ".join(tool.tags)]
             ).lower()
             if normalized in haystack or all(term in haystack for term in normalized.split()):
                 matches.append(tool)
+            if len(matches) >= limit:
+                break
+        self._emit(
+            "lazy_tool_search_finished",
+            "Lazy tool search finished",
+            {
+                "task_id": _context_task_id(context),
+                "query": query,
+                "match_ids": [tool.tool_id for tool in matches],
+            },
+        )
         return matches
 
     def get_tool(self, tool_name: str) -> ToolDescriptor:
@@ -102,6 +130,36 @@ class ToolGateway:
 
     def get_tool_schema(self, tool_name: str) -> dict[str, Any]:
         return self.get_tool(tool_name).model_dump(mode="json")
+
+    def load_tool(
+        self,
+        tool_name: str,
+        *,
+        context: dict[str, Any] | None = None,
+    ) -> ToolDescriptor:
+        descriptor = self.get_tool(tool_name)
+        if not _loadable_tool(descriptor):
+            self._emit(
+                "lazy_tool_rejected",
+                "Lazy tool rejected",
+                {
+                    "task_id": _context_task_id(context),
+                    "tool_name": tool_name,
+                    "reason": descriptor.reason_if_disabled or descriptor.exposure,
+                },
+            )
+            raise PermissionError(f"Tool cannot be loaded: {tool_name}")
+        self._emit(
+            "lazy_tool_loaded",
+            "Lazy tool loaded",
+            {
+                "task_id": _context_task_id(context),
+                "tool_name": descriptor.tool_id,
+                "provider": descriptor.provider,
+                "risk_level": descriptor.risk_level,
+            },
+        )
+        return descriptor
 
     async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
         started = perf_counter()
@@ -153,7 +211,22 @@ class ToolGateway:
             },
         )
 
+        if request.tool_name == "tool_search":
+            result = self._invoke_tool_search(request, descriptor, started_at)
+            return self._finish(request, descriptor, result, started, policy_decision.risk_check)
+
         if policy_decision.decision == "blocked" or descriptor is None or provider is None:
+            if descriptor is not None and descriptor.loading_mode == "lazy":
+                self._emit(
+                    "lazy_tool_rejected",
+                    "Lazy tool rejected",
+                    {
+                        "task_id": request.task_id,
+                        "tool_name": request.tool_name,
+                        "call_id": request.call_id,
+                        "error_type": policy_decision.error_type,
+                    },
+                )
             result = ToolInvocationResult(
                 task_id=request.task_id,
                 tool_name=request.tool_name,
@@ -208,6 +281,16 @@ class ToolGateway:
             return self._finish(request, descriptor, result, started, policy_decision.risk_check)
 
         try:
+            if descriptor.loading_mode == "lazy":
+                self._emit(
+                    "lazy_tool_execution_started",
+                    "Lazy tool execution started",
+                    {
+                        "task_id": request.task_id,
+                        "tool_name": request.tool_name,
+                        "call_id": request.call_id,
+                    },
+                )
             result = await provider.invoke(request)
         except Exception as exc:
             result = ToolInvocationResult(
@@ -225,7 +308,20 @@ class ToolGateway:
         result.provider_type = descriptor.provider_type
         result.approval_id = request.approval_override_id
         result.started_at = result.started_at or started_at
-        return self._finish(request, descriptor, result, started, policy_decision.risk_check)
+        finished = self._finish(request, descriptor, result, started, policy_decision.risk_check)
+        if descriptor.loading_mode == "lazy":
+            self._emit(
+                "lazy_tool_execution_finished",
+                "Lazy tool execution finished",
+                {
+                    "task_id": request.task_id,
+                    "tool_name": request.tool_name,
+                    "call_id": request.call_id,
+                    "status": finished.status,
+                    "error_type": finished.error_type,
+                },
+            )
+        return finished
 
     def _emit(
         self,
@@ -243,11 +339,56 @@ class ToolGateway:
             return
 
     def _resolve(self, tool_name: str) -> tuple[ToolDescriptor | None, ToolProvider | None]:
+        if tool_name == "tool_search":
+            return _tool_search_descriptor(), None
         for provider in self.providers:
             descriptor = provider.get_tool(tool_name)
             if descriptor is not None:
                 return descriptor, provider
         return None, None
+
+    def _invoke_tool_search(
+        self,
+        request: ToolInvocationRequest,
+        descriptor: ToolDescriptor,
+        started_at: str,
+    ) -> ToolInvocationResult:
+        query = str(request.arguments.get("query") or "")
+        limit_arg = request.arguments.get("limit")
+        limit = limit_arg if isinstance(limit_arg, int) else 5
+        matches = self.search_tools(
+            query,
+            context={"task_id": request.task_id},
+            limit=max(1, min(limit, 10)),
+        )
+        loaded = [
+            _compact_descriptor(tool)
+            for tool in matches
+        ]
+        for tool in matches:
+            self._emit(
+                "lazy_tool_loaded",
+                "Lazy tool descriptor loaded",
+                {
+                    "task_id": request.task_id,
+                    "tool_name": tool.tool_id,
+                    "provider": tool.provider,
+                },
+            )
+        return ToolInvocationResult(
+            task_id=request.task_id,
+            tool_name=request.tool_name,
+            call_id=request.call_id,
+            provider_type=descriptor.provider_type,
+            decision="allowed",
+            status="success",
+            output={
+                "query": query,
+                "purpose": request.arguments.get("purpose"),
+                "matches": loaded,
+            },
+            started_at=started_at,
+        )
 
     def _create_approval_request(
         self,
@@ -372,3 +513,57 @@ def _action_detail(arguments: dict[str, Any], key: str) -> str | None:
         return None
     value = action.get(key)
     return str(value) if value is not None else None
+
+
+def _tool_search_descriptor() -> ToolDescriptor:
+    return ToolDescriptor(
+        tool_id="tool_search",
+        name="Tool Search",
+        description="Search compact lazy tool metadata before loading or using a lazy tool.",
+        provider_type="local",
+        loading_mode="core",
+        provider="gateway",
+        input_schema={
+            "schema": {
+                "query": "string",
+                "purpose": "string optional",
+                "limit": "integer optional",
+            }
+        },
+        output_schema={"schema": {"matches": "array of compact lazy descriptors"}},
+        schema_summary={"query": "string", "purpose": "string optional"},
+        tags=["tool", "search", "lazy", "discovery"],
+    )
+
+
+def _searchable_lazy_tool(tool: ToolDescriptor) -> bool:
+    return (
+        tool.loading_mode == "lazy"
+        and tool.exposure == "lazy"
+        and tool.enabled
+        and not tool.compatibility_wrapper
+    )
+
+
+def _loadable_tool(tool: ToolDescriptor) -> bool:
+    return tool.enabled and tool.exposure not in {"hidden", "disabled", "compatibility"}
+
+
+def _compact_descriptor(tool: ToolDescriptor) -> dict[str, Any]:
+    return {
+        "id": tool.tool_id,
+        "description": tool.description,
+        "loading_mode": tool.loading_mode,
+        "exposure": tool.exposure,
+        "provider": tool.provider,
+        "risk_level": tool.risk_level,
+        "required_context": tool.required_context,
+        "schema_summary": tool.schema_summary or tool.input_schema.schema,
+    }
+
+
+def _context_task_id(context: dict[str, Any] | None) -> str | None:
+    if not isinstance(context, dict):
+        return None
+    value = context.get("task_id") or context.get("run_id")
+    return str(value) if value else None

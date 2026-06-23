@@ -58,7 +58,7 @@ from webscoper.runtime.execution.tool_executor import LocalToolExecutor
 from webscoper.runtime.artifacts.trace import TraceRecorder, TranscriptStore
 from webscoper.tools.gateway import (
     BrowserToolProvider,
-    FakeMCPToolProvider,
+    ResearchToolProvider,
     ToolGateway,
     ToolGatewayAuditStore,
     ToolGatewayPolicy,
@@ -293,7 +293,10 @@ class WebAgentExecutionHandler:
                     browser_runtime=browser_runtime,
                     tool_registry=self.tool_registry,
                 ),
-                FakeMCPToolProvider(),
+                ResearchToolProvider(
+                    tool_registry=self.tool_registry,
+                    public_web_config=self.public_web_config,
+                ),
             ],
             policy=ToolGatewayPolicy(self.risk_gate),
             audit_store=ToolGatewayAuditStore(context.run_dir / "tool_audit.jsonl"),

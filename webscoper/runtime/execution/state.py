@@ -74,6 +74,8 @@ def status_from_loop_error(error_type: str | None) -> str | None:
         "UNKNOWN_TOOL",
         "TOOL_DISABLED",
         "TOOL_DANGEROUS",
+        "TOOL_HIDDEN",
+        "TOOL_COMPATIBILITY_WRAPPER_REJECTED",
     }:
         return "blocked"
     return None

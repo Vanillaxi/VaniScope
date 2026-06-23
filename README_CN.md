@@ -11,6 +11,7 @@ Next.js Console
 -> Auto Explore Planner
 -> ToolGateway
 -> Browser Tool Contract v2
+-> Lazy Tool / Lazy Skill Loader
 -> Browser Runtime / Playwright
 -> Evidence / Report / Review
 -> Inspector / Graph / Timeline

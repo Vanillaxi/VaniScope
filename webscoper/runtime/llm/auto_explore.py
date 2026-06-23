@@ -318,6 +318,17 @@ def decision_to_tool_call(decision: AutoExploreDecision, call_id: str) -> ToolCa
             arguments={"reason": reason},
             reason=reason,
         )
+    if action.type == "tool_search":
+        return ToolCall(
+            call_id=call_id,
+            tool_id="tool_search",
+            arguments={
+                "query": action.query or action.instruction or reason or "",
+                "purpose": action.purpose or reason,
+                "limit": action.limit,
+            },
+            reason=reason or "Search lazy tool descriptors.",
+        )
     raise RuntimeError(f"LLM_ACTION_SCHEMA_INVALID: unsupported action {action.type}.")
 
 
@@ -443,6 +454,12 @@ def _normalize_decision_payload(
         action["summary"] = normalized["summary"]
     if "instruction" in normalized and "instruction" not in action:
         action["instruction"] = normalized["instruction"]
+    if "query" in normalized and "query" not in action:
+        action["query"] = normalized["query"]
+    if "purpose" in normalized and "purpose" not in action:
+        action["purpose"] = normalized["purpose"]
+    if "limit" in normalized and "limit" not in action:
+        action["limit"] = normalized["limit"]
     if action.get("type") in {"browser_extract", "finish_task"} and not action.get("instruction"):
         summary = action.get("summary") or normalized.get("summary")
         if summary:
@@ -460,6 +477,8 @@ def _normalize_decision_payload(
             if user_goal
             else "Extract relevant visible information from the current page."
         )
+    if action.get("type") == "tool_search" and not action.get("query"):
+        action["query"] = action.get("instruction") or user_goal or "lazy research tools"
     if action.get("type") == "finish_task" and not (
         action.get("instruction") or action.get("summary") or action.get("summary_instruction")
     ):
@@ -482,6 +501,9 @@ def _normalize_decision_payload(
         "condition",
         "value",
         "instruction",
+        "query",
+        "purpose",
+        "limit",
         "summary_instruction",
         "expected_effect",
         "risk_level",
@@ -507,6 +529,8 @@ def _normalize_action_type(value: Any) -> str | None:
         "wait": "browser_wait",
         "scroll": "browser_scroll",
         "screenshot": "browser_screenshot",
+        "toolsearch": "tool_search",
+        "tool_search": "tool_search",
     }
     return aliases.get(normalized, normalized)
 
@@ -559,6 +583,9 @@ def _looks_like_action(payload: dict[str, Any]) -> bool:
             "condition",
             "value",
             "instruction",
+            "query",
+            "purpose",
+            "limit",
             "summary_instruction",
             "summary",
         )

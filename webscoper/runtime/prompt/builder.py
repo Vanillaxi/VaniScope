@@ -14,12 +14,13 @@ from webscoper.schemas.runtime import (
     SkillPromptContext,
 )
 from webscoper.schemas.tool import ToolSpec
+from webscoper.skills.registry import SkillRegistry, create_default_skill_registry
 from webscoper.tools.registry import ToolRegistry
 
 
 MAX_AGENTS_MD_FILES = 5
 MAX_AGENTS_MD_CHARS = 8000
-INITIAL_AUTO_EXPLORE_TOOLS = {"browser_open", "ask_human", "finish_task"}
+INITIAL_AUTO_EXPLORE_TOOLS = {"browser_open", "tool_search", "ask_human", "finish_task"}
 OBSERVED_AUTO_EXPLORE_TOOLS = {
     "browser_observe",
     "browser_click",
@@ -27,6 +28,7 @@ OBSERVED_AUTO_EXPLORE_TOOLS = {
     "browser_wait",
     "browser_extract",
     "browser_screenshot",
+    "tool_search",
     "ask_human",
     "finish_task",
 }
@@ -116,6 +118,7 @@ def select_prompt_tools(
     *,
     context: Any,
     observation: Any | None = None,
+    selected_tool_ids: set[str] | None = None,
 ) -> PromptToolSelection:
     task = context.task
     opened = observation is not None
@@ -123,6 +126,7 @@ def select_prompt_tools(
     public_web = not local_fixture
     input_allowed = _input_tools_allowed(task, observation, local_fixture=local_fixture)
     stage_tools = _stage_tool_ids(task, opened=opened, input_allowed=input_allowed)
+    stage_tools.update(selected_tool_ids or set())
     selection = PromptToolSelection()
 
     for tool in registry.list_tools():
@@ -134,7 +138,14 @@ def select_prompt_tools(
             input_allowed=input_allowed,
             opened=opened,
         )
-        if tool.exposure == "lazy" or tool.loading_mode == "lazy":
+        if (
+            tool.tool_id in stage_tools
+            and tool.exposure == "lazy"
+            and tool.enabled
+            and not tool.compatibility_wrapper
+        ):
+            selection.available_tools.append(tool)
+        elif tool.exposure == "lazy" or tool.loading_mode == "lazy":
             selection.lazy_tools.append(tool)
         elif tool.exposure == "disabled" or not tool.enabled:
             selection.disabled_tools[tool.tool_id] = reason or "disabled/reserved"
@@ -298,8 +309,13 @@ def _is_local_fixture_url(url: str) -> bool:
 
 
 class DynamicPromptBuilder:
-    def __init__(self, tool_registry: ToolRegistry) -> None:
+    def __init__(
+        self,
+        tool_registry: ToolRegistry,
+        skill_registry: SkillRegistry | None = None,
+    ) -> None:
         self.tool_registry = tool_registry
+        self.skill_registry = skill_registry or create_default_skill_registry()
 
     def build(
         self,
@@ -308,23 +324,28 @@ class DynamicPromptBuilder:
         runtime_reminders: list[RuntimeReminder] | None = None,
         skill: SkillPromptContext | None = None,
         context_pack: ContextPack | None = None,
+        observation: Any | None = None,
     ) -> PromptBuildResult:
         agents_md_instructions = agents_md_instructions or []
         runtime_reminders = runtime_reminders or []
         tool_selection = select_prompt_tools(
             self.tool_registry,
             context=context,
+            observation=observation,
+            selected_tool_ids=_selected_skill_tool_ids(self.skill_registry, skill),
         )
 
         sections = {
             "identity": _identity_section(),
             "task": _task_section(context),
+            "observation": _observation_section(observation),
             "safety": _safety_section(context),
-            "skill_instruction": _skill_instruction_section(skill),
             "permission_mode": context.safety.mode,
             "runtime_version": _runtime_version_section(context),
-            "core_tools": _core_tools_section(tool_selection.available_tools),
+            "available_tools": _available_tools_section(tool_selection.available_tools),
             "lazy_tools": _lazy_tools_section(tool_selection.lazy_tools),
+            "skill_catalog": _skill_catalog_section(self.skill_registry, skill),
+            "skill_instruction": _skill_instruction_section(skill),
             "agents_md": _agents_md_section(agents_md_instructions),
             "runtime_reminders": _runtime_reminders_section(runtime_reminders),
             "output_rules": _output_rules_section(),
@@ -332,12 +353,14 @@ class DynamicPromptBuilder:
         ordered_keys = [
             "identity",
             "task",
+            "observation",
             "safety",
-            "skill_instruction",
             "permission_mode",
             "runtime_version",
-            "core_tools",
+            "available_tools",
             "lazy_tools",
+            "skill_catalog",
+            "skill_instruction",
             "agents_md",
             "runtime_reminders",
             "output_rules",
@@ -405,6 +428,24 @@ def _task_section(context: WebAgentContextSnapshot) -> str:
     return "\n".join(lines)
 
 
+def _observation_section(observation: Any | None) -> str:
+    lines = ["# Current Observation", ""]
+    if observation is None:
+        lines.append("No page has been observed yet.")
+        return "\n".join(lines)
+    lines.extend(
+        [
+            f"- url: {getattr(observation, 'url', None) or _dict_value(observation, 'url') or 'none'}",
+            f"- title: {getattr(observation, 'title', None) or _dict_value(observation, 'title') or 'none'}",
+            (
+                "- visible_text_summary: "
+                f"{_compact_line(getattr(observation, 'visible_text_summary', None) or _dict_value(observation, 'visible_text_summary') or 'none')}"
+            ),
+        ]
+    )
+    return "\n".join(lines)
+
+
 def _skill_instruction_section(skill: SkillPromptContext | None) -> str:
     lines = ["# Skill Instruction", ""]
     if skill is None:
@@ -439,6 +480,34 @@ def _skill_instruction_section(skill: SkillPromptContext | None) -> str:
     return "\n".join(lines)
 
 
+def _skill_catalog_section(
+    registry: SkillRegistry,
+    selected_skill: SkillPromptContext | None,
+) -> str:
+    lines = [
+        "# Skill Catalog",
+        "",
+        "Compact descriptors only. Full instructions are loaded only after a skill is selected.",
+    ]
+    selected_id = selected_skill.skill_id if selected_skill is not None else None
+    for descriptor in registry.list_descriptors():
+        lines.extend(
+            [
+                "",
+                f"- id: {descriptor['id']}",
+                f"  description: {descriptor['description']}",
+                f"  triggers: {', '.join(str(item) for item in descriptor['triggers'])}",
+                f"  supported_url_patterns: {', '.join(str(item) for item in descriptor['supported_url_patterns'])}",
+                f"  required_tools: {', '.join(str(item) for item in descriptor['required_tools'])}",
+                f"  optional_tools: {', '.join(str(item) for item in descriptor['optional_tools']) or 'none'}",
+                f"  budget_hint: {descriptor['budget_hint']}",
+                f"  enabled: {descriptor['enabled']}",
+                f"  selected: {descriptor['id'] == selected_id}",
+            ]
+        )
+    return "\n".join(lines)
+
+
 def _safety_section(context: WebAgentContextSnapshot) -> str:
     safety = context.safety
     lines = [
@@ -469,17 +538,24 @@ def _runtime_version_section(context: WebAgentContextSnapshot) -> str:
     return "\n".join(lines)
 
 
-def _core_tools_section(tools: list[ToolSpec]) -> str:
-    lines = ["# Core Tools", ""]
+def _available_tools_section(tools: list[ToolSpec]) -> str:
+    lines = [
+        "# Available Tools",
+        "",
+        "Browser Tool Contract v2 actions use natural-language targets and compact JSON arguments.",
+        "",
+    ]
     for tool in tools:
         lines.extend(
             [
                 f"## {tool.tool_id}",
-                f"- name: {tool.name}",
                 f"- description: {tool.description}",
+                f"- provider: {tool.provider}",
+                f"- loading_mode: {tool.loading_mode}",
+                f"- exposure: {tool.exposure}",
                 f"- permission: {tool.permission}",
                 f"- risk_level: {tool.risk_level}",
-                f"- prompt: {tool.prompt}",
+                f"- schema_summary: {_schema_summary_text(tool)}",
                 "",
             ]
         )
@@ -490,11 +566,20 @@ def _lazy_tools_section(tools: list[ToolSpec]) -> str:
     lines = [
         "# Lazy Tools",
         "",
-        "If a lazy tool is needed, request ToolSearch before using it.",
+        "If a lazy tool is needed, call tool_search first. Search returns descriptors only; execution must still go through ToolGateway.",
         "",
     ]
     for tool in tools:
-        lines.append(f"- {tool.tool_id}: {tool.name} - {tool.description}")
+        lines.extend(
+            [
+                f"- id: {tool.tool_id}",
+                f"  description: {tool.description}",
+                f"  provider: {tool.provider}",
+                f"  risk_level: {tool.risk_level}",
+                f"  required_context: {', '.join(tool.required_context) or 'none'}",
+                f"  schema_summary: {_schema_summary_text(tool)}",
+            ]
+        )
     return "\n".join(lines)
 
 
@@ -630,3 +715,42 @@ def _output_rules_section() -> str:
 
 def _xml_escape(value: str) -> str:
     return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _dict_value(value: Any, key: str) -> Any:
+    if isinstance(value, dict):
+        return value.get(key)
+    return None
+
+
+def _compact_line(value: Any, limit: int = 500) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 14].rstrip() + " [truncated]"
+
+
+def _schema_summary_text(tool: ToolSpec) -> str:
+    summary = tool.schema_summary or {
+        key: str(value) for key, value in tool.input_schema.items()
+    }
+    if not summary:
+        return "none"
+    return ", ".join(f"{key}={value}" for key, value in summary.items())
+
+
+def _selected_skill_tool_ids(
+    registry: SkillRegistry,
+    skill: SkillPromptContext | None,
+) -> set[str]:
+    if skill is None:
+        return set()
+    try:
+        definition = next(
+            item.definition
+            for item in registry.list_skills()
+            if item.definition.skill_id == skill.skill_id
+        )
+    except StopIteration:
+        return set()
+    return set(definition.required_tools) | set(definition.optional_tools)

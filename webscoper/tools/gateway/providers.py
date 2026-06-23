@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import re
+from html import unescape
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Awaitable, Callable, Protocol
 from urllib.parse import urlparse
 
+import httpx
+
+from webscoper.browser.public_web import PublicWebPolicy, PublicWebRuntimeConfig
 from webscoper.browser.public_web import PublicWebPolicyError
 from webscoper.browser.tool_runtime import StatefulBrowserToolRuntime
 from webscoper.tools.gateway.descriptors import (
@@ -235,90 +240,89 @@ class LocalToolProvider:
         return _success(request, "local", output if isinstance(output, dict) else {"value": output})
 
 
-class FakeMCPToolProvider:
-    provider_type = "mcp"
+FetchText = Callable[[str], Awaitable[str]]
 
-    def __init__(self) -> None:
-        self._tools = {
-            tool.tool_id: tool
-            for tool in [
-                ToolDescriptor(
-                    tool_id="fake_mcp_echo",
-                    name="Fake MCP Echo",
-                    description="Return the provided text deterministically.",
-                    provider_type="mcp",
-                    tags=["fake", "mcp", "echo"],
-                ),
-                ToolDescriptor(
-                    tool_id="fake_mcp_get_time",
-                    name="Fake MCP Get Time",
-                    description="Return a deterministic timestamp for tests.",
-                    provider_type="mcp",
-                    tags=["fake", "mcp", "time"],
-                ),
-                ToolDescriptor(
-                    tool_id="fake_mcp_fetch_doc",
-                    name="Fake MCP Fetch Doc",
-                    description="Return deterministic local documentation text.",
-                    provider_type="mcp",
-                    tags=["fake", "mcp", "docs"],
-                    lazy=True,
-                ),
-                ToolDescriptor(
-                    tool_id="fake_mcp_disabled",
-                    name="Fake MCP Disabled",
-                    description="Disabled fake MCP tool for policy tests.",
-                    provider_type="mcp",
-                    enabled=False,
-                    tags=["fake", "mcp", "disabled"],
-                ),
-                ToolDescriptor(
-                    tool_id="fake_mcp_delete_data",
-                    name="Fake MCP Delete Data",
-                    description="Dangerous fake MCP tool that must be blocked.",
-                    provider_type="mcp",
-                    permission="dangerous",
-                    risk_level="dangerous",
-                    tags=["fake", "mcp", "dangerous"],
-                ),
-            ]
-        }
+
+class ResearchToolProvider:
+    provider_type = "remote"
+
+    def __init__(
+        self,
+        tool_registry: ToolRegistry | None = None,
+        *,
+        public_web_config: PublicWebRuntimeConfig | None = None,
+        fetch_text: FetchText | None = None,
+    ) -> None:
+        self.tool_registry = tool_registry or create_default_tool_registry()
+        self.public_web_policy = PublicWebPolicy(public_web_config)
+        self.fetch_text = fetch_text or _fetch_text
 
     def list_tools(self) -> list[ToolDescriptor]:
-        return list(self._tools.values())
+        return [
+            _descriptor_from_registry_tool(tool, provider_type="remote")
+            for tool in self.tool_registry.list_tools()
+            if tool.provider == "research"
+        ]
 
     def get_tool(self, tool_name: str) -> ToolDescriptor | None:
-        return self._tools.get(tool_name)
+        for tool in self.list_tools():
+            if tool.tool_id == tool_name:
+                return tool
+        return None
 
     async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
-        if request.tool_name == "fake_mcp_echo":
-            return _success(
-                request,
-                "mcp",
-                {"text": str(request.arguments.get("text") or "")},
-            )
-        if request.tool_name == "fake_mcp_get_time":
-            return _success(
-                request,
-                "mcp",
-                {"iso_time": "2026-01-01T00:00:00+00:00"},
-            )
-        if request.tool_name == "fake_mcp_fetch_doc":
-            topic = str(request.arguments.get("topic") or "tool_gateway")
-            return _success(
-                request,
-                "mcp",
-                {
-                    "topic": topic,
-                    "content": f"Fake MCP documentation for {topic}.",
-                },
-            )
+        if request.tool_name == "github_fetch_issue":
+            return await self._fetch_github(request, kind="issue")
+        if request.tool_name == "github_fetch_pr":
+            return await self._fetch_github(request, kind="pull")
+        if request.tool_name == "docs_extract":
+            return _success(request, "remote", _docs_extract_output(request))
+        if request.tool_name == "table_extract":
+            return _success(request, "remote", _table_extract_output(request))
         return _failed(
             request,
-            "mcp",
-            "UNKNOWN_FAKE_MCP_TOOL",
-            f"Unknown fake MCP tool: {request.tool_name}",
+            "remote",
+            "UNSUPPORTED_RESEARCH_TOOL",
+            f"Unsupported research tool: {request.tool_name}",
         )
+
+    async def _fetch_github(
+        self,
+        request: ToolInvocationRequest,
+        *,
+        kind: str,
+    ) -> ToolInvocationResult:
+        url = _github_url(request.arguments, kind=kind)
+        if url is None:
+            return _failed(
+                request,
+                "remote",
+                "INVALID_GITHUB_REFERENCE",
+                "Provide a public GitHub URL or repo plus number.",
+            )
+        if not _is_github_url(url, kind=kind):
+            return _failed(
+                request,
+                "remote",
+                "GITHUB_URL_REQUIRED",
+                f"{request.tool_name} only accepts public github.com {kind} URLs.",
+                status="blocked",
+            )
+        decision = self.public_web_policy.check(url)
+        if not decision.allow:
+            return _failed(
+                request,
+                "remote",
+                "PUBLIC_WEB_BLOCKED",
+                decision.reason,
+                output={"public_web_policy": decision.model_dump(mode="json")},
+                status="blocked",
+                metadata={"public_web_policy": decision.model_dump(mode="json")},
+            )
+        html = str(request.arguments.get("html") or "")
+        if not html:
+            html = await self.fetch_text(url)
+        return _success(request, "remote", _github_output(html, source_url=url, kind=kind))
 
 
 def _descriptor_from_registry_tool(tool: Any, provider_type: str) -> ToolDescriptor:
@@ -330,8 +334,16 @@ def _descriptor_from_registry_tool(tool: Any, provider_type: str) -> ToolDescrip
         provider_type=provider_type,
         input_schema={"schema": getattr(tool, "input_schema", {})},
         output_schema={"schema": getattr(tool, "output_schema", {})},
+        loading_mode=(
+            "disabled" if not tool.enabled or tool.exposure == "disabled" else tool.loading_mode
+        )
+        if tool.loading_mode in {"core", "contextual", "lazy", "disabled"}
+        else "core",
+        provider=tool.provider,
         permission=tool.permission,
         risk_level=tool.risk_level,
+        required_context=list(getattr(tool, "required_context", [])),
+        schema_summary=dict(getattr(tool, "schema_summary", {})),
         supported_modes=list(getattr(tool, "supported_modes", [])),
         requires_session=tool.requires_session,
         produces_evidence=tool.produces_evidence,
@@ -341,13 +353,13 @@ def _descriptor_from_registry_tool(tool: Any, provider_type: str) -> ToolDescrip
         public_web_allowed=tool.public_web_allowed,
         local_fixture_allowed=tool.local_fixture_allowed,
         compatibility_wrapper=tool.compatibility_wrapper,
-        lazy=tool.loading_mode == "lazy",
         enabled=tool.enabled,
         exposure=tool.exposure,
         public_web_exposure=tool.public_web_exposure,
         local_fixture_exposure=tool.local_fixture_exposure,
         real_llm_prompt_allowed=tool.real_llm_prompt_allowed,
         tags=list(tool.tags),
+        reason_if_disabled=tool.reason_if_disabled,
     )
 
 
@@ -358,6 +370,249 @@ def _local_echo_descriptor() -> ToolDescriptor:
         description="Return local echo output for gateway tests.",
         provider_type="local",
     )
+
+
+async def _fetch_text(url: str) -> str:
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+        response = await client.get(url, headers={"User-Agent": "VaniScope/0.1"})
+        response.raise_for_status()
+        return response.text
+
+
+def _github_url(arguments: dict[str, Any], *, kind: str) -> str | None:
+    url = _optional_str(arguments.get("url"))
+    if url:
+        return url
+    repo = _optional_str(arguments.get("repo"))
+    number = _optional_int(arguments.get("number"))
+    if not repo or number is None:
+        return None
+    path = "pull" if kind == "pull" else "issues"
+    return f"https://github.com/{repo.strip('/')}/{path}/{number}"
+
+
+def _is_github_url(url: str, *, kind: str) -> bool:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or parsed.hostname != "github.com":
+        return False
+    parts = [part for part in parsed.path.split("/") if part]
+    marker = "pull" if kind == "pull" else "issues"
+    return len(parts) >= 4 and parts[2] == marker and parts[3].isdigit()
+
+
+def _github_output(html: str, *, source_url: str, kind: str) -> dict[str, Any]:
+    text = _visible_text(html)
+    title = _first_non_empty(
+        _meta_content(html, "og:title"),
+        _tag_text(html, "title"),
+        _heading_text(html),
+    )
+    labels = _labels(html, text)
+    comments = _comments_excerpt(text)
+    return {
+        "kind": kind,
+        "title": title or "Untitled GitHub item",
+        "state": _state(text),
+        "labels": labels,
+        "author": _author(text),
+        "body_text": _compact_text(text, limit=6000),
+        "comments_excerpt": comments,
+        "source_url": source_url,
+        "status": "success",
+    }
+
+
+def _docs_extract_output(request: ToolInvocationRequest) -> dict[str, Any]:
+    html = _text_arg(request, "html")
+    text = _text_arg(request, "text") or _page_observation_text(request)
+    source_url = _text_arg(request, "url") or _page_observation_value(request, "url")
+    title = _page_observation_value(request, "title")
+    if html:
+        text = _visible_text(html)
+        title = title or _first_non_empty(_tag_text(html, "title"), _heading_text(html))
+    query = _text_arg(request, "query")
+    matched_excerpt = _matched_excerpt(text, query) if query else _compact_text(text, limit=600)
+    return {
+        "source_url": source_url,
+        "title": title,
+        "content_text": _compact_text(text, limit=10000),
+        "matched_excerpt": matched_excerpt,
+        "status": "success",
+    }
+
+
+def _table_extract_output(request: ToolInvocationRequest) -> dict[str, Any]:
+    html = _text_arg(request, "html")
+    text = _text_arg(request, "text") or _page_observation_text(request)
+    tables = _html_tables(html) if html else _text_tables(text)
+    return {
+        "source_url": _text_arg(request, "url") or _page_observation_value(request, "url"),
+        "tables": tables,
+        "table_count": len(tables),
+        "status": "success",
+    }
+
+
+def _html_tables(html: str) -> list[dict[str, Any]]:
+    tables: list[dict[str, Any]] = []
+    for table_html in re.findall(r"<table\b[^>]*>(.*?)</table>", html, flags=re.I | re.S):
+        rows: list[list[str]] = []
+        for row_html in re.findall(r"<tr\b[^>]*>(.*?)</tr>", table_html, flags=re.I | re.S):
+            cells = re.findall(r"<t[hd]\b[^>]*>(.*?)</t[hd]>", row_html, flags=re.I | re.S)
+            if cells:
+                rows.append([_visible_text(cell).strip() for cell in cells])
+        if not rows:
+            continue
+        headers = rows[0]
+        data_rows = rows[1:] if len(rows) > 1 else []
+        tables.append(
+            {
+                "headers": headers,
+                "rows": [
+                    {headers[index] if index < len(headers) else f"column_{index + 1}": value for index, value in enumerate(row)}
+                    for row in data_rows
+                ],
+            }
+        )
+    return tables
+
+
+def _text_tables(text: str) -> list[dict[str, Any]]:
+    lines = [line.strip() for line in text.splitlines() if "|" in line]
+    if len(lines) < 2:
+        return []
+    headers = [cell.strip() for cell in lines[0].strip("|").split("|")]
+    rows = []
+    for line in lines[1:]:
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) == len(headers):
+            rows.append(dict(zip(headers, cells, strict=False)))
+    return [{"headers": headers, "rows": rows}] if rows else []
+
+
+def _visible_text(html: str) -> str:
+    without_scripts = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", html, flags=re.I | re.S)
+    text = re.sub(r"<[^>]+>", " ", without_scripts)
+    return _compact_whitespace(unescape(text))
+
+
+def _tag_text(html: str, tag: str) -> str | None:
+    match = re.search(rf"<{tag}\b[^>]*>(.*?)</{tag}>", html, flags=re.I | re.S)
+    return _visible_text(match.group(1)) if match else None
+
+
+def _heading_text(html: str) -> str | None:
+    for level in range(1, 4):
+        value = _tag_text(html, f"h{level}")
+        if value:
+            return value
+    return None
+
+
+def _meta_content(html: str, property_name: str) -> str | None:
+    match = re.search(
+        rf'<meta\b[^>]*(?:property|name)=["\']{re.escape(property_name)}["\'][^>]*content=["\']([^"\']+)["\']',
+        html,
+        flags=re.I,
+    )
+    return unescape(match.group(1)).strip() if match else None
+
+
+def _labels(html: str, text: str) -> list[str]:
+    html_labels = [
+        _visible_text(match).strip()
+        for match in re.findall(r'class=["\'][^"\']*label[^"\']*["\'][^>]*>(.*?)</', html, flags=re.I | re.S)
+    ]
+    if html_labels:
+        return _unique_non_empty(html_labels)[:20]
+    section = re.search(r"Labels\s+(.+?)(?:Issue Body|Expected Behavior|Current Behavior|$)", text, flags=re.I)
+    if not section:
+        return []
+    return _unique_non_empty(re.split(r"\s{2,}|,\s*", section.group(1)))[:20]
+
+
+def _state(text: str) -> str | None:
+    match = re.search(r"\b(open|closed|merged)\b", text, flags=re.I)
+    return match.group(1).lower() if match else None
+
+
+def _author(text: str) -> str | None:
+    match = re.search(r"(?:Author|Maintainer):\s*([^\n\.]+)", text, flags=re.I)
+    return match.group(1).strip() if match else None
+
+
+def _comments_excerpt(text: str) -> list[str]:
+    excerpts = []
+    for label in ("Maintainer Comments", "Comments", "Review"):
+        match = re.search(rf"{label}\s+(.+?)(?:Acceptance Criteria|Risks|$)", text, flags=re.I)
+        if match:
+            excerpts.append(_compact_text(match.group(1), limit=600))
+    return excerpts[:5]
+
+
+def _matched_excerpt(text: str, query: str | None) -> str | None:
+    if not query:
+        return None
+    terms = [term.lower() for term in re.findall(r"[a-zA-Z0-9_]+", query) if len(term) > 2]
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    for sentence in sentences:
+        lowered = sentence.lower()
+        if any(term in lowered for term in terms):
+            return _compact_text(sentence, limit=600)
+    return _compact_text(text, limit=600)
+
+
+def _page_observation_text(request: ToolInvocationRequest) -> str:
+    observation = request.page_observation if isinstance(request.page_observation, dict) else {}
+    return _compact_whitespace(
+        str(
+            observation.get("visible_text_summary")
+            or observation.get("main_content_summary")
+            or observation.get("accessibility_summary")
+            or ""
+        )
+    )
+
+
+def _page_observation_value(request: ToolInvocationRequest, key: str) -> str | None:
+    observation = request.page_observation if isinstance(request.page_observation, dict) else {}
+    value = observation.get(key)
+    return str(value) if value else None
+
+
+def _text_arg(request: ToolInvocationRequest, key: str) -> str:
+    value = request.arguments.get(key)
+    return str(value) if value else ""
+
+
+def _first_non_empty(*values: str | None) -> str | None:
+    for value in values:
+        if value and value.strip():
+            return value.strip()
+    return None
+
+
+def _unique_non_empty(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        normalized = _compact_whitespace(value).strip()
+        key = normalized.lower()
+        if normalized and key not in seen:
+            seen.add(key)
+            result.append(normalized)
+    return result
+
+
+def _compact_text(text: str, *, limit: int) -> str:
+    compacted = _compact_whitespace(text)
+    if len(compacted) <= limit:
+        return compacted
+    return compacted[: limit - 14].rstrip() + " [truncated]"
+
+
+def _compact_whitespace(text: str) -> str:
+    return re.sub(r"\s+", " ", text or "").strip()
 
 
 def _normalize_url(value: str) -> str:
