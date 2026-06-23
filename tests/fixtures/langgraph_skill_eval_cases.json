@@ -118,7 +118,7 @@
     "expected": {
       "status": "succeeded",
       "required_artifacts": ["final_report.md", "evidence.jsonl", "review.json", "skill_result.json", "tool_audit.jsonl"],
-      "final_report_contains": ["common/url_test.go", "Contribution Value", "Risks / Caveats"],
+      "final_report_contains": ["common/url_test.go", "贡献价值", "风险与限制"],
       "min_evidence_count": 2,
       "review_passed": true,
       "expected_skill_id": "github_issue_research",

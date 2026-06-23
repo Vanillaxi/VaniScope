@@ -38,6 +38,7 @@ export function EvidencePanel({ taskId, evidence }: EvidencePanelProps) {
               </div>
               {item.source_url ? (
                 <div className="mt-2 break-all text-xs text-[var(--muted)]">
+                  <span className="font-semibold">{t.inspector.sourceUrl}: </span>
                   {item.source_url}
                 </div>
               ) : null}
@@ -50,6 +51,14 @@ export function EvidencePanel({ taskId, evidence }: EvidencePanelProps) {
               <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
                 <Meta label={t.inspector.reportSections} values={item.report_sections} />
                 <Meta label={t.inspector.reviewIssues} values={item.review_issue_ids} />
+                <Meta
+                  label={t.inspector.relatedEvent}
+                  values={
+                    typeof item.raw.trace_event_id === "string"
+                      ? [item.raw.trace_event_id]
+                      : []
+                  }
+                />
               </div>
             </div>
           ))}

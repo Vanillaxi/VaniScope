@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 from webscoper.browser.public_web import PublicWebRuntimeConfig
 from webscoper.runtime.llm.config import default_llm_config_path
+from webscoper.runtime.localization import select_task_languages
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.runtime.prompt.builder import RuntimeReminderStore
 from webscoper.schemas.browser import ActionContract, ExpectedEffect, PageObservation
@@ -139,8 +140,21 @@ def build_task_spec(
     expected_output: str | None = None,
     constraints: list[str] | None = None,
     language: str = "auto",
+    display_language: str | None = None,
+    requested_output_language: str | None = None,
+    preferred_report_language: str | None = None,
     task_id: str = "cli_task",
 ) -> TaskSpec:
+    languages = select_task_languages(
+        goal=goal,
+        query=query,
+        research_goal=research_goal,
+        expected_output=expected_output,
+        language=language,
+        display_language=display_language,
+        requested_output_language=requested_output_language,
+        preferred_report_language=preferred_report_language,
+    )
     return TaskSpec(
         task_id=task_id,
         raw_input=raw_input(url, click, expect, goal or query or research_goal),
@@ -153,7 +167,10 @@ def build_task_spec(
         research_goal=research_goal,
         expected_output=expected_output,
         constraints=constraints or [],
-        language=language,
+        language=languages.report_language,
+        display_language=languages.display_language,
+        requested_output_language=languages.requested_output_language,
+        report_language=languages.report_language,
         action=action(click, expect) if click else None,
         expected_effect=expected_effect(expect) if expect else None,
         tags=["cli"],

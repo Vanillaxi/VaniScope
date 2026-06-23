@@ -244,6 +244,9 @@ class TaskService:
                 skill_status=skill_metadata.get("skill_status"),
                 difficulty=skill_metadata.get("difficulty"),
                 recommendation=skill_metadata.get("recommendation"),
+                display_language=skill_metadata.get("display_language"),
+                requested_output_language=skill_metadata.get("requested_output_language"),
+                report_language=skill_metadata.get("report_language"),
             )
 
         run_dir = self._run_dir(task_id)
@@ -268,6 +271,9 @@ class TaskService:
             skill_status=skill_metadata.get("skill_status"),
             difficulty=skill_metadata.get("difficulty"),
             recommendation=skill_metadata.get("recommendation"),
+            display_language=skill_metadata.get("display_language"),
+            requested_output_language=skill_metadata.get("requested_output_language"),
+            report_language=skill_metadata.get("report_language"),
         )
 
     def list_artifacts(self, task_id: str) -> TaskArtifactListResponse:
@@ -696,13 +702,14 @@ class TaskService:
                     task_id=task_id,
                     metadata={"url": request.url, "mode": request.mode},
                 )
+            _write_task_metadata(run_dir, task)
             self.persistence.upsert_task(
                 task_id=task_id,
                 conversation_id=conversation_id,
                 status="running",
                 task_type=task.task_type,
                 skill_id=task.skill_id,
-                input_json=request.model_dump(mode="json"),
+                input_json=_task_input_json(request, task),
                 run_dir=str(run_dir),
             )
         except Exception:
@@ -719,13 +726,14 @@ class TaskService:
     ) -> None:
         try:
             task = build_api_task(task_id, request)
+            _write_task_metadata(run_dir, task)
             self.persistence.upsert_task(
                 task_id=task_id,
                 conversation_id=request.conversation_id,
                 status=status,
                 task_type=task.task_type,
                 skill_id=task.skill_id,
-                input_json=request.model_dump(mode="json"),
+                input_json=_task_input_json(request, task),
                 run_dir=str(run_dir),
                 error=error,
                 error_type=error_type,
@@ -796,6 +804,7 @@ def _load_events_from_jsonl(path: Path) -> list[TaskEvent]:
 
 
 def _skill_metadata(run_dir: Path) -> dict[str, str | None]:
+    task_metadata = _task_metadata(run_dir)
     result_path = run_dir / "skill_result.json"
     if result_path.exists():
         try:
@@ -817,17 +826,26 @@ def _skill_metadata(run_dir: Path) -> dict[str, str | None]:
                 "recommendation": result.get("recommendation")
                 if isinstance(result.get("recommendation"), str)
                 else None,
+                "display_language": _metadata_string(result, "display_language")
+                or task_metadata.get("display_language"),
+                "requested_output_language": _metadata_string(
+                    result,
+                    "requested_output_language",
+                )
+                or task_metadata.get("requested_output_language"),
+                "report_language": _metadata_string(result, "report_language")
+                or task_metadata.get("report_language"),
             }
 
     workflow_path = run_dir / "workflow_state.json"
     if not workflow_path.exists():
-        return _empty_skill_metadata()
+        return _empty_skill_metadata(task_metadata)
     try:
         workflow_state = json.loads(workflow_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
-        return _empty_skill_metadata()
+        return _empty_skill_metadata(task_metadata)
     if not isinstance(workflow_state, dict):
-        return _empty_skill_metadata()
+        return _empty_skill_metadata(task_metadata)
     skill_id = workflow_state.get("skill_id")
     task_type = workflow_state.get("task_type")
     return {
@@ -836,17 +854,86 @@ def _skill_metadata(run_dir: Path) -> dict[str, str | None]:
         "skill_status": None,
         "difficulty": None,
         "recommendation": None,
+        "display_language": task_metadata.get("display_language"),
+        "requested_output_language": task_metadata.get("requested_output_language"),
+        "report_language": task_metadata.get("report_language"),
     }
 
 
-def _empty_skill_metadata() -> dict[str, str | None]:
+def _empty_skill_metadata(
+    task_metadata: dict[str, str | None] | None = None,
+) -> dict[str, str | None]:
+    task_metadata = task_metadata or {}
     return {
         "skill_id": None,
         "task_type": None,
         "skill_status": None,
         "difficulty": None,
         "recommendation": None,
+        "display_language": task_metadata.get("display_language"),
+        "requested_output_language": task_metadata.get("requested_output_language"),
+        "report_language": task_metadata.get("report_language"),
     }
+
+
+def _task_metadata(run_dir: Path) -> dict[str, str | None]:
+    path = run_dir / "task_metadata.json"
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return {
+        "display_language": payload.get("display_language")
+        if isinstance(payload.get("display_language"), str)
+        else None,
+        "requested_output_language": payload.get("requested_output_language")
+        if isinstance(payload.get("requested_output_language"), str)
+        else None,
+        "report_language": payload.get("report_language")
+        if isinstance(payload.get("report_language"), str)
+        else None,
+    }
+
+
+def _metadata_string(result: dict[str, Any], key: str) -> str | None:
+    metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
+    value = metadata.get(key)
+    return value if isinstance(value, str) else None
+
+
+def _task_input_json(request: TaskCreateRequest, task: TaskSpec) -> dict[str, Any]:
+    payload = request.model_dump(mode="json")
+    payload.update(
+        {
+            "display_language": task.display_language,
+            "requested_output_language": task.requested_output_language,
+            "report_language": task.report_language,
+        }
+    )
+    return payload
+
+
+def _write_task_metadata(run_dir: Path, task: TaskSpec) -> None:
+    try:
+        (run_dir / "task_metadata.json").write_text(
+            json.dumps(
+                {
+                    "task_id": task.task_id,
+                    "display_language": task.display_language,
+                    "requested_output_language": task.requested_output_language,
+                    "report_language": task.report_language,
+                },
+                indent=2,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+    except Exception:
+        return
 
 
 def _workflow_task_type(run_dir: Path) -> str | None:

@@ -19,6 +19,9 @@ class TaskSpec(BaseModel):
     expected_output: str | None = None
     constraints: list[str] = Field(default_factory=list)
     language: str = "auto"
+    display_language: str = "zh-CN"
+    requested_output_language: str | None = None
+    report_language: str = "zh-CN"
     action: ActionContract | None = None
     expected_effect: ExpectedEffect | None = None
     require_evidence: bool = True

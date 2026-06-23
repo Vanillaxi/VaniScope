@@ -173,6 +173,9 @@ class GitHubIssueResearchSkill:
             metadata={
                 "query": task.query or task.research_goal or task.raw_input,
                 "language": task.language,
+                "display_language": task.display_language,
+                "requested_output_language": task.requested_output_language,
+                "report_language": task.report_language,
                 "repository": analysis.repository,
                 "issue_number": analysis.issue_number,
                 "labels": analysis.labels,
@@ -257,7 +260,7 @@ def analyze_issue(
 
 
 def _en_report(task: TaskSpec, analysis: IssueAnalysis) -> str:
-    refs = _refs(analysis.evidence_ids)
+    refs = _refs(analysis.evidence_ids, language="en")
     return "\n".join(
         [
             "# GitHub Issue Research Report",
@@ -318,7 +321,7 @@ def _en_report(task: TaskSpec, analysis: IssueAnalysis) -> str:
             "",
             "## Evidence",
             "",
-            *_evidence_lines(analysis),
+            *_evidence_lines(analysis, language="en"),
             "",
             "## Final Recommendation",
             "",
@@ -329,68 +332,72 @@ def _en_report(task: TaskSpec, analysis: IssueAnalysis) -> str:
 
 
 def _zh_report(task: TaskSpec, analysis: IssueAnalysis) -> str:
-    refs = _refs(analysis.evidence_ids)
+    refs = _refs(analysis.evidence_ids, language="zh")
     return "\n".join(
         [
-            "# GitHub Issue Research Report",
+            "# GitHub Issue 研究报告",
             "",
-            "## Task",
+            "## 任务概览",
             "",
-            f"- task_id: {task.task_id}",
-            "- skill_id: github_issue_research",
-            f"- query: {analysis.query}",
+            f"- 任务 ID：{task.task_id}",
+            "- 技能 ID：github_issue_research",
+            f"- 查询：{analysis.query}",
             "",
-            "## Source URL",
+            "## 来源页面",
             "",
             f"- {analysis.source_url}",
-            f"- page_title: {analysis.page_title}",
+            f"- 页面标题：{analysis.page_title}",
             "",
-            "## Result",
+            "## 核心结论",
             "",
-            f"- 建议：{analysis.recommendation}；难度：{analysis.difficulty}；贡献价值：{analysis.contribution_value}。{refs}",
+            (
+                f"- 建议：{_zh_recommendation(analysis.recommendation)}；"
+                f"难度：{_zh_level(analysis.difficulty)}；"
+                f"贡献价值：{_zh_level(analysis.contribution_value)}。{refs}"
+            ),
             "",
-            "## Issue Summary",
+            "## Issue 摘要",
             "",
-            f"- {analysis.summary} {refs}",
+            f"- {_zh_issue_summary(analysis)} {refs}",
             "",
-            "## Repository / Issue Metadata",
+            "## 仓库与 Issue 信息",
             "",
-            f"- Repository: {analysis.repository} {refs}",
-            f"- Issue: {analysis.issue_title}",
-            f"- Issue number: {analysis.issue_number}",
-            f"- Labels: {', '.join(analysis.labels) or 'unknown'}",
+            f"- 仓库：{analysis.repository} {refs}",
+            f"- Issue：{analysis.issue_title}",
+            f"- Issue 编号：{analysis.issue_number}",
+            f"- 标签：{', '.join(analysis.labels) or '未知'}",
             "",
-            "## What needs to be changed",
+            "## 需要修改的内容",
             "",
-            *_bullet_lines(analysis.needs_changes, refs),
+            *_bullet_lines(analysis.needs_changes, refs, language="zh"),
             "",
-            "## Affected Modules",
+            "## 影响模块",
             "",
-            *_bullet_lines(analysis.affected_modules, refs),
+            *_bullet_lines(analysis.affected_modules, refs, language="zh"),
             "",
-            "## Difficulty Estimate",
+            "## 难度判断",
             "",
-            f"- {analysis.difficulty}：依据受影响模块、benchmark 要求和 clone semantics 风险判断。{refs}",
+            f"- {_zh_level(analysis.difficulty)}：依据受影响模块、benchmark 要求和 clone semantics 风险判断。{refs}",
             "",
-            "## Contribution Value",
+            "## 贡献价值",
             "",
-            f"- {analysis.contribution_value}：依据页面标签和性能收益描述判断。{refs}",
+            f"- {_zh_level(analysis.contribution_value)}：依据页面标签和性能收益描述判断。{refs}",
             "",
-            "## Risks / Caveats",
+            "## 风险与限制",
             "",
-            *_bullet_lines(analysis.risks, refs),
+            *_bullet_lines(analysis.risks, refs, language="zh"),
             "",
-            "## Suggested Implementation Plan",
+            "## 建议实现计划",
             "",
-            *_bullet_lines(analysis.suggested_plan, refs),
+            *_bullet_lines(analysis.suggested_plan, refs, language="zh"),
             "",
-            "## Evidence",
+            "## 证据链",
             "",
-            *_evidence_lines(analysis),
+            *_evidence_lines(analysis, language="zh"),
             "",
-            "## Final Recommendation",
+            "## 最终建议",
             "",
-            f"- {analysis.recommendation}。如果贡献者能补 benchmark 并保持 clone semantics，值得做。{refs}",
+            f"- {_zh_recommendation(analysis.recommendation)}。如果贡献者能补 benchmark 并保持 clone semantics，值得做。{refs}",
             "",
         ]
     )
@@ -548,29 +555,90 @@ def _suggested_plan(affected_modules: list[str]) -> list[str]:
     ] + ["Add regression tests and benchmark coverage before proposing a patch."]
 
 
-def _bullet_lines(items: list[str], refs: str) -> list[str]:
+def _bullet_lines(items: list[str], refs: str, language: str = "en") -> list[str]:
     if not items:
+        if _is_zh(language):
+            return [f"- 页面证据不足，无法确认该项。{refs}"]
         return [f"- Not enough page evidence to determine this. {refs}"]
+    if _is_zh(language):
+        return [f"- {_zh_source_labels(item)} {refs}" for item in items]
     return [f"- {item} {refs}" for item in items]
 
 
-def _evidence_lines(analysis: IssueAnalysis) -> list[str]:
-    fields = [
-        f"Issue title: {analysis.issue_title}",
-        f"Labels: {', '.join(analysis.labels) or 'unknown'}",
-        f"Affected modules: {', '.join(analysis.affected_modules) or 'unknown'}",
-        f"Maintainer requirements: {'; '.join(analysis.maintainer_requirements) or 'unknown'}",
-        f"Acceptance criteria: {'; '.join(analysis.acceptance_criteria) or 'unknown'}",
-        f"Suggested implementation: {'; '.join(analysis.suggested_plan) or 'unknown'}",
-    ]
+def _evidence_lines(analysis: IssueAnalysis, language: str) -> list[str]:
+    unknown = "未知" if _is_zh(language) else "unknown"
+    if _is_zh(language):
+        fields = [
+            f"Issue 标题：{analysis.issue_title}",
+            f"标签：{', '.join(analysis.labels) or unknown}",
+            f"影响模块：{', '.join(analysis.affected_modules) or unknown}",
+            f"维护者要求：{'; '.join(_zh_source_labels(item) for item in analysis.maintainer_requirements) or unknown}",
+            f"验收标准：{'; '.join(_zh_source_labels(item) for item in analysis.acceptance_criteria) or unknown}",
+            f"建议实现：{'; '.join(_zh_source_labels(item) for item in analysis.suggested_plan) or unknown}",
+        ]
+    else:
+        fields = [
+            f"Issue title: {analysis.issue_title}",
+            f"Labels: {', '.join(analysis.labels) or unknown}",
+            f"Affected modules: {', '.join(analysis.affected_modules) or unknown}",
+            f"Maintainer requirements: {'; '.join(analysis.maintainer_requirements) or unknown}",
+            f"Acceptance criteria: {'; '.join(analysis.acceptance_criteria) or unknown}",
+            f"Suggested implementation: {'; '.join(analysis.suggested_plan) or unknown}",
+        ]
     evidence_id = analysis.evidence_ids[0] if analysis.evidence_ids else "no_evidence"
     return [f"- [{evidence_id}] {field}" for field in fields]
 
 
-def _refs(evidence_ids: list[str]) -> str:
+def _refs(evidence_ids: list[str], language: str = "en") -> str:
     if not evidence_ids:
-        return "[no evidence]"
-    return "Evidence: " + ", ".join(f"[{item}]" for item in evidence_ids[:3])
+        return "[无证据]" if _is_zh(language) else "[no evidence]"
+    prefix = "证据：" if _is_zh(language) else "Evidence: "
+    return prefix + ", ".join(f"[{item}]" for item in evidence_ids[:3])
+
+
+def _zh_level(value: str) -> str:
+    return {
+        "low": "低",
+        "medium": "中",
+        "high": "高",
+    }.get(value, value)
+
+
+def _zh_recommendation(value: str) -> str:
+    return {
+        "worth_doing": "值得做",
+        "worth_doing_with_caution": "谨慎推进",
+        "defer": "建议暂缓",
+    }.get(value, value)
+
+
+def _zh_issue_summary(analysis: IssueAnalysis) -> str:
+    return (
+        f"{analysis.repository} {analysis.issue_number}：{analysis.issue_title}。"
+        f"建议为{_zh_recommendation(analysis.recommendation)}，"
+        f"难度为{_zh_level(analysis.difficulty)}，"
+        f"贡献价值为{_zh_level(analysis.contribution_value)}。"
+    )
+
+
+def _zh_source_labels(value: str) -> str:
+    replacements = {
+        "Repository:": "仓库：",
+        "Project:": "项目：",
+        "Issue Number:": "Issue 编号：",
+        "Issue:": "Issue：",
+        "Title:": "标题：",
+        "Labels:": "标签：",
+        "Maintainer:": "维护者：",
+        "Related issue:": "相关 Issue：",
+        "Acceptance Criteria:": "验收标准：",
+        "Suggested Implementation:": "建议实现：",
+        "Risks:": "风险：",
+    }
+    output = value
+    for source, target in replacements.items():
+        output = output.replace(source, target)
+    return output
 
 
 def _dedupe(values: list[str]) -> list[str]:

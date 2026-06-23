@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { formatDateTime } from "@/lib/format";
 import { screenshotUrl } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { eventDisplay, graphNodeDisplay, statusLabel } from "@/lib/localizedDisplay";
 import type {
   RuntimeEvidenceLink,
   RuntimeGraphNode,
@@ -28,6 +29,12 @@ export function StepDetailPanel({
 }: StepDetailPanelProps) {
   const { language, t } = useI18n();
   const detail = normalizeDetail(node, item);
+  const displayLabel = item
+    ? eventDisplay(item, language).title
+    : node
+      ? graphNodeDisplay(node, language).label
+      : detail.label;
+  const displayStatus = statusLabel(detail.status, language);
   const relatedEvidence = evidence.filter((entry) =>
     detail.evidenceIds.includes(entry.evidence_id),
   );
@@ -39,30 +46,29 @@ export function StepDetailPanel({
         <div>
           <h2 className="text-lg font-semibold">{title}</h2>
           <div className="mt-1 text-sm text-[var(--muted)]">
-            {detail.label || "Select a node or event"}
+            {displayLabel || t.inspector.selectNodeOrEvent}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
           {detail.type ? <Badge tone="info">{detail.type}</Badge> : null}
-          {detail.status ? <Badge tone={statusTone(detail.status)}>{detail.status}</Badge> : null}
+          {detail.status ? <Badge tone={statusTone(detail.status)}>{displayStatus}</Badge> : null}
         </div>
       </div>
 
       {detail.empty ? (
         <div className="mt-4 rounded-md border border-dashed border-[var(--line)] p-5 text-sm text-[var(--muted)]">
-          Select a Timeline event or Graph node to inspect URLs, readiness, verification,
-          screenshots, evidence, and raw payload.
+          {t.inspector.detailEmpty}
         </div>
       ) : (
         <div className="mt-5 grid gap-5">
           <div className="grid gap-3 text-sm sm:grid-cols-2">
-            <Meta label="Started" value={formatDateTime(detail.timestamp, language, "-")} />
-            <Meta label="Duration" value={formatDuration(detail.durationMs)} />
-            <Meta label="URL before" value={stringFromPath(detail.raw, ["url_before"])} />
-            <Meta label="URL after" value={stringFromPath(detail.raw, ["url_after"])} />
-            <Meta label="Title before" value={stringFromPath(detail.raw, ["title_before"])} />
+            <Meta label={t.inspector.started} value={formatDateTime(detail.timestamp, language, "-")} />
+            <Meta label={t.inspector.duration} value={formatDuration(detail.durationMs)} />
+            <Meta label={t.inspector.urlBefore} value={stringFromPath(detail.raw, ["url_before"])} />
+            <Meta label={t.inspector.urlAfter} value={stringFromPath(detail.raw, ["url_after"])} />
+            <Meta label={t.inspector.titleBefore} value={stringFromPath(detail.raw, ["title_before"])} />
             <Meta
-              label="Title after"
+              label={t.inspector.titleAfter}
               value={
                 stringFromPath(detail.raw, ["title_after"]) ||
                 stringFromPath(detail.raw, ["title"])
@@ -70,12 +76,12 @@ export function StepDetailPanel({
             />
           </div>
 
-          <SignalGrid raw={detail.raw} />
+          <SignalGrid raw={detail.raw} labels={t.inspector} />
 
           {screenshots.length ? (
             <div>
               <div className="mb-2 text-xs font-semibold uppercase text-[var(--muted)]">
-                Screenshots
+                {t.inspector.screenshots}
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 {screenshots.map((shot) => {
@@ -105,7 +111,7 @@ export function StepDetailPanel({
           ) : null}
 
           <div className="grid gap-3 text-sm sm:grid-cols-2">
-            <Meta label="Evidence ids" value={detail.evidenceIds.join(", ")} />
+            <Meta label={t.inspector.evidenceIds} value={detail.evidenceIds.join(", ")} />
             <Meta
               label={t.inspector.artifactRefs}
               value={detail.artifactRefs.join(", ")}
@@ -115,7 +121,7 @@ export function StepDetailPanel({
           {relatedEvidence.length ? (
             <div>
               <div className="mb-2 text-xs font-semibold uppercase text-[var(--muted)]">
-                Produced Evidence
+                {t.inspector.producedEvidence}
               </div>
               <div className="grid gap-2">
                 {relatedEvidence.map((entry) => (
@@ -152,7 +158,13 @@ export function StepDetailPanel({
   );
 }
 
-function SignalGrid({ raw }: { raw: Record<string, unknown> }) {
+function SignalGrid({
+  raw,
+  labels,
+}: {
+  raw: Record<string, unknown>;
+  labels: ReturnType<typeof useI18n>["t"]["inspector"];
+}) {
   const readiness = objectFromPath(raw, ["readiness"]) || objectFromPath(raw, ["payload", "readiness"]);
   const signals =
     objectFromPath(raw, ["signals"]) ||
@@ -170,7 +182,7 @@ function SignalGrid({ raw }: { raw: Record<string, unknown> }) {
       {signals ? (
         <div>
           <div className="mb-2 text-xs font-semibold uppercase text-[var(--muted)]">
-            Readiness Signals
+            {labels.readinessSignals}
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {Object.entries(signals).map(([key, value]) => (
@@ -188,7 +200,7 @@ function SignalGrid({ raw }: { raw: Record<string, unknown> }) {
       {verification ? (
         <div>
           <div className="mb-2 text-xs font-semibold uppercase text-[var(--muted)]">
-            Effect Verification
+            {labels.effectVerification}
           </div>
           <pre className="max-h-72 overflow-auto rounded-md bg-[#101828] p-3 text-xs leading-5 text-[#f8fafc]">
             {JSON.stringify(verification, null, 2)}

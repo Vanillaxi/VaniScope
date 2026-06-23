@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { StepDetailPanel } from "@/components/tasks/StepDetailPanel";
 import { formatDateTime } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
+import { graphNodeDisplay } from "@/lib/localizedDisplay";
 import type {
   RuntimeEvidenceLink,
   RuntimeExecutionGraphResponse,
@@ -25,7 +26,7 @@ export function ExecutionGraphPanel({
   graph,
   evidence = [],
 }: ExecutionGraphPanelProps) {
-  const { language } = useI18n();
+  const { language, t } = useI18n();
   const nodes = useMemo(() => graph?.nodes ?? [], [graph?.nodes]);
   const [selectedId, setSelectedId] = useState<string | null>(nodes[0]?.id ?? null);
   const selectedNode = useMemo(
@@ -38,10 +39,10 @@ export function ExecutionGraphPanel({
       <Card className="p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Execution Graph</h2>
+            <h2 className="text-lg font-semibold">{t.inspector.executionGraph}</h2>
             <p className="mt-1 text-sm text-[var(--muted)]">
-              {nodes.length} nodes · {graph?.edges.length ?? 0} edges
-              {graph?.fallback ? " · fallback" : ""}
+              {nodes.length} {t.inspector.graphNodes} · {graph?.edges.length ?? 0} {t.inspector.graphEdges}
+              {graph?.fallback ? ` · ${t.inspector.fallbackGraph}` : ""}
             </p>
           </div>
           {graph?.error ? <Badge tone="danger">{graph.error}</Badge> : null}
@@ -90,8 +91,12 @@ export function ExecutionGraphPanel({
                     <span
                       className={`h-2.5 w-2.5 rounded-full ${statusDotClass(node.status)}`}
                     />
-                    <Badge tone={typeTone(node.type)}>{node.type}</Badge>
-                    <Badge tone={statusTone(node.status)}>{node.status}</Badge>
+                    <Badge tone={typeTone(node.type)}>
+                      {graphNodeDisplay(node, language).type}
+                    </Badge>
+                    <Badge tone={statusTone(node.status)}>
+                      {graphNodeDisplay(node, language).status}
+                    </Badge>
                     <span className="text-xs text-[var(--muted)]">
                       {formatDateTime(node.timestamp, language, "")}
                     </span>
@@ -102,7 +107,7 @@ export function ExecutionGraphPanel({
                     ) : null}
                   </div>
                   <div className="mt-2 overflow-hidden text-ellipsis whitespace-nowrap font-semibold text-[#26323f]">
-                    {node.label}
+                    {graphNodeDisplay(node, language).label}
                   </div>
                   {node.summary ? (
                     <div className="mt-1 max-h-10 overflow-hidden text-sm leading-5 text-[var(--muted)]">
@@ -115,14 +120,14 @@ export function ExecutionGraphPanel({
           </div>
         ) : (
           <div className="rounded-md border border-dashed border-[var(--line)] p-5 text-sm text-[var(--muted)]">
-            No graph nodes yet.
+            {t.inspector.noGraphNodes}
           </div>
         )}
       </Card>
 
       <StepDetailPanel
         taskId={taskId}
-        title="Node Detail"
+        title={t.inspector.nodeDetail}
         node={selectedNode}
         evidence={evidence}
       />

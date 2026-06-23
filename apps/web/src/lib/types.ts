@@ -3,7 +3,7 @@ export type BackendPlannerMode = "deterministic" | "fake_llm" | "real_llm";
 export type TaskMode = "auto_explore" | "guided" | "skill";
 export type TaskType = "browser_task" | "docs_research" | "github_issue_research";
 export type SkillId = "auto" | "docs_research" | "github_issue_research";
-export type TaskLanguage = "auto" | "zh" | "en";
+export type TaskLanguage = "auto" | "zh" | "en" | "zh-CN" | "en-US";
 
 export type TaskStatus =
   | "created"
@@ -34,6 +34,9 @@ export type TaskCreateRequest = {
   query?: string;
   research_goal?: string;
   language?: TaskLanguage;
+  display_language?: "zh-CN" | "en-US";
+  requested_output_language?: "zh-CN" | "en-US";
+  preferred_report_language?: "zh-CN" | "en-US";
   planner: PlannerMode;
   planner_mode?: BackendPlannerMode;
   use_real_llm?: boolean;
@@ -74,6 +77,9 @@ export type TaskStatusResponse = {
   skill_status?: string | null;
   difficulty?: string | null;
   recommendation?: string | null;
+  display_language?: string | null;
+  requested_output_language?: string | null;
+  report_language?: string | null;
 };
 
 export type TaskArtifactListResponse = {

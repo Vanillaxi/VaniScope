@@ -22,7 +22,7 @@ export function RuntimeInspectorTabs({ children }: RuntimeInspectorTabsProps) {
   const tabs: { id: InspectorTabId; label: string }[] = [
     { id: "overview", label: t.inspector.overview },
     { id: "timeline", label: t.inspector.timeline },
-    { id: "graph", label: "Graph" },
+    { id: "graph", label: t.inspector.graph },
     { id: "report", label: t.inspector.report },
     { id: "evidence", label: t.inspector.evidence },
     { id: "llm", label: t.inspector.llmPrompt },

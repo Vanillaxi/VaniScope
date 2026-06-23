@@ -8,6 +8,7 @@ import { getDiagnostics, getHealth } from "@/lib/api";
 import { formatDateTime, statusTone } from "@/lib/format";
 import type { Language } from "@/lib/i18n";
 import { useI18n } from "@/lib/i18n";
+import { statusLabel } from "@/lib/localizedDisplay";
 import { CONSOLE_SKILLS } from "@/lib/skills";
 import {
   clearTaskHistory,
@@ -132,7 +133,9 @@ export function Sidebar() {
                     {task.title}
                   </div>
                   <div className="mt-1 flex items-center gap-2">
-                    <Badge tone={statusTone(task.status)}>{task.status}</Badge>
+                    <Badge tone={statusTone(task.status)}>
+                      {statusLabel(task.status, language)}
+                    </Badge>
                     <span className="truncate text-xs text-[var(--muted)]">
                       {formatDateTime(task.created_at, language)}
                     </span>
@@ -182,7 +185,7 @@ export function Sidebar() {
         </div>
         {diagnostics?.web?.mode ? (
           <div className="flex items-center justify-between gap-2 text-sm">
-            <span className="font-medium text-[var(--muted)]">Web Mode</span>
+            <span className="font-medium text-[var(--muted)]">{t.nav.webMode}</span>
             <Badge tone={diagnostics.web.mode === "public_open" ? "warning" : "neutral"}>
               {String(diagnostics.web.mode)}
             </Badge>

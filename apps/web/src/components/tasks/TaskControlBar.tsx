@@ -9,6 +9,7 @@ import {
   resumeTask,
   stopAndSummarizeTask,
 } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import type { TaskStatusResponse } from "@/lib/types";
 
 type TaskControlBarProps = {
@@ -17,6 +18,7 @@ type TaskControlBarProps = {
 };
 
 export function TaskControlBar({ task, onChanged }: TaskControlBarProps) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -48,13 +50,13 @@ export function TaskControlBar({ task, onChanged }: TaskControlBarProps) {
     <Card className="p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-sm font-semibold">Task controls</div>
+          <div className="text-sm font-semibold">{t.controls.title}</div>
           <div className="mt-1 text-xs text-[var(--muted)]">
             {task.status === "stop_requested"
-              ? "Generating partial report from collected evidence..."
+              ? t.controls.stopRequested
               : terminal
-                ? "Task is complete; controls are disabled."
-                : "Requests are applied at the next safe checkpoint."}
+                ? t.controls.completeDisabled
+                : t.controls.checkpointHint}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -63,28 +65,28 @@ export function TaskControlBar({ task, onChanged }: TaskControlBarProps) {
             disabled={!canPause || busy !== null}
             onClick={() => void run("pause", () => pauseTask(task.task_id))}
           >
-            Pause
+            {t.controls.pause}
           </Button>
           <Button
             variant="secondary"
             disabled={!canResume || busy !== null}
             onClick={() => void run("resume", () => resumeTask(task.task_id))}
           >
-            Resume
+            {t.controls.resume}
           </Button>
           <Button
             variant="secondary"
             disabled={!canStop || busy !== null}
             onClick={() => void run("stop", () => stopAndSummarizeTask(task.task_id))}
           >
-            Stop and summarize
+            {t.controls.stopAndSummarize}
           </Button>
           <Button
             variant="danger"
             disabled={!canCancel || busy !== null}
             onClick={() => void run("cancel", () => cancelTask(task.task_id))}
           >
-            Cancel
+            {t.controls.cancel}
           </Button>
         </div>
       </div>

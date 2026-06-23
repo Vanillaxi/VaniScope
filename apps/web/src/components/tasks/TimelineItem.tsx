@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { formatDateTime } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
+import { eventDisplay } from "@/lib/localizedDisplay";
 import type { RuntimeTimelineItem } from "@/lib/types";
 
 type TimelineItemProps = {
@@ -15,6 +16,7 @@ type TimelineItemProps = {
 export function TimelineItem({ item, selected = false, onSelect }: TimelineItemProps) {
   const { language, t } = useI18n();
   const [expanded, setExpanded] = useState(false);
+  const display = eventDisplay(item, language);
 
   return (
     <div
@@ -31,8 +33,8 @@ export function TimelineItem({ item, selected = false, onSelect }: TimelineItemP
         className="flex w-full flex-col gap-3 text-left"
       >
         <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={categoryTone(item.category)}>{item.category}</Badge>
-          {item.status ? <Badge tone={statusTone(item.status)}>{item.status}</Badge> : null}
+          <Badge tone={categoryTone(item.category)}>{display.category}</Badge>
+          {item.status ? <Badge tone={statusTone(item.status)}>{display.status}</Badge> : null}
           <span className="text-xs text-[var(--muted)]">
             {formatDateTime(item.timestamp, language, "")}
           </span>
@@ -43,10 +45,10 @@ export function TimelineItem({ item, selected = false, onSelect }: TimelineItemP
           ) : null}
         </div>
         <div>
-          <div className="font-semibold text-[#26323f]">{item.title}</div>
-          {item.summary ? (
+          <div className="font-semibold text-[#26323f]">{display.title}</div>
+          {display.description ? (
             <div className="mt-1 text-sm leading-6 text-[var(--muted)]">
-              {item.summary}
+              {display.description}
             </div>
           ) : null}
         </div>
@@ -54,8 +56,8 @@ export function TimelineItem({ item, selected = false, onSelect }: TimelineItemP
       {expanded ? (
         <div className="mt-4 grid gap-3">
           <div className="grid gap-2 text-sm sm:grid-cols-3">
-            <Meta label={t.inspector.category} value={item.category} />
-            <Meta label={t.inspector.status} value={item.status} />
+            <Meta label={t.inspector.category} value={display.category} />
+            <Meta label={t.inspector.status} value={display.status} />
             <Meta label="Step" value={item.step_id} />
             <Meta label="Tool" value={item.tool_name} />
             <Meta label={t.inspector.evidenceLinked} value={item.evidence_ids.join(", ")} />

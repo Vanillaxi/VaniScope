@@ -6,6 +6,7 @@ import { TimelineItem } from "@/components/tasks/TimelineItem";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { useI18n } from "@/lib/i18n";
+import { categoryLabel } from "@/lib/localizedDisplay";
 import type {
   RuntimeEvidenceLink,
   RuntimeInspectorSummary,
@@ -58,7 +59,7 @@ export function TimelinePanel({
   summary,
   evidence = [],
 }: TimelinePanelProps) {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const [showLowLevel, setShowLowLevel] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set(FILTERS));
   const [selectedId, setSelectedId] = useState<string | null>(items[0]?.id ?? null);
@@ -82,7 +83,7 @@ export function TimelinePanel({
             <h2 className="text-lg font-semibold">{t.inspector.timeline}</h2>
             <p className="mt-1 text-sm text-[var(--muted)]">
               {summary
-                ? `${filteredItems.length}/${summary.timeline_count} items · ${summary.evidence_count} evidence · ${summary.llm_call_count} LLM`
+                ? `${filteredItems.length}/${summary.timeline_count} ${t.inspector.timelineItems} · ${summary.evidence_count} ${t.inspector.evidence} · ${summary.llm_call_count} LLM`
                 : t.inspector.summary}
             </p>
           </div>
@@ -92,7 +93,7 @@ export function TimelinePanel({
               checked={showLowLevel}
               onChange={(event) => setShowLowLevel(event.target.checked)}
             />
-            Show low-level workflow events
+            {t.inspector.showLowLevel}
           </label>
         </div>
         <div className="mb-4 flex flex-wrap gap-2">
@@ -103,7 +104,9 @@ export function TimelinePanel({
               onClick={() => setActiveFilters((current) => toggleFilter(current, filter))}
               className="rounded"
             >
-              <Badge tone={activeFilters.has(filter) ? "info" : "neutral"}>{filter}</Badge>
+              <Badge tone={activeFilters.has(filter) ? "info" : "neutral"}>
+                {categoryLabel(filter, language)}
+              </Badge>
             </button>
           ))}
         </div>
@@ -124,7 +127,7 @@ export function TimelinePanel({
       </Card>
       <StepDetailPanel
         taskId={taskId}
-        title="Event Detail"
+        title={t.inspector.eventDetail}
         item={selectedItem}
         evidence={evidence}
       />

@@ -7,6 +7,7 @@ from webscoper.api.schemas import TaskCreateRequest
 from webscoper.browser.public_web import load_public_web_config
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.runtime.execution.planner import normalize_planner_mode
+from webscoper.runtime.localization import select_task_languages
 from webscoper.runtime.prompt.builder import RuntimeReminderStore
 from webscoper.runtime.execution.runner import build_task_spec, llm_config_path
 from webscoper.runtime.llm.config import (
@@ -64,6 +65,16 @@ def validate_request_planner_configuration(request: TaskCreateRequest) -> None:
 
 
 def build_api_task(task_id: str, request: TaskCreateRequest) -> TaskSpec:
+    languages = select_task_languages(
+        goal=request.goal,
+        query=request.query,
+        research_goal=request.research_goal,
+        expected_output=request.expect,
+        language=request.language,
+        display_language=request.display_language,
+        preferred_report_language=request.preferred_report_language,
+        requested_output_language=request.requested_output_language,
+    )
     task = build_task_spec(
         url=request.url,
         click=request.click,
@@ -75,7 +86,10 @@ def build_api_task(task_id: str, request: TaskCreateRequest) -> TaskSpec:
         query=request.query,
         research_goal=request.research_goal,
         expected_output=request.expect,
-        language=request.language,
+        language=languages.report_language,
+        display_language=languages.display_language,
+        requested_output_language=languages.requested_output_language,
+        preferred_report_language=languages.report_language,
         task_id=task_id,
     )
     if request.max_steps is not None:

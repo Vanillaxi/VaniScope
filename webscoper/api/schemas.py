@@ -51,6 +51,9 @@ class TaskCreateRequest(BaseModel):
     query: str | None = None
     research_goal: str | None = None
     language: str = "auto"
+    display_language: str | None = None
+    requested_output_language: str | None = None
+    preferred_report_language: str | None = None
     planner: PlannerMode = "deterministic"
     workflow: WorkflowBackend = "langgraph"
     reviewer: ReviewerMode = "deterministic"
@@ -106,6 +109,9 @@ class TaskStatusResponse(BaseModel):
     skill_status: str | None = None
     difficulty: str | None = None
     recommendation: str | None = None
+    display_language: str | None = None
+    requested_output_language: str | None = None
+    report_language: str | None = None
 
 
 class TaskArtifactListResponse(BaseModel):

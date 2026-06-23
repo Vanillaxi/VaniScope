@@ -40,24 +40,24 @@ class ReportReviewer:
                 message="No evidence items were available for review.",
             )
 
-        if "## Evidence" not in report_markdown:
+        if not _has_heading(report_markdown, "Evidence", "证据链"):
             builder.add(
                 severity="error",
                 issue_type="missing_evidence_section",
-                message="Report is missing the ## Evidence section.",
+                message="Report is missing the Evidence / 证据链 section.",
                 location="report",
             )
 
-        if "## Result" not in report_markdown:
+        if not _has_heading(report_markdown, "Result", "核心结论"):
             builder.add(
                 severity="warning",
                 issue_type="missing_result_section",
-                message="Report is missing the ## Result section.",
+                message="Report is missing the Result / 核心结论 section.",
                 location="report",
             )
 
         if task_spec is not None and task_spec.skill_id == "docs_research":
-            if "## Source URL" not in report_markdown:
+            if not _has_heading(report_markdown, "Source URL", "来源页面"):
                 builder.add(
                     severity="error",
                     issue_type="missing_source_url_section",
@@ -81,7 +81,7 @@ class ReportReviewer:
                 )
 
         if task_spec is not None and task_spec.skill_id == "github_issue_research":
-            if "## Source URL" not in report_markdown:
+            if not _has_heading(report_markdown, "Source URL", "来源页面"):
                 builder.add(
                     severity="error",
                     issue_type="missing_source_url_section",
@@ -101,28 +101,39 @@ class ReportReviewer:
                 "Contribution Value": "missing_contribution_value",
                 "Final Recommendation": "missing_recommendation",
             }.items():
-                if f"## {heading}" not in report_markdown:
+                if not _has_heading(report_markdown, heading, _zh_github_heading(heading)):
                     builder.add(
                         severity="error",
                         issue_type=issue_type,
                         message=f"GitHub issue research report is missing ## {heading}.",
                         location="report",
                     )
-            if not _section_has_content(report_markdown, "Affected Modules"):
+            if not (
+                _section_has_content(report_markdown, "Affected Modules")
+                or _section_has_content(report_markdown, "影响模块")
+            ):
                 builder.add(
                     severity="error",
                     issue_type="empty_affected_modules",
                     message="Affected modules section is empty.",
                     location="## Affected Modules",
                 )
-            if not re.search(r"\b(low|medium|high)\b", _section(report_markdown, "Difficulty Estimate"), re.I):
+            difficulty_section = _section(report_markdown, "Difficulty Estimate") or _section(
+                report_markdown,
+                "难度判断",
+            )
+            if not re.search(r"\b(low|medium|high)\b|[低中高]", difficulty_section, re.I):
                 builder.add(
                     severity="error",
                     issue_type="difficulty_not_classified",
                     message="Difficulty estimate must include low, medium, or high.",
                     location="## Difficulty Estimate",
                 )
-            if not re.search(r"\b(low|medium|high)\b", _section(report_markdown, "Contribution Value"), re.I):
+            contribution_section = _section(report_markdown, "Contribution Value") or _section(
+                report_markdown,
+                "贡献价值",
+            )
+            if not re.search(r"\b(low|medium|high)\b|[低中高]", contribution_section, re.I):
                 builder.add(
                     severity="error",
                     issue_type="contribution_value_not_classified",
@@ -276,6 +287,25 @@ def _claim_checks(markdown: str) -> list[ClaimEvidenceCheck]:
             )
         )
     return claims
+
+
+def _has_heading(markdown: str, *headings: str | None) -> bool:
+    for heading in headings:
+        if not heading:
+            continue
+        pattern = rf"(?im)^##\s+{re.escape(heading)}\s*$"
+        if re.search(pattern, markdown):
+            return True
+    return False
+
+
+def _zh_github_heading(heading: str) -> str | None:
+    return {
+        "Affected Modules": "影响模块",
+        "Difficulty Estimate": "难度判断",
+        "Contribution Value": "贡献价值",
+        "Final Recommendation": "最终建议",
+    }.get(heading)
 
 
 def _section(markdown: str, heading: str) -> str:

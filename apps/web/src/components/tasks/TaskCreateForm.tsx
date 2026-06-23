@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { createTask, getDiagnostics } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { localeCode } from "@/lib/localizedDisplay";
 import { type ConsoleSkill, type ConsoleSkillId, skillById } from "@/lib/skills";
 import { upsertTaskHistory } from "@/lib/taskHistory";
 import type { DiagnosticsResponse, PlannerMode, TaskLanguage, TaskMode } from "@/lib/types";
@@ -23,7 +24,7 @@ export function TaskCreateForm() {
 }
 
 function TaskCreateFormBody({ selectedSkill }: { selectedSkill: ConsoleSkill }) {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const router = useRouter();
   const initialPreset = selectedSkill.presets[0];
   const [url, setUrl] = useState(initialPreset?.values.url ?? "");
@@ -95,6 +96,8 @@ function TaskCreateFormBody({ selectedSkill }: { selectedSkill: ConsoleSkill }) 
         query,
         research_goal: researchGoal,
         language: taskLanguage,
+        display_language: localeCode(language),
+        preferred_report_language: localeCode(language),
         planner,
         workspace: selectedSkill.id === "browser_task" ? workspace : undefined,
         reminder,

@@ -92,6 +92,19 @@ def persist_evidence_and_final_report(
         final_observation=observation,
     )
     report_path.write_text(report_text, encoding="utf-8")
+    (context.run_dir / "task_metadata.json").write_text(
+        json.dumps(
+            {
+                "task_id": context.task.task_id,
+                "display_language": context.task.display_language,
+                "requested_output_language": context.task.requested_output_language,
+                "report_language": context.task.report_language,
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
     skill_result = None
     if context.task.skill_id == "docs_research":
         skill_result = DocsResearchSkill().build_result(

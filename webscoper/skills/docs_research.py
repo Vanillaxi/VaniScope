@@ -104,44 +104,54 @@ class DocsResearchSkill:
         limitations = _limitations(query, relevant_items, task.language)
         summary = _summary(query, relevant_items, task.language)
 
+        labels = _report_labels(task.language)
         lines = [
-            "# Docs Research Report",
+            f"# {labels['title']}",
             "",
-            "## Task",
+            f"## {labels['task']}",
             "",
-            f"- task_id: {task.task_id}",
-            f"- skill_id: {self.definition.skill_id}",
-            f"- query: {query}",
-            f"- expected_output: {task.expected_output or 'none'}",
+            f"- {labels['task_id']}: {task.task_id}",
+            f"- {labels['skill_id']}: {self.definition.skill_id}",
+            f"- {labels['query']}: {query}",
+            f"- {labels['expected_output']}: {task.expected_output or labels['none']}",
             "",
-            "## Source URL",
+            f"## {labels['source_url']}",
             "",
             f"- {source_url or task.target_url}",
-            f"- page_title: {title or 'unknown'}",
+            f"- {labels['page_title']}: {title or labels['unknown']}",
             "",
-            "## Summary",
-            "",
-            summary,
-            "",
-            "## Result",
+            f"## {labels['summary']}",
             "",
             summary,
             "",
-            "## Key Findings",
+            f"## {labels['result']}",
+            "",
+            summary,
+            "",
+            f"## {labels['findings']}",
             "",
         ]
-        lines.extend(findings or ["- No directly relevant finding was found in evidence."])
-        lines.extend(["", "## Evidence", ""])
+        lines.extend(
+            findings
+            or [
+                "- 没有在证据中找到直接相关的信息。"
+                if _is_zh(task.language)
+                else "- No directly relevant finding was found in evidence."
+            ]
+        )
+        lines.extend(["", f"## {labels['evidence']}", ""])
         if relevant_items:
             for item in relevant_items:
                 text = _compact_text(item.text)
                 lines.append(
-                    f"- [{item.evidence_id}] {item.page_title or 'Page'} "
-                    f"from {item.source_url or source_url or 'unknown source'}: {text}"
+                    f"- [{item.evidence_id}] {labels['page_label']}："
+                    f"{item.page_title or labels['unknown']}；"
+                    f"{labels['source']}: {item.source_url or source_url or labels['unknown_source']}；"
+                    f"{labels['visible_text']}: {text}"
                 )
         else:
-            lines.append("- No evidence was captured.")
-        lines.extend(["", "## Limitations", ""])
+            lines.append(f"- {labels['no_evidence']}")
+        lines.extend(["", f"## {labels['limitations']}", ""])
         lines.extend(limitations)
         lines.append("")
         return "\n".join(lines)
@@ -169,6 +179,9 @@ class DocsResearchSkill:
             metadata={
                 "query": query,
                 "language": task.language,
+                "display_language": task.display_language,
+                "requested_output_language": task.requested_output_language,
+                "report_language": task.report_language,
                 "evidence_count": len(evidence_items),
                 "relevant_evidence_count": len(relevant_items),
             },
@@ -360,3 +373,51 @@ def _compact_text(text: str | None, limit: int = 240) -> str:
 
 def _is_zh(language: str) -> bool:
     return language.lower().startswith("zh")
+
+
+def _report_labels(language: str) -> dict[str, str]:
+    if _is_zh(language):
+        return {
+            "title": "VaniScope 文档研究报告",
+            "task": "任务概览",
+            "source_url": "来源页面",
+            "summary": "摘要",
+            "result": "核心结论",
+            "findings": "关键信息",
+            "evidence": "证据链",
+            "limitations": "风险与限制",
+            "task_id": "任务 ID",
+            "skill_id": "技能 ID",
+            "query": "查询",
+            "expected_output": "期望输出",
+            "page_title": "页面标题",
+            "page_label": "页面",
+            "source": "来源",
+            "visible_text": "可见文本",
+            "none": "无",
+            "unknown": "未知",
+            "unknown_source": "未知来源",
+            "no_evidence": "暂无可用证据。",
+        }
+    return {
+        "title": "Docs Research Report",
+        "task": "Task",
+        "source_url": "Source URL",
+        "summary": "Summary",
+        "result": "Result",
+        "findings": "Key Findings",
+        "evidence": "Evidence",
+        "limitations": "Limitations",
+        "task_id": "Task ID",
+        "skill_id": "Skill ID",
+        "query": "Query",
+        "expected_output": "Expected output",
+        "page_title": "Page title",
+        "page_label": "Page",
+        "source": "Source",
+        "visible_text": "Visible text",
+        "none": "none",
+        "unknown": "unknown",
+        "unknown_source": "unknown source",
+        "no_evidence": "No evidence was captured.",
+    }

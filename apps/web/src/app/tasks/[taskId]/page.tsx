@@ -22,6 +22,7 @@ import {
   listArtifacts,
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { statusLabel } from "@/lib/localizedDisplay";
 import { skillIdFromTask } from "@/lib/skills";
 import { updateTaskHistoryOpened } from "@/lib/taskHistory";
 import type {
@@ -243,7 +244,7 @@ function OverviewPanel({
   inspector: RuntimeInspectorResponse | null;
   artifacts: string[];
 }) {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const summary = inspector?.summary;
   const review = inspector?.review_summary ?? {};
   const tool = inspector?.tool_summary ?? {};
@@ -256,7 +257,7 @@ function OverviewPanel({
     <Card className="p-5">
       <h2 className="text-lg font-semibold">{t.inspector.overview}</h2>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <OverviewMetric label={t.status.task} value={task?.status ?? "-"} />
+        <OverviewMetric label={t.status.task} value={statusLabel(task?.status, language)} />
         <OverviewMetric label={t.status.skillId} value={task?.skill_id ?? "-"} />
         <OverviewMetric label={t.status.taskType} value={task?.task_type ?? "-"} />
         <OverviewMetric label={t.inspector.evidence} value={String(summary?.evidence_count ?? 0)} />

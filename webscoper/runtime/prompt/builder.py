@@ -438,6 +438,9 @@ def _task_section(context: WebAgentContextSnapshot) -> str:
         f"- research_goal: {task.research_goal or 'none'}",
         f"- expected_output: {task.expected_output or 'none'}",
         f"- language: {task.language}",
+        f"- target_report_language: {task.report_language}",
+        f"- user_requested_language: {task.requested_output_language or 'none'}",
+        f"- console_display_language: {task.display_language}",
         f"- require_evidence: {task.require_evidence}",
         f"- tags: {', '.join(task.tags) if task.tags else 'none'}",
     ]
@@ -454,6 +457,16 @@ def _task_section(context: WebAgentContextSnapshot) -> str:
                 f"  - expected_value: {expected_effect.value or 'none'}",
             ]
         )
+    lines.extend(
+        [
+            "",
+            "Report requirements:",
+            "- Write user-facing report headings, status labels, recommendations, and explanations in target_report_language.",
+            "- Do not dump raw visible text as the main result; synthesize readable conclusions from evidence.",
+            "- Preserve technical identifiers, code-like names, URLs, model names, tool ids, repository names, and proper nouns.",
+            "- Cite evidence ids for key claims whenever evidence ids are available.",
+        ]
+    )
     return "\n".join(lines)
 
 
