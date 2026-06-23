@@ -412,6 +412,8 @@ Run pytest:
 uv run pytest -q
 ```
 
+For targeted validation guidance, see `tests/README.md`.
+
 Run workflow eval:
 
 ```bash
