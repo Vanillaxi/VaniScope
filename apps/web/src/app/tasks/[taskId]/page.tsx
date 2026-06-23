@@ -8,6 +8,7 @@ import { EvidencePanel } from "@/components/tasks/EvidencePanel";
 import { ExecutionGraphPanel } from "@/components/tasks/ExecutionGraphPanel";
 import { LlmCallsPanel } from "@/components/tasks/LlmCallsPanel";
 import { RuntimeInspectorTabs } from "@/components/tasks/RuntimeInspectorTabs";
+import { TaskControlBar } from "@/components/tasks/TaskControlBar";
 import { TaskStatusCard } from "@/components/tasks/TaskStatusCard";
 import { TimelinePanel } from "@/components/tasks/TimelinePanel";
 import { ToolCatalogPanel } from "@/components/tasks/ToolCatalogPanel";
@@ -126,21 +127,24 @@ export default function TaskPage({ params }: TaskPageProps) {
   return (
     <>
       {task ? (
-        <TaskStatusCard
-          task={task}
-          latestEvent={
-            latestTimelineItem
-              ? {
-                  event_id: latestTimelineItem.id,
-                  task_id: taskId,
-                  kind: latestTimelineItem.kind,
-                  message: latestTimelineItem.title,
-                  created_at: latestTimelineItem.timestamp ?? "",
-                  payload: latestTimelineItem.raw,
-                }
-              : undefined
-          }
-        />
+        <>
+          <TaskStatusCard
+            task={task}
+            latestEvent={
+              latestTimelineItem
+                ? {
+                    event_id: latestTimelineItem.id,
+                    task_id: taskId,
+                    kind: latestTimelineItem.kind,
+                    message: latestTimelineItem.title,
+                    created_at: latestTimelineItem.timestamp ?? "",
+                    payload: latestTimelineItem.raw,
+                  }
+                : undefined
+            }
+          />
+          <TaskControlBar task={task} onChanged={refresh} />
+        </>
       ) : (
         <Card className="p-5 text-sm text-[var(--muted)]">{t.taskDetail.loading}</Card>
       )}

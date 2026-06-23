@@ -206,12 +206,27 @@ def _normalize_provider_payload(payload: dict) -> dict:
 def _normalize_budget_payload(payload: dict) -> dict:
     aliases = {
         "max_calls_per_task": "max_llm_calls_per_task",
+        "max_prompt_tokens_per_call": "max_prompt_tokens_per_call",
         "max_input_tokens_per_task": "max_prompt_tokens",
         "max_output_tokens_per_task": "max_completion_tokens",
+        "max_completion_tokens_per_call": "max_completion_tokens_per_call",
         "max_cost_usd_per_task": "max_cost_usd",
     }
     normalized = dict(payload)
     for source, target in aliases.items():
         if source in normalized:
             normalized[target] = normalized[source]
+    if "max_prompt_tokens_per_call" in normalized and "max_prompt_tokens" not in normalized:
+        normalized["max_prompt_tokens"] = normalized["max_prompt_tokens_per_call"]
+    if (
+        "approval_prompt_tokens_per_task" in normalized
+        and "max_total_tokens_per_task" not in normalized
+    ):
+        normalized["max_total_tokens_per_task"] = normalized[
+            "approval_prompt_tokens_per_task"
+        ]
+    if "max_completion_tokens_per_call" in normalized and "max_completion_tokens" not in normalized:
+        normalized["max_completion_tokens"] = normalized[
+            "max_completion_tokens_per_call"
+        ]
     return normalized

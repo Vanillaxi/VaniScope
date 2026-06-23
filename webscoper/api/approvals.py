@@ -12,6 +12,7 @@ def decide_approval(
     approved: bool,
     decided_by: str,
     reason: str | None = None,
+    option: str | None = None,
 ) -> ApprovalDecisionResponse:
     try:
         approval = service.approval_store.decide(
@@ -52,6 +53,15 @@ def decide_approval(
     except Exception:
         pass
 
+    if approval.metadata.get("approval_type") == "llm_budget":
+        resume_result = _resolve_budget_approval(
+            service,
+            approval=approval,
+            approved=approved,
+            option=option,
+        )
+        return ApprovalDecisionResponse(approval=approval, resume_result=resume_result)
+
     if approved:
         resume_result = service.resume_langgraph_after_approval(
             approval_id,
@@ -84,3 +94,64 @@ def decide_approval(
             error=None,
         )
     return ApprovalDecisionResponse(approval=approval, resume_result=resume_result)
+
+
+def _resolve_budget_approval(
+    service,
+    *,
+    approval,
+    approved: bool,
+    option: str | None,
+) -> TaskResumeResult:
+    task_id = approval.task_id
+    selected = option or ("continue_once" if approved else "cancel_task")
+    if selected == "continue_once" and approved:
+        service.control_store.resolve_budget_approval(task_id, continue_once=True)
+        service._set_task_state(task_id, "running", None)
+        message = "Budget approval resolved for one LLM call."
+    elif selected == "continue_for_task" and approved:
+        service.control_store.resolve_budget_approval(task_id, continue_for_task=True)
+        service._set_task_state(task_id, "running", None)
+        message = "Budget approval resolved for this task."
+    elif selected == "continue_with_compaction" and approved:
+        service.control_store.resolve_budget_approval(
+            task_id,
+            continue_with_compaction=True,
+        )
+        service._set_task_state(task_id, "running", None)
+        message = "Budget approval resolved with aggressive compaction."
+    elif selected == "stop_and_summarize":
+        response = service.stop_and_summarize_task(task_id)
+        message = response.message
+    else:
+        response = service.cancel_task(task_id)
+        message = response.message
+    run_dir = service._run_dir(task_id)
+    service.control_store.write_jsonl(task_id, run_dir / "user_control.jsonl")
+    service._publish_task_event(
+        task_id,
+        "budget_approval_resolved",
+        "LLM budget approval resolved",
+        {
+            "approval_id": approval.approval_id,
+            "approved": approved,
+            "option": selected,
+        },
+    )
+    request = service._task_requests.get(task_id)
+    if approved and selected.startswith("continue") and request is not None:
+        import asyncio
+        import threading
+
+        threading.Thread(
+            target=lambda: asyncio.run(service._run_async_task(task_id, request)),
+            daemon=True,
+        ).start()
+    return TaskResumeResult(
+        task_id=task_id,
+        approval_id=approval.approval_id,
+        resumed=approved and selected.startswith("continue"),
+        status=service.get_task_status(task_id).status,
+        message=message,
+        error=None,
+    )

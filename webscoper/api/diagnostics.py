@@ -12,6 +12,7 @@ from webscoper.runtime.llm.config import (
     default_fake_router_config,
     load_llm_router_config_from_file,
 )
+from webscoper.schemas.runtime import BudgetContext
 from webscoper.skills.registry import create_default_skill_registry
 
 
@@ -92,7 +93,9 @@ def _llm_status() -> dict[str, object]:
         "local_config_present": local_config is not None,
         "example_config_present": committed_example.exists(),
         "config_source": config_source,
-        "budget": _redacted_budget(router.budget),
+        "budget": _redacted_budget(
+            BudgetContext().model_copy(update=router.budget).model_dump(mode="json")
+        ),
         "warnings": warnings,
         "api_key_required_for_default": real_enabled,
         "api_key_configured": _api_key_configured(selected_provider) if selected_provider else False,
@@ -171,11 +174,23 @@ def _config_status(public_web) -> dict[str, object]:
 
 def _redacted_budget(budget: dict[str, Any]) -> dict[str, object]:
     safe_keys = {
+        "max_calls_per_task",
+        "max_prompt_tokens_per_call",
         "max_prompt_tokens",
+        "soft_prompt_tokens_per_task",
+        "approval_prompt_tokens_per_task",
+        "hard_prompt_tokens_per_task",
+        "max_completion_tokens_per_call",
         "max_completion_tokens",
+        "max_completion_tokens_per_task",
         "max_total_tokens_per_task",
         "max_llm_calls_per_task",
+        "soft_cost_usd_per_task",
+        "approval_cost_usd_per_task",
+        "hard_cost_usd_per_task",
         "max_cost_usd",
+        "enable_budget_approval",
+        "enable_auto_compaction",
         "timeout_seconds",
     }
     return {key: value for key, value in budget.items() if key in safe_keys}

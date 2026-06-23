@@ -54,6 +54,23 @@ export function ApprovalPanel({ taskId, onDecision }: ApprovalPanelProps) {
     }
   };
 
+  const decideBudget = async (approval: ApprovalRequest, option: string) => {
+    setBusyId(approval.approval_id);
+    try {
+      await submitApprovalDecision(approval.approval_id, {
+        approved: option !== "cancel_task",
+        option,
+        reason: t.approvals.approvedReason,
+      });
+      await refresh();
+      onDecision?.();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <Card className="p-5">
       <div className="flex items-start justify-between gap-3">
@@ -118,21 +135,65 @@ export function ApprovalPanel({ taskId, onDecision }: ApprovalPanelProps) {
               <div className="mt-3 rounded-md bg-[var(--panel-soft)] p-3 text-sm">
                 {approval.reason}
               </div>
+              {approval.metadata?.approval_type === "llm_budget" ? (
+                <BudgetApprovalDetails metadata={approval.metadata} />
+              ) : null}
               {approval.status === "pending" ? (
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <Button
-                    onClick={() => void decide(approval, true)}
-                    disabled={busyId === approval.approval_id}
-                  >
-                    {t.approvals.approve}
-                  </Button>
-                  <Button
-                    variant="danger"
-                    onClick={() => void decide(approval, false)}
-                    disabled={busyId === approval.approval_id}
-                  >
-                    {t.approvals.reject}
-                  </Button>
+                  {approval.metadata?.approval_type === "llm_budget" ? (
+                    <>
+                      <Button
+                        onClick={() => void decideBudget(approval, "continue_once")}
+                        disabled={busyId === approval.approval_id}
+                      >
+                        Continue once
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => void decideBudget(approval, "continue_for_task")}
+                        disabled={busyId === approval.approval_id}
+                      >
+                        Continue for this task
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => void decideBudget(approval, "continue_with_compaction")}
+                        disabled={busyId === approval.approval_id}
+                      >
+                        Continue with compaction
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => void decideBudget(approval, "stop_and_summarize")}
+                        disabled={busyId === approval.approval_id}
+                      >
+                        Stop and summarize
+                      </Button>
+                      <Button
+                        variant="danger"
+                        onClick={() => void decideBudget(approval, "cancel_task")}
+                        disabled={busyId === approval.approval_id}
+                      >
+                        Cancel task
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        onClick={() => void decide(approval, true)}
+                        disabled={busyId === approval.approval_id}
+                      >
+                        {t.approvals.approve}
+                      </Button>
+                      <Button
+                        variant="danger"
+                        onClick={() => void decide(approval, false)}
+                        disabled={busyId === approval.approval_id}
+                      >
+                        {t.approvals.reject}
+                      </Button>
+                    </>
+                  )}
                 </div>
               ) : null}
             </div>
@@ -141,6 +202,39 @@ export function ApprovalPanel({ taskId, onDecision }: ApprovalPanelProps) {
       </div>
     </Card>
   );
+}
+
+function BudgetApprovalDetails({ metadata }: { metadata: Record<string, unknown> }) {
+  const rows = [
+    ["Provider / model", `${stringValue(metadata.provider)} / ${stringValue(metadata.model)}`],
+    ["LLM calls used", `${stringValue(metadata.current_llm_calls)} / ${stringValue(metadata.max_calls_per_task)}`],
+    ["Estimated prompt tokens", stringValue(metadata.estimated_prompt_tokens_so_far)],
+    ["Estimated completion tokens", stringValue(metadata.estimated_completion_tokens_so_far)],
+    ["Estimated cost", `$${stringValue(metadata.estimated_cost_so_far)}`],
+    ["Next prompt tokens", stringValue(metadata.estimated_prompt_tokens_next_call)],
+    ["Next estimated cost", `$${stringValue(metadata.estimated_cost_next_call)}`],
+    ["Next planned action", stringValue(metadata.current_step)],
+    ["Current evidence count", stringValue(metadata.current_evidence_count)],
+  ];
+  return (
+    <div className="mt-3 rounded-md border border-[var(--line)] bg-white p-3">
+      <div className="text-sm font-semibold">LLM token usage is high</div>
+      <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+        {rows.map(([label, value]) => (
+          <div key={label}>
+            <dt className="font-semibold text-[var(--muted)]">{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+function stringValue(value: unknown) {
+  if (typeof value === "number") return value.toLocaleString();
+  if (typeof value === "string" && value) return value;
+  return "-";
 }
 
 function approvalStatusLabel(

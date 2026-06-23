@@ -8,13 +8,31 @@ default_provider = "fake"
 default_model = "fake-planner"
 
 [budget]
-max_calls_per_task = 8
-max_input_tokens_per_task = 30000
-max_output_tokens_per_task = 6000
-max_cost_usd_per_task = 0.2
-max_prompt_tokens = 30000
-max_completion_tokens = 6000
-max_llm_calls_per_task = 20
+max_calls_per_task = 12
+max_llm_calls_per_task = 12
+
+# Per-call technical prompt ceiling. Prompts above this are compacted before
+# being sent to the provider.
+max_prompt_tokens_per_call = 12000
+max_prompt_tokens = 12000
+
+# Task-level prompt budget layers.
+soft_prompt_tokens_per_task = 30000
+approval_prompt_tokens_per_task = 50000
+hard_prompt_tokens_per_task = 80000
+
+max_completion_tokens_per_call = 2048
+max_completion_tokens = 2048
+max_completion_tokens_per_task = 12000
+max_total_tokens_per_task = 50000
+
+soft_cost_usd_per_task = 0.15
+approval_cost_usd_per_task = 0.30
+hard_cost_usd_per_task = 0.60
+max_cost_usd_per_task = 0.60
+
+enable_budget_approval = true
+enable_auto_compaction = true
 timeout_seconds = 60
 
 [providers.fake]

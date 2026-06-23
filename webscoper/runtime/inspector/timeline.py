@@ -117,6 +117,16 @@ class RuntimeTimelineBuilder:
                 )
             )
 
+        for record in artifacts["budget_decisions"]:
+            order += 1
+            candidates.append(
+                (
+                    _timestamp(record, "timestamp", "created_at"),
+                    order,
+                    _item_from_budget_decision(record, order),
+                )
+            )
+
         for record in artifacts["recovery"]:
             order += 1
             candidates.append(
@@ -170,6 +180,11 @@ class RuntimeTimelineBuilder:
             for call in artifacts["llm_calls"]
             if call.get("budget_decision")
         )
+        budget_decisions.update(
+            str(item.get("decision"))
+            for item in artifacts["budget_decisions"]
+            if item.get("decision")
+        )
         real_llm_calls = sum(
             1
             for call in artifacts["llm_calls"]
@@ -196,6 +211,7 @@ class RuntimeTimelineBuilder:
             "trace": self.loader.read_jsonl("trace.jsonl"),
             "tool_audit": self.loader.read_jsonl("tool_audit.jsonl"),
             "llm_calls": self.loader.read_jsonl("llm_calls.jsonl"),
+            "budget_decisions": self.loader.read_jsonl("budget_decisions.jsonl"),
             "recovery": self.loader.read_jsonl("recovery.jsonl"),
             "approvals": self.loader.read_jsonl("approvals.jsonl"),
             "pending": self.loader.read_jsonl("pending.jsonl"),
@@ -289,6 +305,27 @@ def _item_from_llm_call(record: dict[str, Any], order: int) -> RuntimeTimelineIt
     )
 
 
+def _item_from_budget_decision(record: dict[str, Any], order: int) -> RuntimeTimelineItem:
+    decision = str(record.get("decision") or "budget_checked")
+    return RuntimeTimelineItem(
+        id=_id("budget", record, order, preferred=f"{decision}_{order}"),
+        timestamp=_timestamp(record, "timestamp", "created_at"),
+        kind="budget_decision",
+        category="budget",
+        title=f"Budget: {_title_from_kind(decision)}",
+        summary=(
+            f"{record.get('estimated_prompt_tokens')} prompt tokens; "
+            f"approval threshold {record.get('approval_threshold')}"
+        ),
+        status=decision,
+        duration_ms=_duration_ms(record),
+        evidence_ids=evidence_ids_from_payload(record),
+        artifact_refs=[_ref("budget_decisions.jsonl", record)],
+        raw_ref=_ref("budget_decisions.jsonl", record),
+        raw=record,
+    )
+
+
 def _item_from_recovery(record: dict[str, Any], order: int) -> RuntimeTimelineItem:
     kind = str(record.get("kind") or record.get("event_type") or "recovery")
     return RuntimeTimelineItem(
@@ -378,8 +415,12 @@ def _item_from_report(report_text: str, order: int) -> RuntimeTimelineItem:
 
 
 def _event_category(kind: str) -> str:
-    if kind.startswith("workflow_") or kind in {"task_started", "task_finished", "task_failed"}:
+    if kind.startswith("workflow_") or kind in {"task_started", "task_finished", "task_failed", "task_canceled"}:
         return "workflow"
+    if kind.startswith("budget_"):
+        return "budget"
+    if kind.startswith("user_") or kind in {"task_paused", "task_resumed"}:
+        return "control"
     if (
         kind.startswith("browser_")
         or kind.startswith("navigation_")
@@ -398,7 +439,7 @@ def _event_category(kind: str) -> str:
         return "llm"
     if kind.startswith("recovery_"):
         return "recovery"
-    if "approval" in kind or kind in {"task_paused", "task_resumed"}:
+    if "approval" in kind:
         return "approval"
     if "evidence" in kind:
         return "evidence"

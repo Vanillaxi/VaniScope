@@ -20,6 +20,7 @@ from webscoper.api.schemas import (
     RuntimeTimelineResponse,
     TaskArtifactContentResponse,
     TaskArtifactListResponse,
+    TaskControlResponse,
     TaskCreateRequest,
     TaskCreateResponse,
     TaskStatusResponse,
@@ -121,6 +122,38 @@ async def create_task_async(request: TaskCreateRequest) -> TaskCreateResponse:
 @app.get("/tasks/{task_id}", response_model=TaskStatusResponse)
 def get_task(task_id: str) -> TaskStatusResponse:
     return task_service.get_task_status(task_id)
+
+
+@app.post("/tasks/{task_id}/pause", response_model=TaskControlResponse)
+def pause_task(task_id: str) -> TaskControlResponse:
+    try:
+        return task_service.pause_task(task_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/tasks/{task_id}/resume", response_model=TaskControlResponse)
+def resume_task(task_id: str) -> TaskControlResponse:
+    try:
+        return task_service.resume_task(task_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/tasks/{task_id}/cancel", response_model=TaskControlResponse)
+def cancel_task(task_id: str) -> TaskControlResponse:
+    try:
+        return task_service.cancel_task(task_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/tasks/{task_id}/stop-and-summarize", response_model=TaskControlResponse)
+def stop_and_summarize_task(task_id: str) -> TaskControlResponse:
+    try:
+        return task_service.stop_and_summarize_task(task_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/tasks/{task_id}/timeline", response_model=RuntimeTimelineResponse)
@@ -240,6 +273,7 @@ def decide_approval(
             approved=request.approved,
             decided_by=request.decided_by,
             reason=request.reason,
+            option=request.option,
         )
     except ValueError as exc:
         detail = str(exc)

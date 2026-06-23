@@ -13,6 +13,7 @@ import type {
   RuntimeTimelineResponse,
   TaskArtifactContentResponse,
   TaskArtifactListResponse,
+  TaskControlResponse,
   TaskCreateApiRequest,
   TaskCreateRequest,
   TaskCreateResponse,
@@ -138,6 +139,31 @@ export function getTask(taskId: string) {
   return requestJson<TaskStatusResponse>(`/tasks/${encodeURIComponent(taskId)}`, {
     cache: "no-store",
   });
+}
+
+export function pauseTask(taskId: string) {
+  return requestJson<TaskControlResponse>(`/tasks/${encodeURIComponent(taskId)}/pause`, {
+    method: "POST",
+  });
+}
+
+export function resumeTask(taskId: string) {
+  return requestJson<TaskControlResponse>(`/tasks/${encodeURIComponent(taskId)}/resume`, {
+    method: "POST",
+  });
+}
+
+export function cancelTask(taskId: string) {
+  return requestJson<TaskControlResponse>(`/tasks/${encodeURIComponent(taskId)}/cancel`, {
+    method: "POST",
+  });
+}
+
+export function stopAndSummarizeTask(taskId: string) {
+  return requestJson<TaskControlResponse>(
+    `/tasks/${encodeURIComponent(taskId)}/stop-and-summarize`,
+    { method: "POST" },
+  );
 }
 
 export function getTaskTimeline(taskId: string) {

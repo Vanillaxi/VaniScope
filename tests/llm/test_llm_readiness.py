@@ -15,6 +15,7 @@ from webscoper.runtime.llm.auto_explore import AutoExploreActionPlanner
 from webscoper.runtime.llm.config import load_llm_router_config_from_file
 from webscoper.runtime.llm.router import AuditedBudgetedLLMClient, LLMProviderRouter
 from webscoper.schemas.llm import LLMMessage, LLMRequest, LLMResponse
+from webscoper.schemas.browser import PageObservation
 from webscoper.schemas.runtime import BudgetContext
 from webscoper.schemas.task import TaskSpec
 
@@ -36,7 +37,7 @@ def test_example_llm_config_parses() -> None:
     assert config.providers["fake"].provider_type == "fake"
     assert config.providers["openai_compatible"].api_key == "YOUR_API_KEY_HERE"
     assert config.providers["openai_compatible"].timeout_ms == 30000
-    assert config.budget["max_llm_calls_per_task"] == 8
+    assert config.budget["max_llm_calls_per_task"] == 12
 
 
 def test_real_provider_requires_real_router_mode(tmp_path: Path) -> None:
@@ -287,12 +288,18 @@ async def test_auto_explore_invalid_json_repairs_once(tmp_path: Path) -> None:
 
     decision = await planner.decide(
         context=context.snapshot(),
-        observation=None,
+        observation=PageObservation(
+            url=task.target_url,
+            title="Mock page",
+            visible_text_summary="A mock page is visible.",
+            interactive_elements=[],
+            risk_signals=[],
+        ),
         history=[],
         step_index=1,
     )
 
-    assert decision.action.type == "extract"
+    assert decision.action.type == "browser_extract"
     assert client.calls == 2
     assert planner.validation_errors[0]["phase"] == "initial"
 

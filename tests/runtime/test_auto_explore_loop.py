@@ -42,7 +42,7 @@ def test_auto_explore_executes_safe_click_intent(api_client) -> None:
     status = wait_for_terminal_status(api_client, task_id)
     assert status["status"] == "succeeded"
     tool_audit = read_jsonl(Path(status["run_dir"]) / "tool_audit.jsonl")
-    assert "browser_click_intent" in [row["tool_name"] for row in tool_audit]
+    assert "browser_click" in [row["tool_name"] for row in tool_audit]
 
 
 def test_auto_explore_invalid_action_fails_safely(api_client) -> None:

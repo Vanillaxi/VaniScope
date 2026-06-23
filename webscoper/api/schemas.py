@@ -20,8 +20,15 @@ from webscoper.runtime.inspector.schemas import (
 PlannerMode = Literal["deterministic", "fake", "fake_llm", "llm", "real_llm"]
 ReviewerMode = Literal["deterministic", "fake_llm", "real_llm"]
 TaskStatus = Literal[
+    "created",
     "running",
+    "waiting_for_approval",
+    "paused",
+    "cancel_requested",
+    "canceled",
+    "stop_requested",
     "succeeded",
+    "succeeded_partial",
     "failed",
     "requires_approval",
     "resuming",
@@ -65,7 +72,12 @@ class TaskCreateResponse(BaseModel):
     task_id: str
     status: Literal[
         "running",
+        "waiting_for_approval",
+        "paused",
+        "canceled",
+        "stopped",
         "succeeded",
+        "succeeded_partial",
         "failed",
         "requires_approval",
         "resuming",
@@ -111,6 +123,15 @@ class ApprovalDecisionRequest(BaseModel):
     approved: bool
     decided_by: str = "local_user"
     reason: str | None = None
+    option: str | None = None
+
+
+class TaskControlResponse(BaseModel):
+    task_id: str
+    status: str
+    requested_action: str
+    message: str
+    artifacts: list[str] = Field(default_factory=list)
 
 
 class ApprovalDecisionResponse(BaseModel):

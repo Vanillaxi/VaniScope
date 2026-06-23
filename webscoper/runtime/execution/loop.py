@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from webscoper.runtime.execution.context import WebAgentContext
+from webscoper.runtime.control import TaskControlStore
 from webscoper.runtime.execution.events import TaskEventSink
 from webscoper.runtime.execution.results import merge_final_output, record_evidence
 from webscoper.runtime.execution.tool_executor import LocalToolExecutor
@@ -15,10 +16,12 @@ class AgentExecutionLoop:
         tool_executor: LocalToolExecutor,
         event_sink: TaskEventSink | None = None,
         approval_override_id: str | None = None,
+        control_store: TaskControlStore | None = None,
     ) -> None:
         self.tool_executor = tool_executor
         self.event_sink = event_sink
         self.approval_override_id = approval_override_id
+        self.control_store = control_store
 
     async def run(
         self,
@@ -34,6 +37,10 @@ class AgentExecutionLoop:
         final_output: dict = {}
 
         for index, step in enumerate(plan.steps, start=1):
+            control_result = self._check_control(context, "before_tool_call")
+            if control_result is not None:
+                transcript.append("execution_loop_interrupted", control_result.model_dump(mode="json"))
+                return control_result
             if index > context.task.budget.max_steps:
                 result = ExecutionLoopResult(
                     task_id=context.task.task_id,
@@ -71,6 +78,10 @@ class AgentExecutionLoop:
                 context.snapshot(),
                 approval_override_id=self.approval_override_id,
             )
+            control_result = self._check_control(context, "after_tool_call")
+            if control_result is not None:
+                transcript.append("execution_loop_interrupted", control_result.model_dump(mode="json"))
+                return control_result
             record = ToolExecutionRecord(call=step.tool_call, result=tool_result)
             records.append(record)
             transcript.append(
@@ -188,6 +199,45 @@ class AgentExecutionLoop:
             self.event_sink(kind, message, event_payload)
         except Exception:
             return
+
+    def _check_control(
+        self,
+        context: WebAgentContext,
+        checkpoint: str,
+    ) -> ExecutionLoopResult | None:
+        if self.control_store is None:
+            return None
+        state = self.control_store.get(context.run_id)
+        if state.cancel_requested:
+            context.state.status = "canceled"
+            return ExecutionLoopResult(
+                task_id=context.task.task_id,
+                status="failed",
+                records=[],
+                final_output={},
+                error_type="TASK_CANCELED",
+                error_message=f"Task canceled by user at {checkpoint}.",
+            )
+        if state.pause_requested:
+            context.state.status = "paused"
+            return ExecutionLoopResult(
+                task_id=context.task.task_id,
+                status="failed",
+                records=[],
+                final_output={},
+                error_type="TASK_PAUSED",
+                error_message=f"Task paused by user at {checkpoint}.",
+            )
+        if state.stop_requested:
+            return ExecutionLoopResult(
+                task_id=context.task.task_id,
+                status="failed",
+                records=[],
+                final_output={},
+                error_type="TASK_STOP_AND_SUMMARIZE",
+                error_message=f"Task stop-and-summarize requested at {checkpoint}.",
+            )
+        return None
 
 
 def _merge_final_output(final_output: dict, output: dict) -> None:

@@ -18,6 +18,8 @@ TERMINAL_EVENT_KINDS = {
     "task_failed",
     "task_blocked",
     "task_rejected",
+    "task_canceled",
+    "partial_report_generated",
     "resume_failed",
 }
 

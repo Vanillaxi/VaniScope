@@ -48,6 +48,10 @@ class RuntimeGraphBuilder:
             order += 1
             rows.append((_timestamp(record, "timestamp", "created_at"), order, _llm_node(record, order)))
 
+        for record in artifacts["budget_decisions"]:
+            order += 1
+            rows.append((_timestamp(record, "timestamp", "created_at"), order, _budget_node(record, order)))
+
         for record in artifacts["tool_audit"]:
             order += 1
             rows.append((_timestamp(record, "timestamp", "created_at"), order, _tool_node(record, order)))
@@ -120,6 +124,7 @@ def _load_artifacts(loader: RunArtifactLoader) -> dict[str, Any]:
         "trace": loader.read_jsonl("trace.jsonl"),
         "tool_audit": loader.read_jsonl("tool_audit.jsonl"),
         "llm_calls": loader.read_jsonl("llm_calls.jsonl"),
+        "budget_decisions": loader.read_jsonl("budget_decisions.jsonl"),
         "recovery": loader.read_jsonl("recovery.jsonl"),
         "approvals": loader.read_jsonl("approvals.jsonl"),
         "evidence": loader.read_jsonl("evidence.jsonl"),
@@ -161,6 +166,30 @@ def _llm_node(record: dict[str, Any], order: int) -> RuntimeGraphNode:
         duration_ms=_duration_ms(record),
         summary=f"{provider} / {model}",
         metadata={"source": "llm_calls.jsonl", "raw": record},
+    )
+
+
+def _budget_node(record: dict[str, Any], order: int) -> RuntimeGraphNode:
+    decision = _string(record.get("decision")) or "checked"
+    label = {
+        "allowed": "Budget Check",
+        "warning": "Budget Warning",
+        "compaction_required": "Budget Check",
+        "approval_required": "Budget Approval",
+        "hard_limit_exceeded": "Budget Check",
+        "denied": "Budget Check",
+    }.get(decision, f"Budget: {_title(decision)}")
+    return RuntimeGraphNode(
+        id=_node_id("budget", record, order, preferred=f"{decision}_{order}"),
+        type="budget",
+        label=label,
+        status="blocked" if decision in {"approval_required", "hard_limit_exceeded"} else "success",
+        timestamp=_timestamp(record, "timestamp", "created_at"),
+        summary=(
+            f"{record.get('estimated_prompt_tokens')} prompt tokens; "
+            f"threshold {record.get('approval_threshold')}"
+        ),
+        metadata={"source": "budget_decisions.jsonl", "raw": record},
     )
 
 
@@ -329,8 +358,12 @@ def _dedupe_edges(edges: list[RuntimeGraphEdge]) -> list[RuntimeGraphEdge]:
 
 
 def _node_type_for_kind(kind: str) -> str:
-    if kind in {"task_created", "task_started", "task_succeeded", "task_finished", "task_failed", "task_blocked"}:
+    if kind in {"task_created", "task_started", "task_succeeded", "task_finished", "task_failed", "task_blocked", "task_canceled"}:
         return "task"
+    if kind.startswith("budget_"):
+        return "budget"
+    if kind.startswith("user_") or kind in {"task_paused", "task_resumed"}:
+        return "control"
     if kind.startswith("workflow_"):
         return "workflow"
     if kind.startswith("planner_"):
@@ -376,14 +409,27 @@ def _status_for_event(kind: str, payload: dict[str, Any]) -> str:
         return "running"
     if kind.endswith("_failed") or kind in {"task_failed", "llm_action_rejected"}:
         return "failed"
-    if kind in {"approval_required", "task_paused", "task_blocked"}:
+    if kind in {"approval_required", "task_paused", "task_blocked", "budget_approval_required"}:
         return "blocked"
-    if kind.endswith("_finished") or kind.endswith("_succeeded") or kind in {"task_succeeded", "report_generated", "report_written", "evidence_added"}:
+    if kind.endswith("_finished") or kind.endswith("_succeeded") or kind in {"task_succeeded", "report_generated", "report_written", "evidence_added", "partial_report_generated", "task_resumed"}:
         return "success"
     return "success"
 
 
 def _label_for_kind(kind: str, payload: dict[str, Any]) -> str:
+    friendly = {
+        "budget_checked": "Budget Check",
+        "budget_warning": "Budget Warning",
+        "budget_approval_required": "Budget Approval",
+        "user_pause_requested": "User Pause",
+        "user_resume_requested": "User Resume",
+        "user_stop_requested": "User Stop",
+        "user_cancel_requested": "User Cancel",
+        "partial_report_started": "Partial Report",
+        "partial_report_generated": "Partial Report",
+    }
+    if kind in friendly:
+        return friendly[kind]
     tool_name = _string(payload.get("tool_name"))
     if tool_name and kind.startswith("tool_"):
         return f"{_title(kind)}: {tool_name}"

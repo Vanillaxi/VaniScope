@@ -8,7 +8,16 @@ from webscoper.schemas.task import TaskSpec
 from webscoper.workflows.state import VaniScopeGraphState
 
 
-TERMINAL_GRAPH_STATUSES = {"failed", "blocked", "requires_approval"}
+TERMINAL_GRAPH_STATUSES = {
+    "failed",
+    "blocked",
+    "requires_approval",
+    "waiting_for_approval",
+    "paused",
+    "canceled",
+    "rejected",
+    "succeeded_partial",
+}
 
 
 def coerce_task(request: Any) -> TaskSpec:

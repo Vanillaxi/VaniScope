@@ -4,7 +4,11 @@ import json
 from typing import Any, Callable
 
 from webscoper.runtime.execution.context import WebAgentContext
-from webscoper.runtime.execution.handler import WebAgentRuntimeComponents
+from webscoper.runtime.execution.handler import (
+    TaskControlInterrupted,
+    WebAgentRuntimeComponents,
+)
+from webscoper.runtime.llm.budget import BudgetApprovalRequired, BudgetHardLimitExceeded
 from webscoper.runtime.llm.auto_explore import (
     AutoExploreActionPlanner,
     decision_to_tool_call,
@@ -116,6 +120,7 @@ class LangGraphWorkflowNodes:
 
     def _do_build_prompt(self, state: VaniScopeGraphState) -> VaniScopeGraphState:
         context = self.workflow.require_context()
+        self.workflow.handler.check_control_state(context, "before_prompt_build")
         self.workflow.prompt_result = self.workflow.handler.build_prompt(context)
         state["prompt_markdown"] = self.workflow.prompt_result.prompt_text
         state["prompt_context"] = self.workflow.prompt_result.model_dump(mode="json")
@@ -134,9 +139,27 @@ class LangGraphWorkflowNodes:
         context = self.workflow.require_context()
         if self.workflow.prompt_result is None:
             raise RuntimeError("Prompt result missing before plan_task.")
-        self.workflow.plan = self.workflow.run_async(
-            self.workflow.handler.plan_task(context, self.workflow.prompt_result)
-        )
+        self.workflow.handler.check_control_state(context, "before_llm_call")
+        try:
+            self.workflow.plan = self.workflow.run_async(
+                self.workflow.handler.plan_task(context, self.workflow.prompt_result)
+            )
+        except BudgetApprovalRequired as exc:
+            _mark_budget_approval_waiting(self.workflow, context, exc)
+            state["status"] = "waiting_for_approval"
+            state["error"] = str(exc)
+            return state
+        except BudgetHardLimitExceeded as exc:
+            self.workflow.handler.generate_partial_report(
+                context,
+                self.workflow.require_runtime().browser_runtime.last_observation,
+                str(exc),
+                status="succeeded_partial",
+            )
+            state["status"] = "succeeded_partial"
+            state["error"] = None
+            return state
+        self.workflow.handler.check_control_state(context, "after_llm_call")
         state["plan"] = self.workflow.plan.model_dump(mode="json")
         return state
 
@@ -147,6 +170,7 @@ class LangGraphWorkflowNodes:
         context = self.workflow.require_context()
         if self.workflow.plan is None:
             raise RuntimeError("Plan missing before validate_plan.")
+        self.workflow.handler.check_control_state(context, "before_tool_call")
         try:
             result = self.workflow.handler.validate_plan(
                 context,
@@ -218,6 +242,7 @@ class LangGraphWorkflowNodes:
         final_output: dict[str, Any] = {}
 
         for index, step in enumerate(plan.steps, start=1):
+            self.workflow.handler.check_control_state(context, "before_tool_call")
             if index > context.task.budget.max_steps:
                 loop_result = ExecutionLoopResult(
                     task_id=context.task.task_id,
@@ -262,6 +287,11 @@ class LangGraphWorkflowNodes:
                 workflow_backend="langgraph",
             )
             gateway_result = await runtime.tool_gateway.invoke(gateway_request)
+            self.workflow.handler.check_control_state(
+                context,
+                "after_tool_call",
+                observation=runtime.browser_runtime.last_observation,
+            )
             if gateway_result.status == "approval_required":
                 payload = self.workflow.approval_bridge.create_interrupt_payload(
                     task_id=context.run_id,
@@ -347,6 +377,11 @@ class LangGraphWorkflowNodes:
                     update={"approval_override_id": approval_override_id}
                 )
                 gateway_result = await runtime.tool_gateway.invoke(resumed_request)
+                self.workflow.handler.check_control_state(
+                    context,
+                    "after_tool_call",
+                    observation=runtime.browser_runtime.last_observation,
+                )
 
             tool_result = _tool_result_from_gateway(gateway_result)
             if approval_override_id is not None:
@@ -514,7 +549,13 @@ class LangGraphWorkflowNodes:
         history: list[dict[str, Any]] = []
 
         for step in seed_plan.steps:
+            self.workflow.handler.check_control_state(context, "before_tool_call")
             tool_result = await self._invoke_auto_tool(context, runtime, step.tool_call)
+            self.workflow.handler.check_control_state(
+                context,
+                "after_tool_call",
+                observation=runtime.browser_runtime.last_observation,
+            )
             record = ToolExecutionRecord(call=step.tool_call, result=tool_result)
             records.append(record)
             history.append(_history_item(step.tool_call, tool_result))
@@ -543,6 +584,11 @@ class LangGraphWorkflowNodes:
 
         for step_index in range(len(records) + 1, context.task.budget.max_steps + 1):
             try:
+                self.workflow.handler.check_control_state(
+                    context,
+                    "before_llm_call",
+                    observation=runtime.browser_runtime.last_observation,
+                )
                 self.workflow.handler._emit_event(
                     "llm_call_started",
                     "LLM call started",
@@ -577,6 +623,22 @@ class LangGraphWorkflowNodes:
                         else {},
                     },
                 )
+                self.workflow.handler.check_control_state(
+                    context,
+                    "after_llm_call",
+                    observation=runtime.browser_runtime.last_observation,
+                )
+            except BudgetApprovalRequired as exc:
+                _mark_budget_approval_waiting(self.workflow, context, exc)
+                return runtime.browser_runtime.last_observation or _empty_auto_observation(context)
+            except BudgetHardLimitExceeded as exc:
+                self.workflow.handler.generate_partial_report(
+                    context,
+                    runtime.browser_runtime.last_observation,
+                    str(exc),
+                    status="succeeded_partial",
+                )
+                return runtime.browser_runtime.last_observation or _empty_auto_observation(context)
             except RuntimeError as exc:
                 validation_artifact_path = self._write_action_validation_artifact(
                     context, planner
@@ -694,7 +756,17 @@ class LangGraphWorkflowNodes:
                     f"{exc} validation_artifact_path={validation_artifact_path}",
                 )
 
+            self.workflow.handler.check_control_state(
+                context,
+                "before_tool_call",
+                observation=runtime.browser_runtime.last_observation,
+            )
             tool_result = await self._invoke_auto_tool(context, runtime, tool_call)
+            self.workflow.handler.check_control_state(
+                context,
+                "after_tool_call",
+                observation=runtime.browser_runtime.last_observation,
+            )
             record = ToolExecutionRecord(call=tool_call, result=tool_result)
             records.append(record)
             history.append(_history_item(tool_call, tool_result))
@@ -849,6 +921,11 @@ class LangGraphWorkflowNodes:
         runtime: WebAgentRuntimeComponents,
         tool_call: ToolCall,
     ) -> ToolResult:
+        self.workflow.handler.check_control_state(
+            context,
+            "before_browser_action",
+            observation=runtime.browser_runtime.last_observation,
+        )
         context.transcript_store.append(
             "tool_call_started",
             {"call": tool_call.model_dump(mode="json")},
@@ -874,6 +951,11 @@ class LangGraphWorkflowNodes:
             )
         )
         tool_result = _tool_result_from_gateway(gateway_result)
+        self.workflow.handler.check_control_state(
+            context,
+            "after_browser_action",
+            observation=runtime.browser_runtime.last_observation,
+        )
         record = ToolExecutionRecord(call=tool_call, result=tool_result)
         context.transcript_store.append(
             "tool_call_completed",
@@ -948,6 +1030,11 @@ class LangGraphWorkflowNodes:
             raise RuntimeError("Final observation missing before build_report.")
         context.state.status = "completed"
         context.state.current_step = 5
+        self.workflow.handler.check_control_state(
+            context,
+            "before_report_generation",
+            observation=self.workflow.final_observation,
+        )
         self.workflow.evidence_items, self.workflow.report_text = (
             self.workflow.handler.build_final_report(
                 context,
@@ -1060,6 +1147,19 @@ class LangGraphWorkflowNodes:
                 )
         except graph_interrupt_type():
             raise
+        except TaskControlInterrupted as exc:
+            if self.workflow.context is not None:
+                next_state["status"] = self.workflow.context.state.status
+                next_state["error"] = self.workflow.context.state.error_message
+            else:
+                next_state["status"] = "failed"
+                next_state["error"] = str(exc)
+            self.workflow.event_emitter.emit_node_finished(
+                next_state,
+                node_name,
+                status=next_state.get("status"),
+                error=next_state.get("error"),
+            )
         except Exception as exc:
             existing_error_type = (
                 self.workflow.context.state.error_type
@@ -1097,6 +1197,41 @@ def _require_last_observation(
     if observation is None:
         raise RuntimeError("Execution stopped without a page observation.")
     return observation
+
+
+def _empty_auto_observation(context: WebAgentContext) -> PageObservation:
+    return PageObservation(
+        url=context.task.target_url,
+        title="Task interrupted",
+        visible_text_summary="Task ended at a cooperative control checkpoint.",
+        interactive_elements=[],
+        risk_signals=[],
+    )
+
+
+def _mark_budget_approval_waiting(
+    workflow: Any,
+    context: WebAgentContext,
+    exc: BudgetApprovalRequired,
+) -> None:
+    context.state.status = "waiting_for_approval"
+    context.state.error_type = "LLM_BUDGET_APPROVAL_REQUIRED"
+    context.state.error_message = str(exc)
+    context.transcript_store.append(
+        "budget_approval_required",
+        {"approval_id": exc.approval_id, "state": state_payload(context)},
+    )
+    context.transcript_store.append("task_paused", state_payload(context))
+    workflow.handler._emit_event(
+        "task_paused",
+        "Task paused for LLM budget approval",
+        {
+            "run_id": context.run_id,
+            "status": "waiting_for_approval",
+            "approval_id": exc.approval_id,
+        },
+    )
+    workflow.handler.snapshot_context(context)
 
 
 def _gateway_request(

@@ -24,7 +24,19 @@ class TaskState:
 def status_from_context_state(state: str) -> str:
     if state == "completed":
         return "succeeded"
-    if state in {"requires_approval", "resuming", "blocked", "rejected", "failed"}:
+    if state in {
+        "requires_approval",
+        "waiting_for_approval",
+        "resuming",
+        "blocked",
+        "rejected",
+        "failed",
+        "paused",
+        "cancel_requested",
+        "canceled",
+        "stop_requested",
+        "succeeded_partial",
+    }:
         return state
     return "succeeded"
 
@@ -43,7 +55,13 @@ def status_from_transcript(run_dir: Path) -> tuple[str, str | None]:
             continue
         event_type = event.get("event_type")
         if event_type == "execution_completed":
-            status = "succeeded"
+            payload = event.get("payload")
+            state_status = None
+            if isinstance(payload, dict):
+                state_payload = payload.get("state")
+                if isinstance(state_payload, dict):
+                    state_status = state_payload.get("status")
+            status = "succeeded_partial" if state_status == "succeeded_partial" else "succeeded"
             error = None
         elif event_type == "execution_failed":
             status = "failed"
@@ -55,8 +73,21 @@ def status_from_transcript(run_dir: Path) -> tuple[str, str | None]:
                     state_status = state_payload.get("status")
                     if state_status in {
                         "requires_approval",
+                        "waiting_for_approval",
                         "blocked",
                         "rejected",
+                        "paused",
+                        "canceled",
+                        "succeeded_partial",
                     }:
                         status = state_status
+        elif event_type == "partial_report_generated":
+            status = "succeeded_partial"
+            error = None
+        elif event_type == "task_canceled":
+            status = "canceled"
+            error = "Task canceled by user."
+        elif event_type == "task_paused":
+            status = "paused"
+            error = None
     return status, error

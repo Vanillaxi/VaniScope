@@ -5,12 +5,25 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
+from webscoper.runtime.control import TaskControlStore
 from webscoper.runtime.llm.client import BaseLLMClient, FakeLLMClient, OpenAICompatibleLLMClient
+from webscoper.runtime.llm.budget import (
+    BudgetApprovalRequired,
+    BudgetHardLimitExceeded,
+    append_budget_decision,
+    build_estimate,
+    compact_llm_messages,
+    decide_budget,
+    emit_budget_checked,
+    maybe_create_budget_approval,
+)
 from webscoper.runtime.llm.config import (
     load_llm_router_config,
     provider_config_to_client_config,
     resolve_llm_provider_config,
 )
+from webscoper.runtime.execution.events import TaskEventSink
+from webscoper.runtime.safety.approvals import ApprovalStore
 from webscoper.schemas.llm import LLMRequest, LLMResponse
 from webscoper.schemas.runtime import BudgetContext
 
@@ -29,6 +42,10 @@ class LLMProviderRouter:
         task_id: str | None = None,
         purpose: str = "planner",
         budget: BudgetContext | None = None,
+        event_sink: TaskEventSink | None = None,
+        approval_store: ApprovalStore | None = None,
+        control_store: TaskControlStore | None = None,
+        user_goal: str | None = None,
     ) -> BaseLLMClient:
         provider = resolve_llm_provider_config(
             self.router_config,
@@ -46,6 +63,10 @@ class LLMProviderRouter:
                 task_id=task_id,
                 purpose=purpose,
                 budget=_budget_from_config(self.router_config.budget, budget),
+                event_sink=event_sink,
+                approval_store=approval_store,
+                control_store=control_store,
+                user_goal=user_goal,
             )
         if provider.provider_type == "openai_compatible":
             client = OpenAICompatibleLLMClient(provider_config_to_client_config(provider))
@@ -58,6 +79,10 @@ class LLMProviderRouter:
                 task_id=task_id,
                 purpose=purpose,
                 budget=_budget_from_config(self.router_config.budget, budget),
+                event_sink=event_sink,
+                approval_store=approval_store,
+                control_store=control_store,
+                user_goal=user_goal,
             )
         raise ValueError(
             f"Unsupported LLM provider_type for {provider.provider_id}: "
@@ -77,6 +102,10 @@ class AuditedBudgetedLLMClient(BaseLLMClient):
         task_id: str | None,
         purpose: str,
         budget: BudgetContext,
+        event_sink: TaskEventSink | None = None,
+        approval_store: ApprovalStore | None = None,
+        control_store: TaskControlStore | None = None,
+        user_goal: str | None = None,
     ) -> None:
         self.client = client
         self.provider = provider
@@ -87,14 +116,166 @@ class AuditedBudgetedLLMClient(BaseLLMClient):
         self.purpose = purpose
         self.budget = budget
         self.calls_made = _existing_call_count(audit_path)
-        self.total_tokens = _existing_token_total(audit_path)
+        prompt_total, completion_total = _existing_token_totals(audit_path)
+        self.prompt_tokens_total = prompt_total
+        self.completion_tokens_total = completion_total
+        self.total_tokens = prompt_total + completion_total
+        self.event_sink = event_sink
+        self.approval_store = approval_store
+        self.control_store = control_store
+        self.user_goal = user_goal
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
+        if (
+            self.approval_store is None
+            and self.event_sink is None
+            and self.control_store is None
+            and _legacy_prompt_budget_exceeded(self.budget, request)
+        ):
+            prompt_tokens = _estimate_request_tokens(request)
+            call_id = f"{self.purpose}_{self.calls_made + 1:04d}"
+            self._write_audit(
+                call_id=call_id,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=0,
+                duration_ms=0,
+                status="skipped",
+                error_type="LLM_BUDGET_EXCEEDED",
+                budget_decision="max_prompt_tokens_exceeded",
+                response_preview=None,
+            )
+            raise RuntimeError("LLM budget exceeded: max_prompt_tokens_exceeded")
+
         prompt_tokens = _estimate_request_tokens(request)
-        budget_decision = self._budget_decision(prompt_tokens)
+        request = request.model_copy(
+            update={"max_tokens": min(request.max_tokens, self.budget.max_completion_tokens_per_call)}
+        )
+        estimate = self._estimate(prompt_tokens, request.max_tokens)
+        control = self.control_store.get(self.task_id) if self.control_store else None
+        budget_decision = decide_budget(
+            self.budget,
+            estimate,
+            continue_for_task=bool(control and control.continue_for_task),
+        )
+        compaction_applied = False
+        if control and control.aggressive_compaction_requested:
+            self._emit(
+                "budget_compaction_started",
+                "Prompt compaction started",
+                {"run_id": self.task_id, "purpose": self.purpose, "mode": "aggressive"},
+            )
+            request = request.model_copy(
+                update={
+                    "messages": compact_llm_messages(
+                        request.messages,
+                        max_prompt_tokens=max(1, self.budget.max_prompt_tokens_per_call // 2),
+                    )
+                }
+            )
+            prompt_tokens = _estimate_request_tokens(request)
+            estimate = self._estimate(prompt_tokens, request.max_tokens)
+            compaction_applied = True
+            budget_decision = decide_budget(
+                self.budget,
+                estimate,
+                continue_for_task=bool(control and control.continue_for_task),
+                per_call_compacted=True,
+            )
+            self._emit(
+                "budget_compaction_finished",
+                "Prompt compaction finished",
+                {
+                    "run_id": self.task_id,
+                    "purpose": self.purpose,
+                    "estimated_prompt_tokens": prompt_tokens,
+                    "decision": budget_decision,
+                    "mode": "aggressive",
+                },
+            )
+        elif budget_decision == "compaction_required":
+            self._emit(
+                "budget_compaction_started",
+                "Prompt compaction started",
+                {"run_id": self.task_id, "purpose": self.purpose},
+            )
+            request = request.model_copy(
+                update={
+                    "messages": compact_llm_messages(
+                        request.messages,
+                        max_prompt_tokens=max(1, self.budget.max_prompt_tokens_per_call - 256),
+                    )
+                }
+            )
+            prompt_tokens = _estimate_request_tokens(request)
+            estimate = self._estimate(prompt_tokens, request.max_tokens)
+            compaction_applied = True
+            budget_decision = decide_budget(
+                self.budget,
+                estimate,
+                continue_for_task=bool(control and control.continue_for_task),
+                per_call_compacted=True,
+            )
+            self._emit(
+                "budget_compaction_finished",
+                "Prompt compaction finished",
+                {
+                    "run_id": self.task_id,
+                    "purpose": self.purpose,
+                    "estimated_prompt_tokens": prompt_tokens,
+                    "decision": budget_decision,
+                },
+            )
+
+        append_budget_decision(
+            self.audit_path.parent if self.audit_path is not None else None,
+            task_id=self.task_id,
+            decision=budget_decision,
+            provider=self.provider,
+            model=self.model,
+            purpose=self.purpose,
+            budget=self.budget,
+            estimate=estimate,
+            compaction_applied=compaction_applied,
+        )
+        emit_budget_checked(
+            self.event_sink,
+            task_id=self.task_id,
+            decision=budget_decision,
+            provider=self.provider,
+            model=self.model,
+            budget=self.budget,
+            estimate=estimate,
+            compaction_applied=compaction_applied,
+        )
         started = perf_counter()
         call_id = f"{self.purpose}_{self.calls_made + 1:04d}"
-        if budget_decision != "allowed":
+        if budget_decision == "warning":
+            self._emit(
+                "budget_warning",
+                "LLM budget soft threshold exceeded",
+                {
+                    "run_id": self.task_id,
+                    "purpose": self.purpose,
+                    "prompt_tokens_so_far": estimate.prompt_tokens_so_far,
+                    "estimated_prompt_tokens_next_call": estimate.prompt_tokens_next_call,
+                },
+            )
+        elif budget_decision == "approval_required" and not (
+            control and (control.budget_override or control.continue_for_task)
+        ):
+            approval_id = maybe_create_budget_approval(
+                approval_store=self.approval_store,
+                control_store=self.control_store,
+                event_sink=self.event_sink,
+                task_id=self.task_id,
+                run_dir=self.audit_path.parent if self.audit_path is not None else None,
+                provider=self.provider,
+                model=self.model,
+                purpose=self.purpose,
+                user_goal=self.user_goal,
+                budget=self.budget,
+                estimate=estimate,
+            )
             self._write_audit(
                 call_id=call_id,
                 prompt_tokens=prompt_tokens,
@@ -105,12 +286,41 @@ class AuditedBudgetedLLMClient(BaseLLMClient):
                 budget_decision=budget_decision,
                 response_preview=None,
             )
+            raise BudgetApprovalRequired(approval_id or "unknown")
+        elif budget_decision in {"hard_limit_exceeded", "denied", "compaction_required"}:
+            self._write_audit(
+                call_id=call_id,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=0,
+                duration_ms=0,
+                status="skipped",
+                error_type="LLM_BUDGET_EXCEEDED",
+                budget_decision=budget_decision,
+                response_preview=None,
+            )
+            if budget_decision == "hard_limit_exceeded":
+                self._emit(
+                    "budget_hard_limit_exceeded",
+                    "Hard LLM context limit exceeded",
+                    {
+                        "run_id": self.task_id,
+                        "purpose": self.purpose,
+                        "estimated_prompt_tokens": prompt_tokens,
+                    },
+                )
+                raise BudgetHardLimitExceeded(
+                    "Hard LLM context limit exceeded; task stopped after saving partial evidence."
+                )
             raise RuntimeError(f"LLM budget exceeded: {budget_decision}")
+        elif control and control.budget_override:
+            self.control_store.clear_transient_flags(self.task_id)
 
         try:
             response = await self.client.generate(request)
             completion_tokens = _estimate_text_tokens(response.content)
             self.calls_made += 1
+            self.prompt_tokens_total += prompt_tokens
+            self.completion_tokens_total += completion_tokens
             self.total_tokens += prompt_tokens + completion_tokens
             self._write_audit(
                 call_id=call_id,
@@ -145,6 +355,28 @@ class AuditedBudgetedLLMClient(BaseLLMClient):
         if self.total_tokens + prompt_tokens > self.budget.max_total_tokens_per_task:
             return "max_total_tokens_per_task_exceeded"
         return "allowed"
+
+    def _estimate(self, prompt_tokens: int, max_completion_tokens: int):
+        return build_estimate(
+            prompt_tokens_next_call=prompt_tokens,
+            max_completion_tokens_next_call=max_completion_tokens,
+            prompt_tokens_so_far=self.prompt_tokens_total,
+            completion_tokens_so_far=self.completion_tokens_total,
+            llm_calls_so_far=self.calls_made,
+        )
+
+    def _emit(
+        self,
+        kind: str,
+        message: str,
+        payload: dict[str, Any],
+    ) -> None:
+        if self.event_sink is None:
+            return
+        try:
+            self.event_sink(kind, message, payload)
+        except Exception:
+            return
 
     def _write_audit(
         self,
@@ -192,6 +424,10 @@ def _wrap_for_audit(
     task_id: str | None,
     purpose: str,
     budget: BudgetContext,
+    event_sink: TaskEventSink | None = None,
+    approval_store: ApprovalStore | None = None,
+    control_store: TaskControlStore | None = None,
+    user_goal: str | None = None,
 ) -> BaseLLMClient:
     audit_path = run_dir / "llm_calls.jsonl" if run_dir is not None else None
     return AuditedBudgetedLLMClient(
@@ -203,6 +439,10 @@ def _wrap_for_audit(
         task_id=task_id,
         purpose=purpose,
         budget=budget,
+        event_sink=event_sink,
+        approval_store=approval_store,
+        control_store=control_store,
+        user_goal=user_goal,
     )
 
 
@@ -237,13 +477,7 @@ def _preview_text(value: str, limit: int = 2000) -> str:
 def _existing_call_count(path: Path | None) -> int:
     if path is None or not path.exists():
         return 0
-    return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
-
-
-def _existing_token_total(path: Path | None) -> int:
-    if path is None or not path.exists():
-        return 0
-    total = 0
+    count = 0
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
@@ -251,9 +485,40 @@ def _existing_token_total(path: Path | None) -> int:
             payload = json.loads(line)
         except json.JSONDecodeError:
             continue
-        total += int(payload.get("prompt_tokens_estimated") or 0)
-        total += int(payload.get("completion_tokens_estimated") or 0)
-    return total
+        if payload.get("status") != "skipped":
+            count += 1
+    return count
+
+
+def _existing_token_total(path: Path | None) -> int:
+    prompt, completion = _existing_token_totals(path)
+    return prompt + completion
+
+
+def _existing_token_totals(path: Path | None) -> tuple[int, int]:
+    if path is None or not path.exists():
+        return 0, 0
+    prompt_total = 0
+    completion_total = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if payload.get("status") == "skipped":
+            continue
+        prompt_total += int(payload.get("prompt_tokens_estimated") or 0)
+        completion_total += int(payload.get("completion_tokens_estimated") or 0)
+    return prompt_total, completion_total
+
+
+def _legacy_prompt_budget_exceeded(budget: BudgetContext, request: LLMRequest) -> bool:
+    fields_set = getattr(budget, "model_fields_set", set())
+    if "max_prompt_tokens" not in fields_set or "max_prompt_tokens_per_call" in fields_set:
+        return False
+    return _estimate_request_tokens(request) > budget.max_prompt_tokens
 
 
 def _utc_now() -> str:

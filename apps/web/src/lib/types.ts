@@ -6,8 +6,15 @@ export type SkillId = "auto" | "docs_research" | "github_issue_research";
 export type TaskLanguage = "auto" | "zh" | "en";
 
 export type TaskStatus =
+  | "created"
   | "running"
+  | "waiting_for_approval"
+  | "paused"
+  | "cancel_requested"
+  | "canceled"
+  | "stop_requested"
   | "succeeded"
+  | "succeeded_partial"
   | "failed"
   | "requires_approval"
   | "resuming"
@@ -106,11 +113,20 @@ export type ApprovalDecisionRequest = {
   approved: boolean;
   decided_by?: string;
   reason?: string;
+  option?: string;
 };
 
 export type ApprovalDecisionResponse = {
   approval: ApprovalRequest;
   resume_result?: unknown;
+};
+
+export type TaskControlResponse = {
+  task_id: string;
+  status: string;
+  requested_action: string;
+  message: string;
+  artifacts: string[];
 };
 
 export type TaskEvent = {

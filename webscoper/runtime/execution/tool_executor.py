@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from webscoper.runtime.control import TaskControlStore
 from webscoper.runtime.safety.approvals import ApprovalStore
 from webscoper.browser.public_web import PublicWebPolicyError
 from webscoper.runtime.execution.events import TaskEventSink
@@ -26,6 +27,7 @@ class LocalToolExecutor:
         approval_store: ApprovalStore | None = None,
         pending_manager: PendingApprovalManager | None = None,
         event_sink: TaskEventSink | None = None,
+        control_store: TaskControlStore | None = None,
     ) -> None:
         self.tool_registry = tool_registry
         self.browser_runtime = browser_runtime
@@ -33,6 +35,7 @@ class LocalToolExecutor:
         self.approval_store = approval_store or ApprovalStore()
         self.pending_manager = pending_manager or PendingApprovalManager()
         self.event_sink = event_sink
+        self.control_store = control_store
 
     async def execute(
         self,
@@ -41,6 +44,9 @@ class LocalToolExecutor:
         approval_override_id: str | None = None,
     ) -> ToolResult:
         started_at = _utc_now()
+        control_result = self._control_result(call, context, started_at, "before_browser_action")
+        if control_result is not None:
+            return control_result
         tool = self.tool_registry.get(call.tool_id)
         if tool is None:
             return _result(
@@ -92,6 +98,14 @@ class LocalToolExecutor:
 
         try:
             output = await self._execute_local(call)
+            control_result = self._control_result(
+                call,
+                context,
+                started_at,
+                "after_browser_action",
+            )
+            if control_result is not None:
+                return control_result
             status = str(output.get("status", "success"))
             return _result(
                 call,
@@ -230,6 +244,42 @@ class LocalToolExecutor:
             "error_type": "UNSUPPORTED_LOCAL_TOOL",
             "error_message": f"Unsupported local tool: {call.tool_id}",
         }
+
+    def _control_result(
+        self,
+        call: ToolCall,
+        context: WebAgentContextSnapshot,
+        started_at: str,
+        checkpoint: str,
+    ) -> ToolResult | None:
+        if self.control_store is None:
+            return None
+        state = self.control_store.get(context.trace.run_id)
+        if state.cancel_requested:
+            return _result(
+                call,
+                started_at,
+                status="failed",
+                error_type="TASK_CANCELED",
+                error_message=f"Task canceled by user at {checkpoint}.",
+            )
+        if state.pause_requested:
+            return _result(
+                call,
+                started_at,
+                status="failed",
+                error_type="TASK_PAUSED",
+                error_message=f"Task paused by user at {checkpoint}.",
+            )
+        if state.stop_requested:
+            return _result(
+                call,
+                started_at,
+                status="failed",
+                error_type="TASK_STOP_AND_SUMMARIZE",
+                error_message=f"Task stop-and-summarize requested at {checkpoint}.",
+            )
+        return None
 
     def _risk_result(
         self,

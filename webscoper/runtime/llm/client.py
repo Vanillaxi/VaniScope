@@ -136,7 +136,7 @@ def _fake_auto_explore_response(request: LLMRequest) -> LLMResponse:
         }
     elif (
         ("click" in goal or "repositories" in goal or "仓库" in goal)
-        and "browser_click_intent" not in action_types
+        and not {"browser_click", "browser_click_intent"}.intersection(action_types)
     ):
         target = "Repositories" if "repositories" in goal or "仓库" in goal else "Quickstart"
         payload = {

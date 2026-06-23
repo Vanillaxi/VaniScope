@@ -315,7 +315,25 @@ timeout_seconds = 30
 
 Public web mode and real LLM mode are independent switches: enabling one does not enable the other. Real public exploration needs both `configs/runtime.local.toml` public web access and `configs/llm.local.toml` with `router.mode = "real"`.
 
-LLM calls go through budget control and are written to `llm_calls.jsonl`. API keys are never written into artifacts, diagnostics, or smoke summaries. Action validation failures are written to `action_validation.json`.
+LLM calls go through Budget Gate v2 and are written to `llm_calls.jsonl`, `prompt_budget_estimate.json`, and `budget_decisions.jsonl`. API keys are never written into artifacts, diagnostics, or smoke summaries. Action validation failures are written to `action_validation.json`.
+
+Budget control is layered instead of a simple hard fail:
+
+* soft token/cost limits emit `budget_warning` and the task continues;
+* approval token/cost limits create a Human-in-the-loop `llm_budget` approval and pause the task as `waiting_for_approval`;
+* users may choose continue once, continue for the task, continue with compaction, stop and summarize, or cancel;
+* provider context and hard task limits still must be respected through compaction, reduced context, or a partial report.
+
+The user control plane is available from the console and API:
+
+```text
+POST /tasks/{task_id}/pause
+POST /tasks/{task_id}/resume
+POST /tasks/{task_id}/cancel
+POST /tasks/{task_id}/stop-and-summarize
+```
+
+Pause, cancel, and stop requests are cooperative. The runner checks them at safe checkpoints before and after LLM calls, tool calls, browser actions, recovery, and report generation. `stop-and-summarize` writes a partial report from collected evidence; if no evidence exists, it writes a minimal report explaining that the task stopped before enough evidence was collected.
 
 Manual real LLM smoke is opt-in and not part of pytest or CI:
 
@@ -374,8 +392,10 @@ Demo flow:
 4. Click the `browser_open` / `browser_open_observe` node. Show before/after URL, duration, screenshot evidence, readiness confidence, and signals such as DOM complete, skeleton/spinner/overlay absent, layout stability, and soft network quiet.
 5. Click the LLM node. Show provider/model, proposed action, validation result, and whether repair was attempted. Confirm that API keys are not present in the payload.
 6. Click `Evidence`. Show page screenshot evidence, text evidence, source URL, page title, and evidence ids used by the report.
-7. Open `Report`. Explain that the final answer is built from `evidence.jsonl`, not from a hidden browser state.
-8. If the task fails, switch back to `Graph` or `Timeline` and inspect recovery, failure screenshot, error node, and related trace payload.
+7. During a running task, click `Stop and summarize`. Show the status moving through `stop_requested` to `succeeded_partial`, then open the partial report generated from current evidence.
+8. Open `Graph` and show `User Stop -> Partial Report`. If budget approval appears, show the `Budget Approval` node and the Human-in-the-loop card.
+9. Open `Report`. Explain that the final or partial answer is built from `evidence.jsonl`, not from a hidden browser state.
+10. If the task fails, switch back to `Graph` or `Timeline` and inspect recovery, failure screenshot, error node, and related trace payload.
 
 ## Tests and Eval
 

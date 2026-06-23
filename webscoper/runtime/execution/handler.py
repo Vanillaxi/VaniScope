@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from webscoper.runtime.control import TaskControlStore
 from webscoper.runtime.prompt.agents_md import AgentsMdLoader
 from webscoper.runtime.safety.approvals import ApprovalStore
 from webscoper.runtime.artifacts.pipeline import (
@@ -33,6 +34,7 @@ from webscoper.runtime.llm.client import (
     BaseLLMClient,
 )
 from webscoper.runtime.llm.config import load_llm_router_config
+from webscoper.runtime.llm.budget import BudgetApprovalRequired, BudgetHardLimitExceeded
 from webscoper.runtime.llm.planner import LLMTaskPlanner
 from webscoper.runtime.llm.reviewer import (
     BaseLLMReportReviewer,
@@ -98,6 +100,7 @@ class WebAgentExecutionHandler:
         risk_gate: RiskGate | None = None,
         approval_store: ApprovalStore | None = None,
         pending_manager: PendingApprovalManager | None = None,
+        control_store: TaskControlStore | None = None,
         reviewer_mode: str = "deterministic",
         revise_attempts: int = 0,
         dry_run: bool = False,
@@ -122,6 +125,7 @@ class WebAgentExecutionHandler:
         self.risk_gate = risk_gate or RiskGate()
         self.approval_store = approval_store or ApprovalStore()
         self.pending_manager = pending_manager or PendingApprovalManager()
+        self.control_store = control_store
         self.reviewer_mode = ReviewerMode(reviewer_mode)
         self.revise_attempts = max(0, revise_attempts)
         self.dry_run = dry_run
@@ -138,6 +142,7 @@ class WebAgentExecutionHandler:
         context = self.start_run(task)
         runtime = self.build_runtime_components(context)
         try:
+            self.check_control_state(context, "before_prompt_build")
             prompt_result = self.build_prompt(context)
             if self.dry_run:
                 self.persist_dry_run_result(context, prompt_result)
@@ -153,18 +158,50 @@ class WebAgentExecutionHandler:
                     interactive_elements=[],
                     risk_signals=[],
                 )
+            self.check_control_state(context, "before_llm_call")
             plan = await self.plan_task(context, prompt_result)
+            self.check_control_state(context, "after_llm_call")
             self.validate_plan(context, plan)
+            self.check_control_state(context, "before_tool_call")
             observation = await self.execute_plan(context, plan, runtime)
+            self.check_control_state(context, "after_tool_call", observation=observation)
             if context.state.status in {"requires_approval", "blocked"}:
                 self.snapshot_context(context)
                 return observation
 
             context.state.status = "completed"
             context.state.current_step = 5
+            self.check_control_state(context, "before_report_generation", observation=observation)
             self.persist_run_artifacts(context, observation)
             self.finalize_success(context)
             return observation
+        except TaskControlInterrupted:
+            self.snapshot_context(context)
+            return runtime.browser_runtime.last_observation or _empty_observation(context)
+        except BudgetApprovalRequired as exc:
+            context.state.status = "waiting_for_approval"
+            context.state.error_type = "LLM_BUDGET_APPROVAL_REQUIRED"
+            context.state.error_message = str(exc)
+            context.transcript_store.append(
+                "budget_approval_required",
+                {"approval_id": exc.approval_id, "state": _state_payload(context)},
+            )
+            context.transcript_store.append("task_paused", _state_payload(context))
+            self._emit_event(
+                "task_paused",
+                "Task paused for LLM budget approval",
+                {
+                    "run_id": context.run_id,
+                    "status": "waiting_for_approval",
+                    "approval_id": exc.approval_id,
+                },
+            )
+            self.snapshot_context(context)
+            return runtime.browser_runtime.last_observation or _empty_observation(context)
+        except BudgetHardLimitExceeded as exc:
+            observation = runtime.browser_runtime.last_observation
+            self.generate_partial_report(context, observation, str(exc), status="succeeded_partial")
+            return observation or _empty_observation(context)
         except Exception as exc:
             self.finalize_failure(context, exc)
             raise
@@ -217,10 +254,12 @@ class WebAgentExecutionHandler:
             approval_store=self.approval_store,
             pending_manager=self.pending_manager,
             event_sink=self.event_sink,
+            control_store=self.control_store,
         )
         execution_loop = AgentExecutionLoop(
             tool_executor=tool_executor,
             event_sink=self.event_sink,
+            control_store=self.control_store,
         )
         tool_gateway = ToolGateway(
             providers=[
@@ -429,6 +468,36 @@ class WebAgentExecutionHandler:
         )
         self.last_loop_result = loop_result
         if loop_result.status != "success":
+            if loop_result.error_type == "TASK_STOP_AND_SUMMARIZE":
+                observation = runtime.browser_runtime.last_observation
+                self.generate_partial_report(
+                    context,
+                    observation,
+                    loop_result.error_message or "Task stopped by user.",
+                    status="succeeded_partial",
+                )
+                raise TaskControlInterrupted(loop_result.error_message or "Task stopped by user.")
+            if loop_result.error_type == "TASK_PAUSED":
+                context.state.status = "paused"
+                context.state.error_type = None
+                context.state.error_message = None
+                self._emit_event(
+                    "task_paused",
+                    "Task paused by user",
+                    {"run_id": context.run_id, "error": loop_result.error_message},
+                )
+                raise TaskControlInterrupted(loop_result.error_message or "Task paused by user.")
+            if loop_result.error_type == "TASK_CANCELED":
+                context.state.status = "canceled"
+                context.state.error_type = "TASK_CANCELED"
+                context.state.error_message = "Task canceled by user."
+                context.transcript_store.append("task_canceled", _state_payload(context))
+                self._emit_event(
+                    "task_canceled",
+                    "Task canceled by user",
+                    {"run_id": context.run_id, "error": loop_result.error_message},
+                )
+                raise TaskControlInterrupted(loop_result.error_message or "Task canceled by user.")
             runtime_status = _status_from_loop_error(loop_result.error_type)
             context.state.status = runtime_status or "failed"
             context.state.error_type = loop_result.error_type
@@ -518,6 +587,98 @@ class WebAgentExecutionHandler:
     def compact_context(self, context: WebAgentContext) -> None:
         _persist_compaction_artifacts(context)
 
+    def check_control_state(
+        self,
+        context: WebAgentContext,
+        checkpoint: str,
+        observation: PageObservation | None = None,
+    ) -> None:
+        if self.control_store is None:
+            return
+        state = self.control_store.get(context.run_id)
+        if state.cancel_requested:
+            context.state.status = "canceled"
+            context.state.error_type = "TASK_CANCELED"
+            context.state.error_message = "Task canceled by user."
+            context.transcript_store.append(
+                "task_canceled",
+                {"checkpoint": checkpoint, "control": state.snapshot()},
+            )
+            self._emit_event(
+                "task_canceled",
+                "Task canceled by user",
+                {"run_id": context.run_id, "checkpoint": checkpoint},
+            )
+            raise TaskControlInterrupted("Task canceled by user.")
+        if state.stop_requested:
+            self.generate_partial_report(
+                context,
+                observation,
+                "Task stopped by user.",
+                status="succeeded_partial",
+            )
+            self.control_store.clear_transient_flags(context.run_id)
+            raise TaskControlInterrupted("Task stopped by user.")
+        if state.pause_requested:
+            context.state.status = "paused"
+            context.transcript_store.append(
+                "task_paused",
+                {"checkpoint": checkpoint, "control": state.snapshot()},
+            )
+            self._emit_event(
+                "task_paused",
+                "Task paused by user",
+                {"run_id": context.run_id, "checkpoint": checkpoint},
+            )
+            raise TaskControlInterrupted("Task paused by user.")
+
+    def generate_partial_report(
+        self,
+        context: WebAgentContext,
+        observation: PageObservation | None,
+        reason: str,
+        *,
+        status: str,
+    ) -> None:
+        context.state.status = status
+        context.state.error_type = None
+        context.state.error_message = None
+        self._emit_event(
+            "partial_report_started",
+            "Partial report generation started",
+            {"run_id": context.run_id, "reason": reason},
+        )
+        context.transcript_store.append(
+            "partial_report_started",
+            {"reason": reason, "status": status},
+        )
+        evidence_items: list[EvidenceItem] = []
+        if context.evidence_store is not None:
+            evidence_items = context.evidence_store.list_items()
+            context.evidence_store.write_jsonl()
+        body = _partial_report_text(context, evidence_items, observation)
+        report_path = context.run_dir / "final_report.md"
+        report_path.write_text(body, encoding="utf-8")
+        context.transcript_store.append(
+            "partial_report_generated",
+            {
+                "final_report_path": str(report_path),
+                "evidence_count": len(evidence_items),
+                "status": status,
+            },
+        )
+        context.transcript_store.append("execution_completed", _state_payload(context))
+        self._emit_event(
+            "partial_report_generated",
+            "Partial report generated",
+            {
+                "run_id": context.run_id,
+                "report_path": str(report_path),
+                "evidence_count": len(evidence_items),
+                "status": status,
+            },
+        )
+
     def maybe_revise_report(
         self,
         context: WebAgentContext,
@@ -604,6 +765,10 @@ class WebAgentExecutionHandler:
                 task_id=context.run_id,
                 purpose="reviewer",
                 budget=context.task.budget,
+                event_sink=self.event_sink,
+                approval_store=self.approval_store,
+                control_store=self.control_store,
+                user_goal=context.task.raw_input,
             )
             return OpenAICompatibleLLMReportReviewer(
                 client=client,
@@ -645,6 +810,10 @@ class WebAgentExecutionHandler:
                 task_id=context.run_id,
                 purpose=purpose,
                 budget=context.task.budget,
+                event_sink=self.event_sink,
+                approval_store=self.approval_store,
+                control_store=self.control_store,
+                user_goal=context.task.raw_input,
             )
         if self.planner_mode in {"fake_llm", "real_llm"}:
             client = LLMProviderRouter(self.llm_config_path).create_client(
@@ -654,6 +823,10 @@ class WebAgentExecutionHandler:
                 task_id=context.run_id,
                 purpose=purpose,
                 budget=context.task.budget,
+                event_sink=self.event_sink,
+                approval_store=self.approval_store,
+                control_store=self.control_store,
+                user_goal=context.task.raw_input,
             )
             return client
         raise ValueError(f"Unsupported planner mode: {self.planner_mode}")
@@ -831,3 +1004,70 @@ def _emit_report_event(
 
 def _observation_summary(observation: PageObservation) -> dict[str, Any]:
     return observation_summary(observation)
+
+
+class TaskControlInterrupted(RuntimeError):
+    pass
+
+
+def _empty_observation(context: WebAgentContext) -> PageObservation:
+    return PageObservation(
+        url=context.task.target_url,
+        title="Task interrupted",
+        visible_text_summary="Task ended at a cooperative control checkpoint.",
+        interactive_elements=[],
+        risk_signals=[],
+    )
+
+
+def _partial_report_text(
+    context: WebAgentContext,
+    evidence_items: list[EvidenceItem],
+    observation: PageObservation | None,
+) -> str:
+    if not evidence_items:
+        return "\n".join(
+            [
+                "# VaniScope Partial Task Report",
+                "",
+                "Task stopped before enough evidence was collected.",
+                "",
+                "## Task",
+                "",
+                f"- task_id: {context.task.task_id}",
+                f"- input: {context.task.raw_input}",
+                f"- target_url: {context.task.target_url}",
+                "",
+            ]
+        )
+    lines = [
+        "# VaniScope Partial Task Report",
+        "",
+        "Task was stopped by user; this report is generated from evidence collected before stopping.",
+        "",
+        "## Task",
+        "",
+        f"- task_id: {context.task.task_id}",
+        f"- input: {context.task.raw_input}",
+        f"- target_url: {context.task.target_url}",
+        "",
+    ]
+    if observation is not None:
+        lines.extend(
+            [
+                "## Last Observation",
+                "",
+                f"- title: {observation.title}",
+                f"- url: {observation.url}",
+                f"- summary: {observation.visible_text_summary.replace(chr(10), ' ')}",
+                "",
+            ]
+        )
+    lines.extend(["## Evidence", ""])
+    for item in evidence_items:
+        text = (item.text or "").replace("\n", " ")
+        if len(text) > 180:
+            text = f"{text[:177]}..."
+        lines.append(f"- [{item.evidence_id}] {item.kind} from {item.source_url or 'unknown source'}: {text}")
+    lines.append("")
+    return "\n".join(lines)

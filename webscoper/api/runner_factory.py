@@ -44,6 +44,7 @@ def build_handler(service, task_id: str, request: TaskCreateRequest) -> WebAgent
         event_sink=service._make_event_sink(task_id),
         approval_store=service.approval_store,
         pending_manager=service.pending_manager,
+        control_store=service.control_store,
         dry_run=request.dry_run,
         public_web_config=load_public_web_config(request.public_web_config)
         if request.public_web_config

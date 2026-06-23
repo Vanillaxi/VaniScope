@@ -11,10 +11,21 @@ class BudgetContext(BaseModel):
     retry_limit: int = 0
     max_cost_usd: float | None = None
     max_tool_calls: int = 50
+    max_prompt_tokens_per_call: int = 12000
     max_prompt_tokens: int = 12000
-    max_completion_tokens: int = 2000
+    soft_prompt_tokens_per_task: int = 30000
+    approval_prompt_tokens_per_task: int = 50000
+    hard_prompt_tokens_per_task: int = 80000
+    max_completion_tokens_per_call: int = 2048
+    max_completion_tokens: int = 2048
+    max_completion_tokens_per_task: int = 12000
     max_total_tokens_per_task: int = 50000
-    max_llm_calls_per_task: int = 20
+    max_llm_calls_per_task: int = 12
+    soft_cost_usd_per_task: float = 0.15
+    approval_cost_usd_per_task: float = 0.30
+    hard_cost_usd_per_task: float = 0.60
+    enable_budget_approval: bool = True
+    enable_auto_compaction: bool = True
     timeout_seconds: int = 60
     llm_timeout_seconds: int = 60
 
@@ -65,6 +76,11 @@ TaskEventKind = Literal[
     "task_started",
     "task_succeeded",
     "task_blocked",
+    "user_pause_requested",
+    "user_resume_requested",
+    "user_cancel_requested",
+    "user_stop_requested",
+    "task_canceled",
     "prompt_built",
     "planner_started",
     "planner_finished",
@@ -141,6 +157,15 @@ TaskEventKind = Literal[
     "task_finished",
     "task_failed",
     "budget_exceeded",
+    "budget_checked",
+    "budget_warning",
+    "budget_compaction_started",
+    "budget_compaction_finished",
+    "budget_approval_required",
+    "budget_approval_resolved",
+    "budget_hard_limit_exceeded",
+    "partial_report_started",
+    "partial_report_generated",
     "dry_run_completed",
 ]
 
@@ -305,6 +330,16 @@ class ApprovalRequest(BaseModel):
     decided_at: str | None = None
     decision: ApprovalDecision | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+BudgetDecision = Literal[
+    "allowed",
+    "warning",
+    "compaction_required",
+    "approval_required",
+    "hard_limit_exceeded",
+    "denied",
+]
 
 
 class RiskCheckResult(BaseModel):

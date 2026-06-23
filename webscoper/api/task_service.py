@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,7 @@ from webscoper.api.schemas import (
     RuntimeExecutionGraphResponse,
     TaskArtifactContentResponse,
     TaskArtifactListResponse,
+    TaskControlResponse,
     TaskCreateRequest,
     TaskCreateResponse,
     TaskStatusResponse,
@@ -51,6 +53,7 @@ from webscoper.runtime.inspector import (
     RuntimeTimelineBuilder,
 )
 from webscoper.runtime.safety.approvals import ApprovalStore
+from webscoper.runtime.control import TaskControlStore
 from webscoper.runtime.execution.events import (
     InMemoryTaskEventBus,
     TaskEventStore,
@@ -82,6 +85,7 @@ class TaskService:
         self.event_bus = InMemoryTaskEventBus()
         self.approval_store = ApprovalStore()
         self.pending_manager = PendingApprovalManager()
+        self.control_store = TaskControlStore()
         self.persistence = SQLitePersistenceStore(
             persistence_path
             or resolve_default_db_path(
@@ -90,6 +94,7 @@ class TaskService:
             )
         )
         self._task_states: dict[str, _TaskState] = {}
+        self._task_requests: dict[str, TaskCreateRequest] = {}
         self._langgraph_adapters: dict[str, Any] = {}
 
     def create_conversation(
@@ -134,6 +139,7 @@ class TaskService:
         handler = build_handler(self, task_id, request)
         task = build_api_task(task_id, request)
         self._persist_task_started(request, task, task_id, run_dir)
+        self._task_requests[task_id] = request
 
         try:
             self._run_langgraph_workflow(handler, task, task_id)
@@ -205,6 +211,7 @@ class TaskService:
             {"run_dir": str(run_dir)},
         )
         self._persist_task_started(request, task, task_id, run_dir)
+        self._task_requests[task_id] = request
         asyncio.create_task(self._run_async_task(task_id, request))
         return TaskCreateResponse(
             task_id=task_id,
@@ -416,6 +423,7 @@ class TaskService:
         approved: bool,
         decided_by: str,
         reason: str | None = None,
+        option: str | None = None,
     ) -> ApprovalDecisionResponse:
         return decide_approval_for_service(
             self,
@@ -423,6 +431,78 @@ class TaskService:
             approved=approved,
             decided_by=decided_by,
             reason=reason,
+            option=option,
+        )
+
+    def pause_task(self, task_id: str) -> TaskControlResponse:
+        self._ensure_task_exists(task_id)
+        self.control_store.request(task_id, "pause")
+        self.control_store.write_jsonl(task_id, self._run_dir(task_id) / "user_control.jsonl")
+        self._set_task_state(task_id, "paused", None)
+        self._publish_task_event(
+            task_id,
+            "user_pause_requested",
+            "User requested task pause",
+            {"run_id": task_id},
+        )
+        return self._control_response(task_id, "pause", "Task pause requested.")
+
+    def resume_task(self, task_id: str) -> TaskControlResponse:
+        self._ensure_task_exists(task_id)
+        self.control_store.request(task_id, "resume")
+        self.control_store.write_jsonl(task_id, self._run_dir(task_id) / "user_control.jsonl")
+        self._set_task_state(task_id, "running", None)
+        self._publish_task_event(
+            task_id,
+            "user_resume_requested",
+            "User requested task resume",
+            {"run_id": task_id},
+        )
+        self._publish_task_event(
+            task_id,
+            "task_resumed",
+            "Task resumed by user",
+            {"run_id": task_id},
+        )
+        request = self._task_requests.get(task_id)
+        if request is not None:
+            threading.Thread(
+                target=lambda: asyncio.run(self._run_async_task(task_id, request)),
+                daemon=True,
+            ).start()
+        return self._control_response(task_id, "resume", "Task resume requested.")
+
+    def cancel_task(self, task_id: str) -> TaskControlResponse:
+        self._ensure_task_exists(task_id)
+        self.control_store.request(task_id, "cancel")
+        self.control_store.write_jsonl(task_id, self._run_dir(task_id) / "user_control.jsonl")
+        self._set_task_state(task_id, "cancel_requested", None)
+        self._publish_task_event(
+            task_id,
+            "user_cancel_requested",
+            "User requested task cancel",
+            {"run_id": task_id},
+        )
+        return self._control_response(task_id, "cancel", "Task cancellation requested.")
+
+    def stop_and_summarize_task(self, task_id: str) -> TaskControlResponse:
+        self._ensure_task_exists(task_id)
+        current_status = self.get_task_status(task_id).status
+        self.control_store.request(task_id, "stop_and_summarize")
+        self.control_store.write_jsonl(task_id, self._run_dir(task_id) / "user_control.jsonl")
+        self._set_task_state(task_id, "stop_requested", None)
+        self._publish_task_event(
+            task_id,
+            "user_stop_requested",
+            "User requested stop and summarize",
+            {"run_id": task_id},
+        )
+        if current_status in {"paused", "waiting_for_approval", "requires_approval", "failed"}:
+            self._generate_partial_report_from_artifacts(task_id)
+        return self._control_response(
+            task_id,
+            "stop_and_summarize",
+            "Task stop-and-summarize requested.",
         )
 
     def resume_langgraph_after_approval(
@@ -465,6 +545,84 @@ class TaskService:
 
     def _workflow_for_task(self, task_id: str) -> str:
         return "langgraph"
+
+    def _ensure_task_exists(self, task_id: str) -> None:
+        if task_id in self._task_states:
+            return
+        if not self._run_dir(task_id).exists():
+            raise FileNotFoundError(f"Task not found: {task_id}")
+
+    def _control_response(
+        self,
+        task_id: str,
+        action: str,
+        message: str,
+    ) -> TaskControlResponse:
+        status = self.get_task_status(task_id)
+        return TaskControlResponse(
+            task_id=task_id,
+            status=status.status,
+            requested_action=action,
+            message=message,
+            artifacts=status.artifacts,
+        )
+
+    def _generate_partial_report_from_artifacts(self, task_id: str) -> None:
+        run_dir = self._run_dir(task_id)
+        evidence_lines: list[str] = []
+        evidence_path = run_dir / "evidence.jsonl"
+        if evidence_path.exists():
+            evidence_lines = [
+                line
+                for line in evidence_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+        self._publish_task_event(
+            task_id,
+            "partial_report_started",
+            "Partial report generation started",
+            {"run_id": task_id, "source": "api"},
+        )
+        if not evidence_lines:
+            report_text = "\n".join(
+                [
+                    "# VaniScope Partial Task Report",
+                    "",
+                    "Task stopped before enough evidence was collected.",
+                    "",
+                ]
+            )
+        else:
+            report_lines = [
+                "# VaniScope Partial Task Report",
+                "",
+                "Task was stopped by user; this report is generated from evidence collected before stopping.",
+                "",
+                "## Evidence",
+                "",
+            ]
+            for index, line in enumerate(evidence_lines, start=1):
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    payload = {}
+                evidence_id = payload.get("evidence_id") or f"evidence_{index:03d}"
+                kind = payload.get("kind") or "evidence"
+                text = str(payload.get("text") or payload.get("source_url") or "")
+                if len(text) > 180:
+                    text = f"{text[:177]}..."
+                report_lines.append(f"- [{evidence_id}] {kind}: {text}")
+            report_text = "\n".join(report_lines) + "\n"
+        (run_dir / "final_report.md").write_text(report_text, encoding="utf-8")
+        self.control_store.clear_transient_flags(task_id)
+        self._set_task_state(task_id, "succeeded_partial", None)
+        self._publish_task_event(
+            task_id,
+            "partial_report_generated",
+            "Partial report generated",
+            {"run_id": task_id, "evidence_count": len(evidence_lines)},
+        )
+        self._write_task_artifacts(task_id)
 
     def _run_dir(self, task_id: str) -> Path:
         return self.runs_dir / task_id
