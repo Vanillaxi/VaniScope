@@ -36,34 +36,40 @@ class FakeLLMClient(BaseLLMClient):
         tool_calls: list[dict[str, Any]] = [
             {
                 "call_id": "call_001",
-                "tool_id": "browser_open_observe",
+                "tool_id": "browser_open",
                 "arguments": {"url": target_url},
-                "reason": "Open the target page and collect the initial observation.",
-            }
+                "reason": "Open the target page.",
+            },
+            {
+                "call_id": "call_002",
+                "tool_id": "browser_observe",
+                "arguments": {"include_screenshot": True},
+                "reason": "Collect the initial page observation.",
+            },
         ]
 
         if action:
             tool_calls.extend(
                 [
                     {
-                        "call_id": "call_002",
-                        "tool_id": "browser_click_intent",
-                        "arguments": {"action": action},
+                        "call_id": "call_003",
+                        "tool_id": "browser_click",
+                        "arguments": _fake_click_arguments(action),
                         "reason": "Click the requested target and verify the expected effect.",
                     },
                     {
-                        "call_id": "call_003",
+                        "call_id": "call_004",
                         "tool_id": "browser_extract",
                         "arguments": {},
                         "reason": "Extract visible page information after clicking.",
                     },
                     {
-                        "call_id": "call_004",
+                        "call_id": "call_005",
                         "tool_id": "finish_task",
                         "arguments": {
-                            "summary": "Click-intent browser task completed.",
+                            "summary_instruction": "Browser click task completed.",
                         },
-                        "reason": "Finish the click-intent browser task.",
+                        "reason": "Finish the browser click task.",
                     },
                 ]
             )
@@ -71,16 +77,16 @@ class FakeLLMClient(BaseLLMClient):
             tool_calls.extend(
                 [
                     {
-                        "call_id": "call_002",
+                        "call_id": "call_003",
                         "tool_id": "browser_extract",
                         "arguments": {},
                         "reason": "Extract visible page information after opening.",
                     },
                     {
-                        "call_id": "call_003",
+                        "call_id": "call_004",
                         "tool_id": "finish_task",
                         "arguments": {
-                            "summary": "Open-only browser task completed.",
+                            "summary_instruction": "Open-only browser task completed.",
                         },
                         "reason": "Finish the open-only browser task.",
                     },
@@ -105,6 +111,17 @@ class FakeLLMClient(BaseLLMClient):
             },
             raw={"client": "FakeLLMClient"},
         )
+
+
+def _fake_click_arguments(action: Any) -> dict[str, Any]:
+    if isinstance(action, dict):
+        return {
+            "target_hint": str(action.get("target_hint") or action.get("intent") or ""),
+            "expected_effect": action.get("expected_effect")
+            if isinstance(action.get("expected_effect"), dict)
+            else {"type": "none"},
+        }
+    return {"target_hint": str(action), "expected_effect": {"type": "none"}}
 
 
 def _fake_auto_explore_response(request: LLMRequest) -> LLMResponse:

@@ -29,19 +29,6 @@ async def test_browser_open_and_observe_run_separately(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_browser_open_observe_compatibility_wrapper_still_works(tmp_path: Path) -> None:
-    runtime = _runtime(tmp_path)
-    await runtime.start()
-    try:
-        observation = await runtime.open_observe(_fixture_url())
-    finally:
-        await runtime.close()
-
-    assert observation.url.startswith("file://")
-    assert observation.screenshot_path
-
-
-@pytest.mark.asyncio
 async def test_scroll_wait_type_select_and_screenshot_on_local_fixture(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
     await runtime.start()

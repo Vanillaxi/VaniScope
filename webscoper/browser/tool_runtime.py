@@ -98,7 +98,24 @@ class StatefulBrowserToolRuntime:
         if not policy_decision.allow:
             observation = _blocked_policy_observation(url, policy_decision)
             self.last_observation = observation
-            self._emit_public_web_block(policy_decision)
+            self.trace_recorder.record(
+                TraceStep(
+                    step_id=step_id,
+                    run_id=self.trace_recorder.run_id,
+                    phase="browser_tool_runtime",
+                    actor="tool",
+                    action_type="browser_open",
+                    status="blocked",
+                    url_before=None,
+                    url_after=url,
+                    title=observation.title,
+                    observation=observation.model_dump(mode="json"),
+                    error_type="PUBLIC_WEB_BLOCKED",
+                    error_message=policy_decision.reason,
+                    latency_ms=_elapsed_ms(start),
+                )
+            )
+            self._emit_public_web_block(policy_decision, tool_name="browser_open")
             raise PublicWebPolicyError(policy_decision, observation)
 
         if policy_decision.url_classification == "public_http":
@@ -496,7 +513,12 @@ class StatefulBrowserToolRuntime:
             )
             raise
 
-    def _emit_public_web_block(self, decision) -> None:
+    def _emit_public_web_block(
+        self,
+        decision,
+        *,
+        tool_name: str = "browser_open_observe",
+    ) -> None:
         if self.event_sink is None:
             return
         try:
@@ -505,7 +527,7 @@ class StatefulBrowserToolRuntime:
                 "Public web URL blocked",
                 {
                     "run_id": self.trace_recorder.run_id,
-                    "tool_name": "browser_open_observe",
+                    "tool_name": tool_name,
                     "error_type": "PUBLIC_WEB_BLOCKED",
                     "error_message": decision.reason,
                     "public_web_policy": decision.model_dump(mode="json"),
@@ -514,7 +536,12 @@ class StatefulBrowserToolRuntime:
         except Exception:
             return
 
-    async def click_intent(self, action: ActionContract) -> dict[str, Any]:
+    async def click_intent(
+        self,
+        action: ActionContract,
+        *,
+        tool_name: str = "browser_click_intent",
+    ) -> dict[str, Any]:
         if self.page is None:
             return _failed_output("PAGE_NOT_OPENED", "Open a page before clicking.")
 
@@ -531,7 +558,7 @@ class StatefulBrowserToolRuntime:
                 kind="before_action_screenshot",
                 screenshot_path=str(before_screenshot_path),
                 step_id=before_step_id,
-                tool_name="browser_click_intent",
+                tool_name=tool_name,
                 source_url=before_url,
                 page_title=before_title,
                 metadata={"target_hint": action.target_hint},
@@ -546,7 +573,7 @@ class StatefulBrowserToolRuntime:
             "Action precondition checked",
             {
                 "step_id": action_step_id,
-                "tool_name": "browser_click_intent",
+                "tool_name": tool_name,
                 "action_type": action.action_type,
                 "target_hint": action.target_hint,
                 "preconditions": action.preconditions,
@@ -557,7 +584,7 @@ class StatefulBrowserToolRuntime:
             "Browser action started",
             {
                 "step_id": action_step_id,
-                "tool_name": "browser_click_intent",
+                "tool_name": tool_name,
                 "action_type": action.action_type,
                 "target_hint": action.target_hint,
                 "expected_effect": action.expected_effect.model_dump(mode="json"),
@@ -571,7 +598,7 @@ class StatefulBrowserToolRuntime:
             "Browser action finished",
             {
                 "step_id": action_step_id,
-                "tool_name": "browser_click_intent",
+                "tool_name": tool_name,
                 "action_type": action.action_type,
                 "target_hint": action.target_hint,
                 "status": action_result.status,
@@ -588,7 +615,7 @@ class StatefulBrowserToolRuntime:
                 run_id=self.trace_recorder.run_id,
                 phase="browser_tool_runtime",
                 actor="tool",
-                action_type="browser_click_intent",
+                action_type=tool_name,
                 status=action_result.status,
                 url_before=action_result.url_before,
                 url_after=action_result.url_after,
@@ -615,7 +642,7 @@ class StatefulBrowserToolRuntime:
             "Effect verification started",
             {
                 "step_id": verify_step_id,
-                "tool_name": "browser_click_intent",
+                "tool_name": tool_name,
                 "expected_effect": action.expected_effect.model_dump(mode="json"),
                 "url_before": action_result.url_before,
                 "title_before": before_title,
@@ -629,7 +656,7 @@ class StatefulBrowserToolRuntime:
                 "span_id": verify_step_id,
                 "parent_span_id": action_step_id,
                 "step_id": verify_step_id,
-                "tool_name": "browser_click",
+                "tool_name": tool_name,
                 "expected_effect": action.expected_effect.model_dump(mode="json"),
             },
         )
@@ -645,7 +672,7 @@ class StatefulBrowserToolRuntime:
             "Effect verification finished",
             {
                 "step_id": verify_step_id,
-                "tool_name": "browser_click_intent",
+                "tool_name": tool_name,
                 "expected_effect": action.expected_effect.model_dump(mode="json"),
                 "url_before": verification_result.url_before,
                 "url_after": verification_result.url_after,
@@ -667,7 +694,7 @@ class StatefulBrowserToolRuntime:
                 "span_id": verify_step_id,
                 "parent_span_id": action_step_id,
                 "step_id": verify_step_id,
-                "tool_name": "browser_click",
+                "tool_name": tool_name,
                 "status": verification_result.status,
                 "satisfied": verification_result.satisfied,
                 "error_type": verification_result.error_type,
@@ -767,7 +794,7 @@ class StatefulBrowserToolRuntime:
             kind="after_action_screenshot",
             screenshot_path=str(screenshot_path),
             step_id=observe_step_id,
-            tool_name="browser_click_intent",
+            tool_name=tool_name,
             source_url=observation.url,
             page_title=observation.title,
             observation_id=observation.observation_id,
@@ -817,7 +844,7 @@ class StatefulBrowserToolRuntime:
                 kind="failure_screenshot",
                 screenshot_path=str(screenshot_path),
                 step_id=observe_step_id,
-                tool_name="browser_click_intent",
+                tool_name=tool_name,
                 source_url=observation.url,
                 page_title=observation.title,
                 observation_id=observation.observation_id,
@@ -878,7 +905,7 @@ class StatefulBrowserToolRuntime:
             expected_effect=expected_effect or {"type": "none"},
             risk_level="read_only",
         )
-        output = await self.click_intent(action)
+        output = await self.click_intent(action, tool_name="browser_click")
         action_result = output.get("action_result") if isinstance(output, dict) else {}
         verification = (
             output.get("verification_result") if isinstance(output, dict) else {}

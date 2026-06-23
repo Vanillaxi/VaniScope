@@ -15,7 +15,9 @@ export function ToolCatalogPanel() {
     getToolCatalog()
       .then((payload) => {
         if (cancelled) return;
-        setTools(payload.tools.filter((tool) => tool.tags.includes("v2") || tool.compatibility_wrapper));
+        setTools(
+          payload.tools.filter((tool) => tool.tags.includes("v2") && !tool.compatibility_wrapper),
+        );
         setError(null);
       })
       .catch((reason: unknown) => {
@@ -72,7 +74,7 @@ export function ToolCatalogPanel() {
                   <td className="px-3 py-3">{yesNo(tool.requires_session)}</td>
                   <td className="px-3 py-3">
                     <Badge tone={tool.enabled ? "info" : "danger"}>
-                      {tool.enabled ? (tool.compatibility_wrapper ? "compat" : "enabled") : "disabled"}
+                      {tool.enabled ? "enabled" : "disabled"}
                     </Badge>
                   </td>
                 </tr>

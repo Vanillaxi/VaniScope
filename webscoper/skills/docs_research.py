@@ -31,7 +31,12 @@ class DocsResearchSkill:
             description="Read one documentation page and produce an evidence-backed report.",
             version="0.1.0",
             supported_task_types=["docs_research"],
-            required_tools=["browser_open_observe", "browser_extract", "finish_task"],
+            required_tools=[
+                "browser_open",
+                "browser_observe",
+                "browser_extract",
+                "finish_task",
+            ],
             risk_level="safe",
             instruction=SkillInstruction(
                 title="Docs Research Instructions",

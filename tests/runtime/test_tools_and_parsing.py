@@ -80,14 +80,14 @@ def test_tool_call_parser_accepts_supported_shapes() -> None:
                     "tool_calls": [
                         {
                             "call_id": "call_001",
-                            "tool_id": "browser_open_observe",
+                            "tool_id": "browser_open",
                             "arguments": {"url": "file:///tmp/basic.html"},
                             "reason": "Open the target page.",
                         }
                     ]
                 }
             ),
-            "browser_open_observe",
+            "browser_open",
         ),
         (
             """```json
@@ -120,12 +120,12 @@ def test_tool_call_parser_accepts_supported_shapes() -> None:
                 {
                     "tool_calls": {
                         "call_id": "call_001",
-                        "tool_id": "browser_open_observe",
+                        "tool_id": "browser_open",
                         "arguments": {"url": "file:///tmp/basic.html"},
                     }
                 }
             ),
-            "browser_open_observe",
+            "browser_open",
         ),
     ]
 
@@ -165,7 +165,9 @@ def test_default_tool_registry_snapshot_and_search() -> None:
     search_result = registry.search("github issue")
     search_tool_ids = {tool.tool_id for tool in search_result.matches}
 
-    assert "browser_open_observe" in core_tool_ids
-    assert "browser_click_intent" in core_tool_ids
+    assert "browser_open" in core_tool_ids
+    assert "finish_task" in core_tool_ids
+    assert "browser_open_observe" not in core_tool_ids
+    assert "browser_click_intent" not in core_tool_ids
     assert "github_fetch_issue" in lazy_tool_ids
     assert "github_fetch_issue" in search_tool_ids

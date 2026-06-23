@@ -22,6 +22,8 @@ class ToolRegistry:
         runtime_tools: list[ToolSpec] = []
 
         for tool in self._tools.values():
+            if tool.exposure in {"compatibility", "disabled"} or tool.compatibility_wrapper:
+                continue
             if tool.loading_mode == "core":
                 core_tools.append(tool)
             elif tool.loading_mode == "lazy":

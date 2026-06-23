@@ -2,50 +2,64 @@
 
 [中文](README_CN.md)
 
-VaniScope / Web-Scoper is a local-first, replayable Browser Agent Runtime built with Python, FastAPI, LangGraph, Playwright, ToolGateway, evidence-based reporting, approval workflows, runtime artifact replay, regression evals, and a Next.js console.
+VaniScope is a local-first Browser Agent Runtime for executing, auditing, and replaying browser-agent workflows. The product line is now intentionally narrow:
 
-It is a runtime for executing, auditing, and inspecting browser-agent workflows.
+```text
+Next.js Console
+-> FastAPI
+-> LangGraph Workflow
+-> Auto Explore Planner
+-> ToolGateway
+-> Browser Tool Contract v2
+-> Browser Runtime / Playwright
+-> Evidence / Report / Review
+-> Inspector / Graph / Timeline
+-> SQLite metadata persistence
+```
 
-## Boundaries
+The default path is deterministic or fake LLM execution against local fixtures. Real LLM providers and public web access are both opt-in local settings.
 
-* LangGraph is the workflow orchestration layer.
-* The Browser Runtime uses Playwright and is primarily designed for local fixtures and controlled pages by default.
-* ToolGateway is the governance boundary for tool invocation. It handles policy, risk, approval, provider dispatch, and `tool_audit.jsonl`.
-* FastAPI provides task APIs, event streaming, artifact reads, approval decisions, resume, and diagnostics.
-* Next.js is a local console, not a production SaaS frontend.
-* Real LLM providers must be explicitly enabled through local configuration. Tests and demos do not depend on real LLMs by default.
-* Public web access is disabled by default. Local fixtures, `file://`, localhost, and `127.0.0.1` remain the default operating surface.
-* VaniScope does not bypass login, CAPTCHA, paywalls, or access controls. It also does not enter real sensitive information.
-
-## Directory Boundaries
+## Architecture
 
 ```text
 webscoper/
-  api/           FastAPI Task API, approvals, artifacts, diagnostics, resume
-  browser/       Playwright runtime, observation, target resolution, effect verification, readiness, recovery
-  eval/          LangGraph workflow eval runner
-  runtime/       execution loop, artifacts, prompt, LLM, review, safety, inspector
-  schemas/       Pydantic data contracts
-  skills/        docs_research and github_issue_research
-  tools/         tool registry and ToolGateway
-  workflows/     LangGraph adapter, approval bridge, backend nodes
+  api/        FastAPI task, artifact, approval, resume, diagnostics APIs
+  browser/    Playwright sessions, v2 browser actions, observation, readiness, recovery
+  eval/       Workflow eval runner
+  runtime/    execution, prompt, LLM, safety, artifacts, review, inspector, persistence
+  schemas/    Domain contracts
+  skills/     docs_research and github_issue_research
+  tools/      Tool registry and ToolGateway
+  workflows/  LangGraph adapter and backend
 
-apps/web/        Next.js local console
-scripts/         API, task, workflow eval, browser smoke entrypoints
-tests/           focused regression tests and local fixtures
+apps/web/     Next.js local console
+scripts/      Current run/eval/smoke entrypoints
+tests/        Focused high-value regression tests
 ```
 
-## Core Modules
+`ToolGateway` is the official tool invocation boundary. LangGraph nodes call the gateway, which applies policy, risk checks, approval handling, provider dispatch, and `tool_audit.jsonl` logging.
 
-`webscoper/browser` handles browser execution: `StatefulBrowserToolRuntime`, page observation, target resolution, effect verification, readiness, risk signals, and recovery.
+`webscoper/browser` owns browser capabilities only: opening pages, observing, clicking, typing/selecting safe fixture inputs, scrolling, waiting, extracting, screenshots, readiness, and recovery. It does not own workflow planning, prompt logic, or report generation.
 
-`webscoper/runtime` handles the task lifecycle under LangGraph: prompt building, tool-call planning and validation, artifact writing, LLM routing, review, approval safety, and Runtime Inspector aggregation.
+## Browser Tools
 
-`webscoper.workflows.LangGraphWorkflowAdapter` is the public workflow entrypoint. The implementation lives under `webscoper/workflows/langgraph_backend/`.
+Browser Tool Contract v2 is the only first-class tool layer:
 
-`webscoper/tools/gateway` is the official tool invocation boundary. LangGraph nodes call `ToolGateway.invoke()`, and the gateway decides whether a tool call is allowed, blocked, waiting for approval, or dispatched to a provider.
+```text
+browser_open
+browser_observe
+browser_click
+browser_type
+browser_select
+browser_scroll
+browser_wait
+browser_extract
+browser_screenshot
+ask_human
+finish_task
+```
 
-`webscoper/skills` contains task-level capabilities. The default registry only includes `docs_research` and `github_issue_research`. Both use local fixtures and do not access real GitHub, external websites, or real MCP services.
+LLMs choose structured actions and natural-language `target_hint` values. They do not output selectors, XPath, Playwright code, JavaScript, or raw DOM handles. RiskGate, PublicWebPolicy, Approval, Evidence, Trace, Timeline, and Graph remain on the execution path.
 
 ## Local Run
 
@@ -63,34 +77,37 @@ pnpm install
 pnpm dev
 ```
 
-Open:
+Open `http://localhost:3000`. The default API base is `http://localhost:8000`; override it with `NEXT_PUBLIC_VANISCOPE_API_BASE_URL` in `apps/web/.env`.
 
-```text
-http://localhost:3000
-```
+## Configuration
 
-Default API:
-
-```text
-http://localhost:8000
-```
-
-Health and diagnostics:
-
-```text
-GET /health
-GET /diagnostics
-```
-
-If the API base URL is different, set it in `apps/web/.env`:
+Runtime config:
 
 ```bash
-NEXT_PUBLIC_VANISCOPE_API_BASE_URL=http://localhost:8000
+cp configs/runtime.example.toml configs/runtime.local.toml
 ```
+
+LLM config:
+
+```bash
+cp configs/llm.example.toml configs/llm.local.toml
+```
+
+Do not commit local configs, databases, runs, traces, downloads, browser state, `.env`, `.next`, `node_modules`, caches, or eval output.
+
+Public web modes:
+
+```text
+local        default; local fixtures, file://, localhost only
+public_safe  allow-listed public domains only
+public_open  unrestricted public HTTP/HTTPS for manual local exploration
+```
+
+Real LLM mode is independent from public web mode. Enabling one does not enable the other.
 
 ## Demo Inputs
 
-Browser task:
+Auto explore:
 
 ```text
 mode: auto_explore
@@ -100,7 +117,7 @@ planner: fake_llm
 workspace: tests/fixtures/workspace
 ```
 
-Guided browser debug task:
+Guided deterministic click:
 
 ```text
 mode: guided
@@ -111,7 +128,7 @@ planner: deterministic
 workspace: tests/fixtures/workspace
 ```
 
-Docs Research:
+Docs research:
 
 ```text
 url: tests/fixtures/mock_site/docs_research.html
@@ -121,7 +138,7 @@ query: How do I install and run VaniScope?
 language: en
 ```
 
-GitHub Issue Research:
+GitHub issue research:
 
 ```text
 url: tests/fixtures/mock_site/github_issue_research.html
@@ -141,314 +158,32 @@ planner: deterministic
 workspace: tests/fixtures/workspace
 ```
 
-Recovery demo:
-
-```text
-url: tests/fixtures/mock_site/early_button_hydration.html
-click: Quickstart
-expect: pip install playwright
-planner: deterministic
-workspace: tests/fixtures/workspace
-```
-
-## Conversation Persistence and Auto Explore
-
-VaniScope stores local conversation and task metadata in SQLite. The default path is `data/vaniscope.db`, configurable with `[persistence].sqlite_path` in `configs/runtime.local.toml` or `VANISCOPE_DB_PATH`. SQLite stores conversations, messages, task metadata, artifact paths/sizes, and approval metadata. Large artifacts such as traces, screenshots, prompts, and reports stay under `runs/task_xxx/`.
-
-FastAPI includes:
-
-```text
-POST /conversations
-GET /conversations
-GET /conversations/{conversation_id}
-GET /conversations/{conversation_id}/messages
-POST /tasks
-```
-
-Browser tasks now support URL + natural-language goal through `mode: auto_explore`. Guided mode is still available for deterministic demos and debugging with explicit `click` / `expect` fields. Skill mode remains available for registered skills such as `docs_research` and `github_issue_research`.
-
-The auto-explore loop lets an LLM choose structured action intents only:
-
-```text
-observe
-click_intent
-extract
-ask_human
-finish
-```
-
-The LLM never chooses CSS selectors, XPath, JavaScript, or DOM handles. It may provide a `target_hint`; Browser Runtime still resolves the target, and ToolGateway, PublicWebPolicy, RiskGate, Approval, PageReadinessDetector, TargetResolver, EffectVerifier, RecoveryManager, EvidenceStore, and task budgets continue to govern execution.
-
-Webpage content is untrusted evidence, not instructions. Prompt-injection text on a page, such as instructions to ignore previous rules or click a destructive control, must still satisfy the user goal and safety policy before any action is attempted.
-
-Fake/deterministic planning remains the test and CI default path. Real LLM execution is opt-in through local configuration such as `configs/llm.local.toml`; do not commit real keys. Pytest and workflow eval do not depend on real public web access or real LLM providers.
-
-## Web Runtime Modes
-
-VaniScope is local-first by default, but real public web access is a formal local runtime mode. It is never enabled by pytest, workflow eval, CI, or the default checked-in config.
-
-Copy and edit the example config:
+## Current Scripts
 
 ```bash
-cp configs/runtime.example.toml configs/runtime.local.toml
+uv run python scripts/run_api.py
+uv run python scripts/run_task.py --url tests/fixtures/mock_site/basic.html --planner deterministic
+uv run python scripts/run_workflow_eval.py --cases tests/fixtures/langgraph_main_eval_cases.json --output-dir eval_results/langgraph_eval_local
+uv run python scripts/run_public_web_smoke.py --config configs/runtime.local.toml --cases tests/fixtures/public_web_smoke_cases.example.json
+uv run python scripts/run_real_llm_smoke.py --cases tests/fixtures/real_llm_smoke_cases.example.json --output-dir eval_results/real_llm_smoke_local
 ```
 
-Do not commit `configs/runtime.local.toml` or any `configs/*.local.toml`.
-
-Modes:
-
-* `local`: default. Allows local fixtures, `file://`, localhost, `127.0.0.1`, and `::1`; blocks public URLs.
-* `public_safe`: allows public HTTP/HTTPS only when the domain matches `allowed_domains`.
-* `public_open`: allows any public HTTP/HTTPS domain, usually with `allowed_domains = ["*"]`, for local manual exploration only.
-
-`public_safe` example:
-
-```toml
-[web]
-mode = "public_safe"
-public_network_enabled = true
-allowed_domains = ["github.com", "playwright.dev", "docs.python.org", "arxiv.org"]
-max_pages_per_task = 3
-request_delay_ms = 250
-navigation_timeout_ms = 12000
-```
-
-The public URL policy classifies each `browser_open_observe` URL before navigation:
-
-* local fixture / `file://`: allowed by default
-* localhost / `127.0.0.1` / `::1`: allowed by default
-* public `http` / `https`: blocked in `local`, allow-listed in `public_safe`, open in `public_open`
-* private/internal network addresses and hostnames: blocked
-* unsupported schemes such as `javascript:` or `data:`: blocked
-
-Safety gates still apply in every mode: VaniScope does not bypass login, CAPTCHA, paywalls, access control, password fields, payment fields, PII fields, or destructive submit/publish/delete/payment actions.
-
-## Public Web Smoke
-
-Public web smoke is manual, non-deterministic, and not a benchmark.
-
-Manual smoke cases live in:
-
-```text
-tests/fixtures/public_web_smoke_cases.example.json
-```
-
-Run them manually:
+## Tests And Eval
 
 ```bash
-uv run python scripts/run_public_web_smoke.py \
-  --config configs/runtime.local.toml \
-  --cases tests/fixtures/public_web_smoke_cases.example.json
-```
-
-The runner writes `summary.json` plus task artifacts under `runs/`. It uses soft checks only: page opens, title exists, visible text is non-empty, and expected artifacts exist when a task succeeds. Public smoke is non-deterministic and is not a benchmark.
-
-## Browser Reliability
-
-VaniScope does not treat `domcontentloaded` or `networkidle` as the only completion signal. Real pages may involve hydration, skeleton screens, spinners, overlays, delayed SPA routing, or long polling.
-
-`PageReadinessDetector` samples lightweight signals:
-
-* document ready state
-* URL/title/text stability
-* interactive element count stability
-* spinner/skeleton/overlay disappearance
-* target visibility, enabled state, stability, and occlusion status
-* soft network quiet
-
-Readiness states include `ready`, `loading`, `degraded_ready`, and `timeout`.
-
-`degraded_ready` only means the page is usable enough for safe observation or read-only extraction. It never bypasses login, CAPTCHA, payment, security, or PII boundaries.
-
-The shared mock site only keeps reusable pages: basic, hydration recovery, risk actions, docs research, and GitHub issue research. Spinner, skeleton, overlay, SPA route delay, disabled target, and long-poll-like scenarios are tested through temporary pytest HTML pages.
-
-## Runtime Inspector
-
-Runtime Inspector reads existing artifacts from the run directory. It does not re-run tasks, access the network, or call real LLMs.
-
-It aggregates:
-
-* `events.jsonl`
-* `trace.jsonl`
-* `tool_audit.jsonl`
-* `llm_calls.jsonl`
-* `recovery.jsonl`
-* `approvals.jsonl`
-* `evidence.jsonl`
-* `review.json`
-* `prompt_preview.md`
-* `prompt_context.json`
-* `final_report.md`
-
-FastAPI exposes:
-
-```text
-GET /tasks/{task_id}/timeline
-GET /tasks/{task_id}/inspector
-```
-
-The console uses these APIs to display Timeline, Artifacts, Evidence, LLM / Prompt, Review, and Approval views.
-
-## LLM Configuration
-
-The default path is deterministic or fake LLM execution. Real providers are only enabled through local configuration:
-
-```text
-configs/llm.example.toml
-configs/llm.local.toml
-```
-
-A real provider must explicitly set:
-
-```toml
-[router]
-mode = "real"
-default_provider = "openai_compatible"
-
-[providers.openai_compatible]
-type = "openai_compatible"
-base_url = "https://api.openai.com/v1"
-api_key = "YOUR_API_KEY_HERE"
-model = "gpt-4.1-mini"
-fallback_model = "gpt-4.1-nano"
-timeout_seconds = 30
-
-[llm]
-max_retries_per_call = 1
-retry_on_timeout = true
-```
-
-Public web mode and real LLM mode are independent switches: enabling one does not enable the other. Real public exploration needs both `configs/runtime.local.toml` public web access and `configs/llm.local.toml` with `router.mode = "real"`.
-
-LLM calls go through Budget Gate v2 and are written to `llm_calls.jsonl`, `prompt_budget_estimate.json`, and `budget_decisions.jsonl`. API keys are never written into artifacts, diagnostics, or smoke summaries. Action validation failures are written to `action_validation.json`.
-
-Budget control is layered instead of a simple hard fail:
-
-* soft token/cost limits emit `budget_warning` and the task continues;
-* approval token/cost limits create a Human-in-the-loop `llm_budget` approval and pause the task as `waiting_for_approval`;
-* users may choose continue once, continue for the task, continue with compaction, stop and summarize, or cancel;
-* provider read timeouts emit failed `llm_call_finished` records with `LLM_PROVIDER_TIMEOUT`, retry once by default, and then create an `llm_timeout` approval;
-* timeout approvals let users retry the same model, retry with `fallback_model`, stop and summarize from collected evidence, or cancel;
-* provider context and hard task limits still must be respected through compaction, reduced context, or a partial report.
-
-The user control plane is available from the console and API:
-
-```text
-POST /tasks/{task_id}/pause
-POST /tasks/{task_id}/resume
-POST /tasks/{task_id}/cancel
-POST /tasks/{task_id}/stop-and-summarize
-```
-
-Pause, cancel, and stop requests are cooperative. The runner checks them at safe checkpoints before and after LLM calls, tool calls, browser actions, recovery, and report generation. `stop-and-summarize` writes a partial report from collected evidence; if no evidence exists, it writes a minimal report explaining that the task stopped before enough evidence was collected.
-
-Manual real LLM smoke is opt-in and not part of pytest or CI:
-
-```bash
-uv run python scripts/run_real_llm_smoke.py \
-  --cases tests/fixtures/real_llm_smoke_cases.example.json \
-  --output-dir eval_results/real_llm_smoke_local
-```
-
-The smoke runner uses soft assertions and reports task status, final URL/title, action count, LLM call count, artifact presence, failure reason, and run directory.
-
-Dry-run tasks generate `prompt_preview.md`, `prompt_context.json`, and `dry_run_result.json`, then stop before browser or LLM execution.
-
-## Browser Tool Contract v2
-
-VaniScope browser tools now use Browser Tool Contract v2. The LLM selects action intent only; it cannot output selectors, XPath, Playwright code, JavaScript, or raw DOM manipulation. ToolGateway, RiskGate, Approval, Evidence, Trace, Timeline, and Graph remain the execution path.
-
-| Tool | Purpose | Risk / notes |
-| --- | --- | --- |
-| `browser_open` | Open a URL in the task browser session. | Read-only, PublicWebPolicy enforced. |
-| `browser_observe` | Return LLM-ready observation with visible text, main content, accessibility summary, interactive elements, readiness, risk signals, and optional screenshot evidence. | Does not send images to a vision model by default. |
-| `browser_click` | Click by natural-language `target_hint` and verify expected effect. | TargetResolver chooses the element; risky clicks require RiskGate/Approval. |
-| `browser_type` | Type safe mock text into a target field. | Local fixture first; public web typing and sensitive values are blocked by default. |
-| `browser_select` | Select an option by text/value. | Local fixture first; public web state-changing selects require human approval. |
-| `browser_scroll` | Scroll up/down and observe the result. | Read-only with per-task scroll limit. |
-| `browser_wait` | Wait for readiness, URL change, content, network quiet, or fixed delay. | LLM must request this tool instead of raw sleeps. |
-| `browser_extract` | Extract visible information into evidence-backed summary. | Keeps source URL and evidence ids. |
-| `browser_screenshot` | Capture an explicit screenshot as first-class evidence. | No base64 is written to JSONL. |
-| `ask_human` | Pause for human decision/input. | Used for login, CAPTCHA, payment, destructive actions, real submissions, and unsafe ambiguity. |
-| `finish_task` | Finish without new browser actions and generate/report from evidence. | Browser-neutral finalization. |
-
-Compatibility wrappers remain available: `browser_open_observe` runs the old open+observe shape, and `browser_click_intent` remains the old click-intent wrapper. New prompts and Tool Catalog output prefer v2 names.
-
-Browser sessions are task-scoped by default: `browser_session_id`, `browser_context_id`, and `page_id` are recorded in workflow/session metadata. VaniScope does not save cookies or localStorage by default, does not reuse public-web login state by default, and does not bypass login, CAPTCHA, or access controls. Storage state is reserved for explicit local opt-in.
-
-Reserved tools `browser_upload_file`, `browser_download`, and `browser_drag` are disabled by default. Public web upload/download/drag is not enabled in this phase; future support must use controlled directories and human approval.
-
-The eval schema now has BrowserGym/WebArena-style local benchmark fields, but this phase does not connect to real BrowserGym or WebArena benchmarks.
-
-## Interview Demo Path
-
-Use this path when showing VaniScope as a real Web Agent runtime, not just a log viewer.
-
-Example task:
-
-```text
-URL: https://github.com/Vanillaxi
-Goal: Summarize this user's open-source experience, main repositories, technical direction, and activity.
-```
-
-Demo flow:
-
-1. Start the API and Console, then create a new task with `public_safe` web access, `auto_explore`, and `real_llm`.
-2. Open `Timeline` first. Point out `planner_started`, `llm_call_finished`, `llm_action_proposed`, `tool_call_started`, browser open/navigation, readiness wait, extract/click, evidence, and report events.
-3. Open `Graph`. Show the chain as `Task -> LLM -> ToolGateway -> Browser -> Readiness -> Evidence -> Report`.
-4. Click the `browser_open` / `browser_open_observe` node. Show before/after URL, duration, screenshot evidence, readiness confidence, and signals such as DOM complete, skeleton/spinner/overlay absent, layout stability, and soft network quiet.
-5. Click the LLM node. Show provider/model, proposed action, validation result, and whether repair was attempted. Confirm that API keys are not present in the payload.
-6. Click `Evidence`. Show page screenshot evidence, text evidence, source URL, page title, and evidence ids used by the report.
-7. During a running task, click `Stop and summarize`. Show the status moving through `stop_requested` to `succeeded_partial`, then open the partial report generated from current evidence.
-8. Open `Graph` and show `User Stop -> Partial Report`. If budget approval appears, show the `Budget Approval` node and the Human-in-the-loop card.
-9. Open `Report`. Explain that the final or partial answer is built from `evidence.jsonl`, not from a hidden browser state.
-10. If the task fails, switch back to `Graph` or `Timeline` and inspect recovery, failure screenshot, error node, and related trace payload.
-
-## Tests and Eval
-
-Run pytest:
-
-```bash
+uv run python -m compileall -q webscoper
+uv run pytest --collect-only -q
 uv run pytest -q
+uv run python scripts/run_workflow_eval.py --cases tests/fixtures/langgraph_main_eval_cases.json --output-dir eval_results/langgraph_eval_local
+uv run python scripts/run_workflow_eval.py --cases tests/fixtures/tool_gateway_eval_cases.json --output-dir eval_results/tool_gateway_eval_local
+uv run python scripts/run_workflow_eval.py --cases tests/fixtures/langgraph_skill_eval_cases.json --output-dir eval_results/langgraph_skill_eval_local
+cd apps/web && pnpm lint && pnpm build
 ```
 
-For targeted validation guidance, see `tests/README.md`.
+## Safety
 
-Run workflow eval:
+VaniScope does not bypass login, CAPTCHA, paywalls, or access controls. It does not enter real passwords, payment information, or PII. Public web access is disabled by default, and mutating or ambiguous actions must go through RiskGate and Approval.
 
-```bash
-uv run python scripts/run_workflow_eval.py \
-  --cases tests/fixtures/langgraph_main_eval_cases.json \
-  --output-dir eval_results/langgraph_eval_local
-```
+## Cleanup Audit
 
-Run ToolGateway eval:
-
-```bash
-uv run python scripts/run_workflow_eval.py \
-  --cases tests/fixtures/tool_gateway_eval_cases.json \
-  --output-dir eval_results/tool_gateway_eval_local
-```
-
-Run skill eval:
-
-```bash
-uv run python scripts/run_workflow_eval.py \
-  --cases tests/fixtures/langgraph_skill_eval_cases.json \
-  --output-dir eval_results/langgraph_skill_eval_local
-```
-
-## Common Artifacts
-
-* `final_report.md`: final report.
-* `evidence.jsonl`: evidence entries.
-* `review.json` / `review_summary.md`: report review result.
-* `trace.jsonl`: browser/runtime trace.
-* `transcript.jsonl`: runtime transcript.
-* `events.jsonl`: task events.
-* `graph.json`: execution graph for offline replay.
-* `observation.json`: latest rich browser observation.
-* `tool_audit.jsonl`: ToolGateway audit.
-* `recovery.jsonl`: recovery strategy records.
-* `approvals.jsonl` / `pending.jsonl` / `risk_report.json`: approval-related artifacts.
-* `workflow_state.json`: LangGraph workflow state snapshot.
+The current architecture compaction audit is in `docs/architecture_cleanup_audit.md`.

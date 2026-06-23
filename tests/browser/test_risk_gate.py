@@ -7,7 +7,7 @@ from webscoper.schemas.browser import ActionContract
 def test_risk_gate_allows_safe_browser_open() -> None:
     result = RiskGate().check_tool_call(
         task_id="task_test",
-        tool_name="browser_open_observe",
+        tool_name="browser_open",
         arguments={"url": "file:///tmp/example.html"},
     )
 
@@ -26,7 +26,7 @@ def test_risk_gate_requires_approval_for_submit_click() -> None:
     assert result.signals[0].kind == "external_submit"
 
 
-def test_risk_gate_blocks_dangerous_click_intents() -> None:
+def test_risk_gate_blocks_dangerous_browser_clicks() -> None:
     cases = [
         ("Delete account", "delete_action"),
         ("Pay now", "payment_form"),

@@ -88,7 +88,7 @@ class PublicWebPolicy:
         if classification.kind == "unsupported_scheme":
             return _block(
                 "block_unsupported_scheme",
-                f"Unsupported URL scheme for browser_open_observe: {classification.scheme or 'none'}",
+                f"Unsupported URL scheme for browser_open: {classification.scheme or 'none'}",
                 url,
                 classification.kind,
                 host=host,
@@ -146,7 +146,7 @@ class PublicWebPolicy:
 
         return _block(
             "block_unsupported_scheme",
-            f"Unsupported URL for browser_open_observe: {url}",
+            f"Unsupported URL for browser_open: {url}",
             url,
             classification.kind,
             host=host,

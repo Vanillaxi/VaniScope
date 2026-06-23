@@ -18,13 +18,24 @@ class DeterministicTaskPlanner:
                 step_id="step_001",
                 tool_call=ToolCall(
                     call_id="call_001",
-                    tool_id="browser_open_observe",
+                    tool_id="browser_open",
                     arguments={"url": task.target_url},
-                    reason="Open the target page and collect the initial observation.",
+                    reason="Open the target page.",
                 ),
-                reason="Open the target page and collect the initial observation.",
-                expected_outcome="The target page is visible and observed.",
-            )
+                reason="Open the target page.",
+                expected_outcome="The target page is visible.",
+            ),
+            PlannedStep(
+                step_id="step_002",
+                tool_call=ToolCall(
+                    call_id="call_002",
+                    tool_id="browser_observe",
+                    arguments={"include_screenshot": True},
+                    reason="Collect the initial page observation.",
+                ),
+                reason="Collect the initial page observation.",
+                expected_outcome="The target page is observed.",
+            ),
         ]
 
         if task.mode == "auto_explore":
@@ -38,9 +49,9 @@ class DeterministicTaskPlanner:
             steps.extend(
                 [
                     PlannedStep(
-                        step_id="step_002",
+                        step_id="step_003",
                         tool_call=ToolCall(
-                            call_id="call_002",
+                            call_id="call_003",
                             tool_id="browser_extract",
                             reason="Extract visible page information after opening.",
                         ),
@@ -48,12 +59,12 @@ class DeterministicTaskPlanner:
                         expected_outcome="Visible page information is available.",
                     ),
                     PlannedStep(
-                        step_id="step_003",
+                        step_id="step_004",
                         tool_call=ToolCall(
-                            call_id="call_003",
+                            call_id="call_004",
                             tool_id="finish_task",
                             arguments={
-                                "summary": "Open-only browser task completed.",
+                                "summary_instruction": "Open-only browser task completed.",
                             },
                             reason="Finish the open-only browser task.",
                         ),
@@ -66,12 +77,15 @@ class DeterministicTaskPlanner:
             steps.extend(
                 [
                     PlannedStep(
-                        step_id="step_002",
+                        step_id="step_003",
                         tool_call=ToolCall(
-                            call_id="call_002",
-                            tool_id="browser_click_intent",
+                            call_id="call_003",
+                            tool_id="browser_click",
                             arguments={
-                                "action": task.action.model_dump(mode="json"),
+                                "target_hint": task.action.target_hint,
+                                "expected_effect": task.action.expected_effect.model_dump(
+                                    mode="json"
+                                ),
                             },
                             reason="Click the requested target and verify the expected effect.",
                         ),
@@ -79,9 +93,9 @@ class DeterministicTaskPlanner:
                         expected_outcome="The requested click effect is verified.",
                     ),
                     PlannedStep(
-                        step_id="step_003",
+                        step_id="step_004",
                         tool_call=ToolCall(
-                            call_id="call_003",
+                            call_id="call_004",
                             tool_id="browser_extract",
                             reason="Extract visible page information after clicking.",
                         ),
@@ -89,16 +103,16 @@ class DeterministicTaskPlanner:
                         expected_outcome="Visible post-click page information is available.",
                     ),
                     PlannedStep(
-                        step_id="step_004",
+                        step_id="step_005",
                         tool_call=ToolCall(
-                            call_id="call_004",
+                            call_id="call_005",
                             tool_id="finish_task",
                             arguments={
-                                "summary": "Click-intent browser task completed.",
+                                "summary_instruction": "Browser click task completed.",
                             },
-                            reason="Finish the click-intent browser task.",
+                            reason="Finish the browser click task.",
                         ),
-                        reason="Finish the click-intent browser task.",
+                        reason="Finish the browser click task.",
                         expected_outcome="The task is marked complete.",
                     ),
                 ]

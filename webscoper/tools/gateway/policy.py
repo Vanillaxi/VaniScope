@@ -54,8 +54,7 @@ class ToolGatewayPolicy:
             )
 
         should_risk_check = (
-            tool_name == "browser_click_intent"
-            or tool_name in {"browser_click", "browser_type", "browser_select"}
+            tool_name in {"browser_click", "browser_type", "browser_select"}
             or descriptor.can_mutate_page
             or descriptor.permission != "read_only"
             or descriptor.risk_level != "read_only"

@@ -33,8 +33,8 @@ def test_langgraph_approval_bridge_creates_json_safe_interrupt_payload() -> None
     payload = bridge.create_interrupt_payload(
         task_id="task_bridge",
         thread_id="task_bridge",
-        tool_name="browser_click_intent",
-        arguments={"action": {"action_type": "click", "target_hint": "Submit"}},
+        tool_name="browser_click",
+        arguments={"target_hint": "Submit"},
         risk_result=risk_result,
         node_name="execute_plan",
         tool_call_id="call_001",
@@ -65,15 +65,15 @@ def test_langgraph_approval_bridge_reuses_pending_interrupt() -> None:
     first = bridge.create_interrupt_payload(
         task_id="task_bridge",
         thread_id="task_bridge",
-        tool_name="browser_click_intent",
-        arguments={"action": {"target_hint": "Submit"}},
+        tool_name="browser_click",
+        arguments={"target_hint": "Submit"},
         risk_result=risk_result,
     )
     second = bridge.create_interrupt_payload(
         task_id="task_bridge",
         thread_id="task_bridge",
-        tool_name="browser_click_intent",
-        arguments={"action": {"target_hint": "Submit"}},
+        tool_name="browser_click",
+        arguments={"target_hint": "Submit"},
         risk_result=risk_result,
     )
 

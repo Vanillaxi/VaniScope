@@ -156,7 +156,7 @@ class RiskGate:
         )
         keyword_result = self._check_keywords(
             action_text,
-            tool_name="browser_click_intent",
+            tool_name="browser_click",
             action_contract=action_contract,
         )
         if keyword_result is not None:

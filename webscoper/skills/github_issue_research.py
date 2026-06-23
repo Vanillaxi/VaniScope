@@ -57,7 +57,7 @@ class GitHubIssueResearchSkill:
                 "issue_research",
                 "contribution_research",
             ],
-            required_tools=["browser_open_observe", "browser_extract"],
+            required_tools=["browser_open", "browser_observe", "browser_extract"],
             risk_level="read_only",
             instruction=SkillInstruction(
                 title="GitHub Issue Research Instructions",

@@ -112,7 +112,7 @@ def test_plan_validator_reports_core_invalid_plan_cases(tmp_path: Path) -> None:
         ),
         (
             _task(),
-            _plan(ToolCall(call_id="call_001", tool_id="browser_open_observe")),
+            _plan(ToolCall(call_id="call_001", tool_id="browser_open")),
             "MISSING_REQUIRED_ARGUMENT",
         ),
         (
@@ -120,9 +120,12 @@ def test_plan_validator_reports_core_invalid_plan_cases(tmp_path: Path) -> None:
             _plan(
                 ToolCall(
                     call_id="call_001",
-                    tool_id="browser_click_intent",
+                    tool_id="browser_click",
                     arguments={
-                        "action": _task(action=True).action.model_dump(mode="json")
+                        "target_hint": _task(action=True).action.target_hint,
+                        "expected_effect": _task(
+                            action=True
+                        ).action.expected_effect.model_dump(mode="json"),
                     },
                 )
             ),
@@ -133,7 +136,7 @@ def test_plan_validator_reports_core_invalid_plan_cases(tmp_path: Path) -> None:
             _plan(
                 ToolCall(
                     call_id="call_001",
-                    tool_id="browser_open_observe",
+                    tool_id="browser_open",
                     arguments={"url": _task().target_url},
                 ),
                 ToolCall(call_id="call_002", tool_id="finish_task"),

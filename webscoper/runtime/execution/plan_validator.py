@@ -59,24 +59,24 @@ class PlanValidator:
             _validate_required_arguments(step, issues)
 
             if tool_id in _BROWSER_TOOL_IDS:
-                if not browser_action_seen and tool_id != "browser_open_observe":
+                if not browser_action_seen and tool_id != "browser_open":
                     issues.append(
                         PlanValidationIssue(
                             issue_type="INVALID_TOOL_ORDER",
-                            message="The first browser action must be browser_open_observe.",
+                            message="The first browser action must be browser_open.",
                             step_id=step.step_id,
                             tool_id=tool_id,
                         )
                     )
                 browser_action_seen = True
 
-            if tool_id == "browser_open_observe":
+            if tool_id == "browser_open":
                 opened = True
-            elif tool_id in {"browser_click_intent", "browser_extract"} and not opened:
+            elif tool_id in _SESSION_BROWSER_TOOL_IDS and not opened:
                 issues.append(
                     PlanValidationIssue(
                         issue_type="INVALID_TOOL_ORDER",
-                        message=f"{tool_id} cannot run before browser_open_observe.",
+                        message=f"{tool_id} cannot run before browser_open.",
                         step_id=step.step_id,
                         tool_id=tool_id,
                     )
@@ -173,20 +173,20 @@ def _validate_required_arguments(
 ) -> None:
     tool_id = step.tool_call.tool_id
     arguments = step.tool_call.arguments
-    if tool_id == "browser_open_observe" and not arguments.get("url"):
+    if tool_id == "browser_open" and not arguments.get("url"):
         issues.append(
             PlanValidationIssue(
                 issue_type="MISSING_REQUIRED_ARGUMENT",
-                message="browser_open_observe requires arguments.url.",
+                message="browser_open requires arguments.url.",
                 step_id=step.step_id,
                 tool_id=tool_id,
             )
         )
-    if tool_id == "browser_click_intent" and not arguments.get("action"):
+    if tool_id == "browser_click" and not arguments.get("target_hint"):
         issues.append(
             PlanValidationIssue(
                 issue_type="MISSING_REQUIRED_ARGUMENT",
-                message="browser_click_intent requires arguments.action.",
+                message="browser_click requires arguments.target_hint.",
                 step_id=step.step_id,
                 tool_id=tool_id,
             )
@@ -194,7 +194,17 @@ def _validate_required_arguments(
 
 
 _BROWSER_TOOL_IDS = {
-    "browser_open_observe",
-    "browser_click_intent",
+    "browser_open",
+    "browser_observe",
+    "browser_click",
+    "browser_type",
+    "browser_select",
+    "browser_scroll",
+    "browser_wait",
     "browser_extract",
+    "browser_screenshot",
+}
+
+_SESSION_BROWSER_TOOL_IDS = _BROWSER_TOOL_IDS - {
+    "browser_open",
 }

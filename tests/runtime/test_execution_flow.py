@@ -40,10 +40,16 @@ def test_deterministic_planner_builds_open_and_click_plans() -> None:
         for step in DeterministicTaskPlanner().build_plan(click_task).steps
     ]
 
-    assert open_tool_ids == ["browser_open_observe", "browser_extract", "finish_task"]
+    assert open_tool_ids == [
+        "browser_open",
+        "browser_observe",
+        "browser_extract",
+        "finish_task",
+    ]
     assert click_tool_ids == [
-        "browser_open_observe",
-        "browser_click_intent",
+        "browser_open",
+        "browser_observe",
+        "browser_click",
         "browser_extract",
         "finish_task",
     ]
@@ -94,7 +100,7 @@ async def test_execution_handler_click_task_writes_trace_and_transcript(
     assert context.transcript_store.transcript_path.exists()
 
     trace_action_types = _trace_action_types(context.trace_recorder.trace_path)
-    assert "browser_click_intent" in trace_action_types
+    assert "browser_click" in trace_action_types
     assert "effect_verify" in trace_action_types
 
 
@@ -167,8 +173,9 @@ async def test_execution_handler_runs_fake_llm_planner_mode(tmp_path: Path) -> N
     assert "execution_completed" in event_types
 
     trace_actions = _jsonl_values(context.trace_recorder.trace_path, "action_type")
-    assert "browser_open_observe" in trace_actions
-    assert "browser_click_intent" in trace_actions
+    assert "browser_open" in trace_actions
+    assert "browser_observe" in trace_actions
+    assert "browser_click" in trace_actions
     assert "effect_verify" in trace_actions
     assert "browser_extract" in trace_actions
     assert "finish_task" in trace_actions

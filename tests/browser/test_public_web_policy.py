@@ -174,7 +174,7 @@ async def test_browser_open_blocks_public_url_before_page_start(tmp_path: Path) 
     runtime = StatefulBrowserToolRuntime(trace_recorder=recorder)
 
     with pytest.raises(PublicWebPolicyError) as exc_info:
-        await runtime.open_observe("https://example.com")
+        await runtime.open("https://example.com")
 
     assert exc_info.value.decision.decision == "block_public_network_disabled"
     assert runtime.last_observation is not None
@@ -204,7 +204,7 @@ async def test_tool_gateway_browser_open_returns_structured_public_web_block(
     result = await gateway.invoke(
         ToolInvocationRequest(
             task_id="task",
-            tool_name="browser_open_observe",
+            tool_name="browser_open",
             arguments={"url": "https://example.com"},
             run_dir=str(tmp_path / "run"),
         )
