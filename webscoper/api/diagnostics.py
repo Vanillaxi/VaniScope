@@ -87,7 +87,10 @@ def _llm_status() -> dict[str, object]:
         "default_provider": router.default_provider,
         "default_model": router.default_model,
         "model": selected_provider.model if selected_provider is not None else router.default_model,
+        "provider": selected_provider.provider_id if selected_provider is not None else router.default_provider,
         "provider_type": selected_provider.provider_type if selected_provider is not None else None,
+        "timeout_ms": selected_provider.timeout_ms if selected_provider is not None else None,
+        "fallback_model": selected_provider.fallback_model if selected_provider is not None else None,
         "real_enabled": real_enabled,
         "real_llm_enabled_by_default": False,
         "local_config_present": local_config is not None,
@@ -191,6 +194,8 @@ def _redacted_budget(budget: dict[str, Any]) -> dict[str, object]:
         "max_cost_usd",
         "enable_budget_approval",
         "enable_auto_compaction",
+        "max_llm_retries_per_call",
+        "retry_on_llm_timeout",
         "timeout_seconds",
     }
     return {key: value for key, value in budget.items() if key in safe_keys}

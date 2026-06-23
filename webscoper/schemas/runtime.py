@@ -26,6 +26,8 @@ class BudgetContext(BaseModel):
     hard_cost_usd_per_task: float = 0.60
     enable_budget_approval: bool = True
     enable_auto_compaction: bool = True
+    max_llm_retries_per_call: int = 1
+    retry_on_llm_timeout: bool = True
     timeout_seconds: int = 60
     llm_timeout_seconds: int = 60
 
@@ -91,6 +93,10 @@ TaskEventKind = Literal[
     "llm_action_validated",
     "llm_action_repaired",
     "llm_action_rejected",
+    "llm_retry_scheduled",
+    "llm_retry_started",
+    "llm_retry_finished",
+    "llm_fallback_model_selected",
     "tool_policy_checked",
     "risk_check_started",
     "risk_check_finished",

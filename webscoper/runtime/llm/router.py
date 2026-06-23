@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import json
+import asyncio
 from pathlib import Path
 from time import perf_counter
 from typing import Any
 
 from webscoper.runtime.control import TaskControlStore
-from webscoper.runtime.llm.client import BaseLLMClient, FakeLLMClient, OpenAICompatibleLLMClient
+from webscoper.runtime.llm.client import (
+    BaseLLMClient,
+    FakeLLMClient,
+    LLMProviderTimeoutError,
+    OpenAICompatibleLLMClient,
+)
 from webscoper.runtime.llm.budget import (
     BudgetApprovalRequired,
     BudgetHardLimitExceeded,
@@ -74,6 +80,7 @@ class LLMProviderRouter:
                 client,
                 provider=provider.provider_id,
                 model=provider.model,
+                fallback_model=provider.fallback_model,
                 mode=provider.mode or self.router_config.mode,
                 run_dir=run_dir,
                 task_id=task_id,
@@ -88,6 +95,12 @@ class LLMProviderRouter:
             f"Unsupported LLM provider_type for {provider.provider_id}: "
             f"{provider.provider_type}"
         )
+
+
+class LLMTimeoutApprovalRequired(RuntimeError):
+    def __init__(self, approval_id: str) -> None:
+        super().__init__(f"LLM timeout approval required: {approval_id}")
+        self.approval_id = approval_id
 
 
 class AuditedBudgetedLLMClient(BaseLLMClient):
@@ -106,10 +119,12 @@ class AuditedBudgetedLLMClient(BaseLLMClient):
         approval_store: ApprovalStore | None = None,
         control_store: TaskControlStore | None = None,
         user_goal: str | None = None,
+        fallback_model: str | None = None,
     ) -> None:
         self.client = client
         self.provider = provider
         self.model = model
+        self.fallback_model = fallback_model
         self.mode = mode
         self.audit_path = audit_path
         self.task_id = task_id or "unknown"
@@ -315,37 +330,158 @@ class AuditedBudgetedLLMClient(BaseLLMClient):
         elif control and control.budget_override:
             self.control_store.clear_transient_flags(self.task_id)
 
-        try:
-            response = await self.client.generate(request)
-            completion_tokens = _estimate_text_tokens(response.content)
-            self.calls_made += 1
-            self.prompt_tokens_total += prompt_tokens
-            self.completion_tokens_total += completion_tokens
-            self.total_tokens += prompt_tokens + completion_tokens
-            self._write_audit(
-                call_id=call_id,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                duration_ms=int((perf_counter() - started) * 1000),
-                status="success",
-                error_type=None,
-                budget_decision=budget_decision,
-                response_preview=_preview_text(response.content),
-            )
-            return response
-        except Exception as exc:
-            self.calls_made += 1
-            self._write_audit(
-                call_id=call_id,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=0,
-                duration_ms=int((perf_counter() - started) * 1000),
-                status="failed",
-                error_type=type(exc).__name__,
-                budget_decision=budget_decision,
-                response_preview=None,
-            )
-            raise
+        max_retries = (
+            max(0, self.budget.max_llm_retries_per_call)
+            if self.budget.retry_on_llm_timeout
+            else 0
+        )
+        timeout_error: LLMProviderTimeoutError | None = None
+        for attempt in range(max_retries + 1):
+            attempt_call_id = call_id if attempt == 0 else f"{call_id}_retry_{attempt}"
+            if attempt > 0:
+                self._emit(
+                    "llm_retry_started",
+                    "LLM retry started",
+                    self._llm_event_payload(
+                        status="running",
+                        duration_ms=0,
+                        error_type=None,
+                        error_message=None,
+                        retryable=True,
+                        attempt=attempt,
+                        max_retries=max_retries,
+                    ),
+                )
+            try:
+                response = await self.client.generate(request)
+                completion_tokens = _estimate_text_tokens(response.content)
+                self.calls_made += 1
+                self.prompt_tokens_total += prompt_tokens
+                self.completion_tokens_total += completion_tokens
+                self.total_tokens += prompt_tokens + completion_tokens
+                duration_ms = int((perf_counter() - started) * 1000)
+                self._write_audit(
+                    call_id=attempt_call_id,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    duration_ms=duration_ms,
+                    status="success",
+                    error_type=None,
+                    budget_decision=budget_decision,
+                    response_preview=_preview_text(response.content),
+                    retryable=False,
+                )
+                self._emit_llm_finished(
+                    status="success",
+                    duration_ms=duration_ms,
+                    error_type=None,
+                    error_message=None,
+                    retryable=False,
+                    attempt=attempt,
+                    max_retries=max_retries,
+                )
+                if attempt > 0:
+                    self._emit(
+                        "llm_retry_finished",
+                        "LLM retry finished",
+                        self._llm_event_payload(
+                            status="success",
+                            duration_ms=duration_ms,
+                            error_type=None,
+                            error_message=None,
+                            retryable=False,
+                            attempt=attempt,
+                            max_retries=max_retries,
+                        ),
+                    )
+                return response
+            except LLMProviderTimeoutError as exc:
+                timeout_error = exc
+                self.calls_made += 1
+                duration_ms = int((perf_counter() - started) * 1000)
+                self._write_audit(
+                    call_id=attempt_call_id,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=0,
+                    duration_ms=duration_ms,
+                    status="failed",
+                    error_type="LLM_PROVIDER_TIMEOUT",
+                    budget_decision=budget_decision,
+                    response_preview=None,
+                    retryable=True,
+                )
+                self._emit_llm_finished(
+                    status="failed",
+                    duration_ms=duration_ms,
+                    error_type="LLM_PROVIDER_TIMEOUT",
+                    error_message=str(exc),
+                    retryable=True,
+                    attempt=attempt,
+                    max_retries=max_retries,
+                )
+                if attempt > 0:
+                    self._emit(
+                        "llm_retry_finished",
+                        "LLM retry finished",
+                        self._llm_event_payload(
+                            status="failed",
+                            duration_ms=duration_ms,
+                            error_type="LLM_PROVIDER_TIMEOUT",
+                            error_message=str(exc),
+                            retryable=True,
+                            attempt=attempt,
+                            max_retries=max_retries,
+                        ),
+                    )
+                if attempt < max_retries:
+                    self._emit(
+                        "llm_retry_scheduled",
+                        "LLM retry scheduled after provider timeout",
+                        self._llm_event_payload(
+                            status="scheduled",
+                            duration_ms=duration_ms,
+                            error_type="LLM_PROVIDER_TIMEOUT",
+                            error_message=str(exc),
+                            retryable=True,
+                            attempt=attempt + 1,
+                            max_retries=max_retries,
+                        ),
+                    )
+                    await asyncio.sleep(1)
+                    continue
+                approval_id = self._create_timeout_approval(
+                    error_message=str(exc),
+                    timeout_ms=_client_timeout_ms(self.client),
+                    prompt_tokens=prompt_tokens,
+                )
+                raise LLMTimeoutApprovalRequired(approval_id) from exc
+            except Exception as exc:
+                self.calls_made += 1
+                duration_ms = int((perf_counter() - started) * 1000)
+                self._write_audit(
+                    call_id=attempt_call_id,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=0,
+                    duration_ms=duration_ms,
+                    status="failed",
+                    error_type=type(exc).__name__,
+                    budget_decision=budget_decision,
+                    response_preview=None,
+                    retryable=False,
+                )
+                self._emit_llm_finished(
+                    status="failed",
+                    duration_ms=duration_ms,
+                    error_type=type(exc).__name__,
+                    error_message=str(exc),
+                    retryable=False,
+                    attempt=attempt,
+                    max_retries=max_retries,
+                )
+                raise
+        if timeout_error is not None:
+            raise timeout_error
+        raise RuntimeError("LLM call failed without a provider response.")
 
     def _budget_decision(self, prompt_tokens: int) -> str:
         if self.calls_made >= self.budget.max_llm_calls_per_task:
@@ -378,6 +514,114 @@ class AuditedBudgetedLLMClient(BaseLLMClient):
         except Exception:
             return
 
+    def _emit_llm_finished(
+        self,
+        *,
+        status: str,
+        duration_ms: int,
+        error_type: str | None,
+        error_message: str | None,
+        retryable: bool,
+        attempt: int,
+        max_retries: int,
+    ) -> None:
+        self._emit(
+            "llm_call_finished",
+            "LLM call finished",
+            self._llm_event_payload(
+                status=status,
+                duration_ms=duration_ms,
+                error_type=error_type,
+                error_message=error_message,
+                retryable=retryable,
+                attempt=attempt,
+                max_retries=max_retries,
+            ),
+        )
+
+    def _llm_event_payload(
+        self,
+        *,
+        status: str,
+        duration_ms: int,
+        error_type: str | None,
+        error_message: str | None,
+        retryable: bool,
+        attempt: int,
+        max_retries: int,
+    ) -> dict[str, Any]:
+        return {
+            "run_id": self.task_id,
+            "status": status,
+            "provider": self.provider,
+            "model": self.model,
+            "purpose": self.purpose,
+            "duration_ms": duration_ms,
+            "error_type": error_type,
+            "error_message": error_message,
+            "timeout_ms": _client_timeout_ms(self.client),
+            "retryable": retryable,
+            "attempt": attempt,
+            "max_retries": max_retries,
+        }
+
+    def _create_timeout_approval(
+        self,
+        *,
+        error_message: str,
+        timeout_ms: int | None,
+        prompt_tokens: int,
+    ) -> str:
+        if self.approval_store is None:
+            raise LLMProviderTimeoutError(error_message)
+        existing = [
+            approval
+            for approval in self.approval_store.list_for_task(self.task_id)
+            if approval.status == "pending"
+            and approval.metadata.get("approval_type") == "llm_timeout"
+        ]
+        if existing:
+            return existing[-1].approval_id
+        metadata = {
+            "approval_type": "llm_timeout",
+            "provider": self.provider,
+            "model": self.model,
+            "fallback_model": self.fallback_model,
+            "purpose": self.purpose,
+            "timeout_ms": timeout_ms,
+            "estimated_prompt_tokens_next_call": prompt_tokens,
+            "user_goal": self.user_goal,
+            "suggested_options": [
+                "retry_same_model",
+                "retry_with_faster_model",
+                "stop_and_summarize",
+                "cancel_task",
+            ],
+        }
+        approval = self.approval_store.create_request(
+            task_id=self.task_id,
+            reason="The LLM provider did not respond before the timeout.",
+            risk_level="low",
+            tool_name="llm_timeout",
+            action_type="timeout_approval",
+            target_hint=self.purpose,
+            metadata=metadata,
+        )
+        run_dir = self.audit_path.parent if self.audit_path is not None else None
+        if run_dir is not None:
+            self.approval_store.write_jsonl_for_task(self.task_id, run_dir / "approvals.jsonl")
+        self._emit(
+            "approval_required",
+            "Approval required after LLM provider timeout",
+            {
+                "run_id": self.task_id,
+                "approval_request": approval.model_dump(mode="json"),
+                "error_type": "LLM_PROVIDER_TIMEOUT",
+                "error_message": error_message,
+            },
+        )
+        return approval.approval_id
+
     def _write_audit(
         self,
         *,
@@ -389,6 +633,7 @@ class AuditedBudgetedLLMClient(BaseLLMClient):
         error_type: str | None,
         budget_decision: str,
         response_preview: str | None,
+        retryable: bool | None = None,
     ) -> None:
         if self.audit_path is None:
             return
@@ -406,6 +651,8 @@ class AuditedBudgetedLLMClient(BaseLLMClient):
             "duration_ms": duration_ms,
             "status": status,
             "error_type": error_type,
+            "retryable": retryable,
+            "timeout_ms": _client_timeout_ms(self.client),
             "budget_decision": budget_decision,
             "response_preview": response_preview,
             "response_redacted": response_preview is not None,
@@ -419,6 +666,7 @@ def _wrap_for_audit(
     *,
     provider: str,
     model: str,
+    fallback_model: str | None = None,
     mode: str,
     run_dir: Path | None,
     task_id: str | None,
@@ -443,6 +691,7 @@ def _wrap_for_audit(
         approval_store=approval_store,
         control_store=control_store,
         user_goal=user_goal,
+        fallback_model=fallback_model,
     )
 
 
@@ -519,6 +768,14 @@ def _legacy_prompt_budget_exceeded(budget: BudgetContext, request: LLMRequest) -
     if "max_prompt_tokens" not in fields_set or "max_prompt_tokens_per_call" in fields_set:
         return False
     return _estimate_request_tokens(request) > budget.max_prompt_tokens
+
+
+def _client_timeout_ms(client: BaseLLMClient) -> int | None:
+    config = getattr(client, "config", None)
+    timeout_ms = getattr(config, "timeout_ms", None)
+    if isinstance(timeout_ms, int):
+        return timeout_ms
+    return None
 
 
 def _utc_now() -> str:

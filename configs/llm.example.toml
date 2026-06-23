@@ -35,6 +35,11 @@ enable_budget_approval = true
 enable_auto_compaction = true
 timeout_seconds = 60
 
+[llm]
+# Provider read timeouts are retried once before the task asks the user what to do.
+max_retries_per_call = 1
+retry_on_timeout = true
+
 [providers.fake]
 type = "fake"
 model = "fake-planner"
@@ -44,6 +49,7 @@ type = "openai_compatible"
 base_url = "https://api.openai.com/v1"
 api_key = "YOUR_API_KEY_HERE"
 model = "gpt-4.1-mini"
+fallback_model = "gpt-4.1-nano"
 timeout_seconds = 30
 
 # Alibaba Cloud DashScope / Qwen. Set DASHSCOPE_API_KEY before selecting this
@@ -53,4 +59,5 @@ type = "openai_compatible"
 base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 api_key_env = "DASHSCOPE_API_KEY"
 model = "qwen-plus"
-timeout_seconds = 30
+fallback_model = "qwen-turbo"
+timeout_seconds = 90

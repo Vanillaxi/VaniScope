@@ -73,14 +73,17 @@ def load_llm_router_config_from_file(path: Path) -> LLMRouterConfig:
         except ValidationError as exc:
             raise ValueError(f"Invalid provider config: {provider_id}") from exc
 
+    budget_payload = (
+        payload.get("budget") if isinstance(payload.get("budget"), dict) else {}
+    )
+    llm_payload = payload.get("llm") if isinstance(payload.get("llm"), dict) else {}
+
     return LLMRouterConfig(
         default_provider=str(default_provider),
         default_model=str(default_model or "fake-planner"),
         mode=str(mode),
         providers=providers,
-        budget=_normalize_budget_payload(
-            payload.get("budget") if isinstance(payload.get("budget"), dict) else {}
-        ),
+        budget=_normalize_budget_payload(budget_payload, llm_payload=llm_payload),
     )
 
 
@@ -161,6 +164,7 @@ def provider_config_to_client_config(provider: LLMProviderConfig) -> LLMClientCo
             base_url=provider.base_url,
             api_key=provider.api_key or "",
             model=provider.model,
+            fallback_model=provider.fallback_model,
             timeout_ms=provider.timeout_ms,
             temperature=provider.temperature,
             max_tokens=provider.max_tokens,
@@ -173,6 +177,7 @@ def provider_config_to_client_config(provider: LLMProviderConfig) -> LLMClientCo
         base_url=provider.base_url,
         api_key=provider.api_key,
         model=provider.model,
+        fallback_model=provider.fallback_model,
         timeout_ms=provider.timeout_ms,
         temperature=provider.temperature,
         max_tokens=provider.max_tokens,
@@ -203,7 +208,7 @@ def _normalize_provider_payload(payload: dict) -> dict:
     return normalized
 
 
-def _normalize_budget_payload(payload: dict) -> dict:
+def _normalize_budget_payload(payload: dict, *, llm_payload: dict | None = None) -> dict:
     aliases = {
         "max_calls_per_task": "max_llm_calls_per_task",
         "max_prompt_tokens_per_call": "max_prompt_tokens_per_call",
@@ -211,8 +216,14 @@ def _normalize_budget_payload(payload: dict) -> dict:
         "max_output_tokens_per_task": "max_completion_tokens",
         "max_completion_tokens_per_call": "max_completion_tokens_per_call",
         "max_cost_usd_per_task": "max_cost_usd",
+        "max_retries_per_call": "max_llm_retries_per_call",
+        "retry_on_timeout": "retry_on_llm_timeout",
     }
     normalized = dict(payload)
+    if llm_payload:
+        for source in ("max_retries_per_call", "retry_on_timeout"):
+            if source in llm_payload and source not in normalized:
+                normalized[source] = llm_payload[source]
     for source, target in aliases.items():
         if source in normalized:
             normalized[target] = normalized[source]

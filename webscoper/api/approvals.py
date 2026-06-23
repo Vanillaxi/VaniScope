@@ -61,6 +61,14 @@ def decide_approval(
             option=option,
         )
         return ApprovalDecisionResponse(approval=approval, resume_result=resume_result)
+    if approval.metadata.get("approval_type") == "llm_timeout":
+        resume_result = _resolve_timeout_approval(
+            service,
+            approval=approval,
+            approved=approved,
+            option=option,
+        )
+        return ApprovalDecisionResponse(approval=approval, resume_result=resume_result)
 
     if approved:
         resume_result = service.resume_langgraph_after_approval(
@@ -140,13 +148,7 @@ def _resolve_budget_approval(
     )
     request = service._task_requests.get(task_id)
     if approved and selected.startswith("continue") and request is not None:
-        import asyncio
-        import threading
-
-        threading.Thread(
-            target=lambda: asyncio.run(service._run_async_task(task_id, request)),
-            daemon=True,
-        ).start()
+        _restart_task(service, task_id, request)
     return TaskResumeResult(
         task_id=task_id,
         approval_id=approval.approval_id,
@@ -155,3 +157,91 @@ def _resolve_budget_approval(
         message=message,
         error=None,
     )
+
+
+def _resolve_timeout_approval(
+    service,
+    *,
+    approval,
+    approved: bool,
+    option: str | None,
+) -> TaskResumeResult:
+    task_id = approval.task_id
+    selected = option or ("retry_same_model" if approved else "cancel_task")
+    resumed = False
+    message = "LLM timeout approval resolved."
+    request = service._task_requests.get(task_id)
+    if selected == "retry_same_model" and approved:
+        service._set_task_state(task_id, "running", None)
+        message = "Retrying the task with the same LLM model."
+        if request is not None:
+            _restart_task(service, task_id, request)
+            resumed = True
+    elif selected == "retry_with_faster_model" and approved:
+        fallback_model = approval.metadata.get("fallback_model")
+        if fallback_model and request is not None:
+            previous_model = getattr(request, "model", None) or approval.metadata.get("model")
+            request = request.model_copy(update={"model": fallback_model})
+            service._task_requests[task_id] = request
+            service._publish_task_event(
+                task_id,
+                "llm_fallback_model_selected",
+                "LLM fallback model selected",
+                {
+                    "run_id": task_id,
+                    "provider": approval.metadata.get("provider"),
+                    "from_model": previous_model,
+                    "to_model": fallback_model,
+                    "approval_id": approval.approval_id,
+                },
+            )
+            message = f"Retrying the task with fallback LLM model {fallback_model}."
+        else:
+            message = "Retrying the task with the same LLM model because no fallback model is configured."
+        service._set_task_state(task_id, "running", None)
+        if request is not None:
+            _restart_task(service, task_id, request)
+            resumed = True
+    elif selected == "stop_and_summarize":
+        response = service.stop_and_summarize_task(
+            task_id,
+            reason="Task stopped after LLM provider timeout.",
+            intro=(
+                "Task stopped after LLM provider timeout; report generated from collected evidence."
+            ),
+        )
+        message = response.message
+    else:
+        response = service.cancel_task(task_id)
+        message = response.message
+    run_dir = service._run_dir(task_id)
+    service.control_store.write_jsonl(task_id, run_dir / "user_control.jsonl")
+    service._publish_task_event(
+        task_id,
+        "approval_resolved",
+        "LLM timeout approval resolved",
+        {
+            "approval_id": approval.approval_id,
+            "approved": approved,
+            "option": selected,
+            "approval_type": "llm_timeout",
+        },
+    )
+    return TaskResumeResult(
+        task_id=task_id,
+        approval_id=approval.approval_id,
+        resumed=resumed,
+        status=service.get_task_status(task_id).status,
+        message=message,
+        error=None,
+    )
+
+
+def _restart_task(service, task_id: str, request) -> None:
+    import asyncio
+    import threading
+
+    threading.Thread(
+        target=lambda: asyncio.run(service._run_async_task(task_id, request)),
+        daemon=True,
+    ).start()

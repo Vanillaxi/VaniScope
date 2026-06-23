@@ -13,7 +13,7 @@ from webscoper.runtime.llm.auto_explore import (
     AutoExploreActionPlanner,
     decision_to_tool_call,
 )
-from webscoper.runtime.llm.router import LLMProviderRouter
+from webscoper.runtime.llm.router import LLMProviderRouter, LLMTimeoutApprovalRequired
 from webscoper.runtime.execution.results import merge_final_output, record_evidence
 from webscoper.runtime.execution.state import state_payload, status_from_loop_error
 from webscoper.schemas.browser import PageObservation
@@ -146,6 +146,11 @@ class LangGraphWorkflowNodes:
             )
         except BudgetApprovalRequired as exc:
             _mark_budget_approval_waiting(self.workflow, context, exc)
+            state["status"] = "waiting_for_approval"
+            state["error"] = str(exc)
+            return state
+        except LLMTimeoutApprovalRequired as exc:
+            _mark_timeout_approval_waiting(self.workflow, context, exc)
             state["status"] = "waiting_for_approval"
             state["error"] = str(exc)
             return state
@@ -630,6 +635,9 @@ class LangGraphWorkflowNodes:
                 )
             except BudgetApprovalRequired as exc:
                 _mark_budget_approval_waiting(self.workflow, context, exc)
+                return runtime.browser_runtime.last_observation or _empty_auto_observation(context)
+            except LLMTimeoutApprovalRequired as exc:
+                _mark_timeout_approval_waiting(self.workflow, context, exc)
                 return runtime.browser_runtime.last_observation or _empty_auto_observation(context)
             except BudgetHardLimitExceeded as exc:
                 self.workflow.handler.generate_partial_report(
@@ -1229,6 +1237,32 @@ def _mark_budget_approval_waiting(
             "run_id": context.run_id,
             "status": "waiting_for_approval",
             "approval_id": exc.approval_id,
+        },
+    )
+    workflow.handler.snapshot_context(context)
+
+
+def _mark_timeout_approval_waiting(
+    workflow: Any,
+    context: WebAgentContext,
+    exc: LLMTimeoutApprovalRequired,
+) -> None:
+    context.state.status = "waiting_for_approval"
+    context.state.error_type = "LLM_TIMEOUT_APPROVAL_REQUIRED"
+    context.state.error_message = str(exc)
+    context.transcript_store.append(
+        "llm_timeout_approval_required",
+        {"approval_id": exc.approval_id, "state": state_payload(context)},
+    )
+    context.transcript_store.append("task_paused", state_payload(context))
+    workflow.handler._emit_event(
+        "task_paused",
+        "Task paused after LLM provider timeout",
+        {
+            "run_id": context.run_id,
+            "status": "waiting_for_approval",
+            "approval_id": exc.approval_id,
+            "error_type": "LLM_PROVIDER_TIMEOUT",
         },
     )
     workflow.handler.snapshot_context(context)

@@ -342,7 +342,12 @@ type = "openai_compatible"
 base_url = "https://api.openai.com/v1"
 api_key = "YOUR_API_KEY_HERE"
 model = "gpt-4.1-mini"
+fallback_model = "gpt-4.1-nano"
 timeout_seconds = 30
+
+[llm]
+max_retries_per_call = 1
+retry_on_timeout = true
 ```
 
 public web mode 和 real LLM mode 是两个独立开关：开启其中一个不会自动开启另一个。
@@ -361,6 +366,10 @@ artifact、diagnostics 或 smoke summary。action validation 失败会写入
   并把任务暂停为 `waiting_for_approval`。
 - 用户可以选择 continue once、continue for the task、continue with compaction、
   stop and summarize 或 cancel。
+- provider read timeout 会写入失败的 `llm_call_finished`，`error_type` 为
+  `LLM_PROVIDER_TIMEOUT`；默认自动 retry 一次，仍失败则创建 `llm_timeout` approval。
+- timeout approval 支持 retry same model、retry with `fallback_model`、
+  stop and summarize from collected evidence 或 cancel。
 - provider context 与 task hard limit 仍然必须遵守，只能通过 compaction、减少上下文
   或 partial report 安全停止。
 

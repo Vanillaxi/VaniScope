@@ -41,7 +41,11 @@ from webscoper.runtime.llm.reviewer import (
     FakeLLMReportReviewer,
     OpenAICompatibleLLMReportReviewer,
 )
-from webscoper.runtime.llm.router import AuditedBudgetedLLMClient, LLMProviderRouter
+from webscoper.runtime.llm.router import (
+    AuditedBudgetedLLMClient,
+    LLMProviderRouter,
+    LLMTimeoutApprovalRequired,
+)
 from webscoper.runtime.safety.pending import PendingApprovalManager
 from webscoper.runtime.execution.plan_validator import PlanValidator
 from webscoper.runtime.execution.planner import DeterministicTaskPlanner, normalize_planner_mode
@@ -194,6 +198,27 @@ class WebAgentExecutionHandler:
                     "run_id": context.run_id,
                     "status": "waiting_for_approval",
                     "approval_id": exc.approval_id,
+                },
+            )
+            self.snapshot_context(context)
+            return runtime.browser_runtime.last_observation or _empty_observation(context)
+        except LLMTimeoutApprovalRequired as exc:
+            context.state.status = "waiting_for_approval"
+            context.state.error_type = "LLM_TIMEOUT_APPROVAL_REQUIRED"
+            context.state.error_message = str(exc)
+            context.transcript_store.append(
+                "llm_timeout_approval_required",
+                {"approval_id": exc.approval_id, "state": _state_payload(context)},
+            )
+            context.transcript_store.append("task_paused", _state_payload(context))
+            self._emit_event(
+                "task_paused",
+                "Task paused after LLM provider timeout",
+                {
+                    "run_id": context.run_id,
+                    "status": "waiting_for_approval",
+                    "approval_id": exc.approval_id,
+                    "error_type": "LLM_PROVIDER_TIMEOUT",
                 },
             )
             self.snapshot_context(context)
@@ -639,6 +664,7 @@ class WebAgentExecutionHandler:
         reason: str,
         *,
         status: str,
+        intro: str | None = None,
     ) -> None:
         context.state.status = status
         context.state.error_type = None
@@ -656,7 +682,7 @@ class WebAgentExecutionHandler:
         if context.evidence_store is not None:
             evidence_items = context.evidence_store.list_items()
             context.evidence_store.write_jsonl()
-        body = _partial_report_text(context, evidence_items, observation)
+        body = _partial_report_text(context, evidence_items, observation, intro=intro)
         report_path = context.run_dir / "final_report.md"
         report_path.write_text(body, encoding="utf-8")
         context.transcript_store.append(
@@ -1024,13 +1050,17 @@ def _partial_report_text(
     context: WebAgentContext,
     evidence_items: list[EvidenceItem],
     observation: PageObservation | None,
+    intro: str | None = None,
 ) -> str:
+    intro_text = intro or (
+        "Task was stopped by user; this report is generated from evidence collected before stopping."
+    )
     if not evidence_items:
         return "\n".join(
             [
                 "# VaniScope Partial Task Report",
                 "",
-                "Task stopped before enough evidence was collected.",
+                intro or "Task stopped before enough evidence was collected.",
                 "",
                 "## Task",
                 "",
@@ -1043,7 +1073,7 @@ def _partial_report_text(
     lines = [
         "# VaniScope Partial Task Report",
         "",
-        "Task was stopped by user; this report is generated from evidence collected before stopping.",
+        intro_text,
         "",
         "## Task",
         "",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
 import urllib.error
 import urllib.request
 from abc import ABC, abstractmethod
@@ -14,6 +15,13 @@ class BaseLLMClient(ABC):
     @abstractmethod
     async def generate(self, request: LLMRequest) -> LLMResponse:
         ...
+
+
+class LLMProviderTimeoutError(RuntimeError):
+    def __init__(self, message: str = "The read operation timed out") -> None:
+        super().__init__(message)
+        self.error_type = "LLM_PROVIDER_TIMEOUT"
+        self.retryable = True
 
 
 class FakeLLMClient(BaseLLMClient):
@@ -217,7 +225,11 @@ class OpenAICompatibleLLMClient(BaseLLMClient):
                 f"LLM HTTP request failed with status {exc.code}."
             ) from exc
         except urllib.error.URLError as exc:
+            if _is_timeout_reason(exc.reason):
+                raise LLMProviderTimeoutError(_timeout_message(exc.reason)) from exc
             raise RuntimeError(f"LLM HTTP request failed: {exc.reason}") from exc
+        except (TimeoutError, socket.timeout) as exc:
+            raise LLMProviderTimeoutError(_timeout_message(exc)) from exc
 
         try:
             data = json.loads(response_body)
@@ -251,6 +263,17 @@ def _request_model(request_model: str | None, config_model: str) -> str:
     if request_model and request_model not in {"none", "fake-llm"}:
         return request_model
     return config_model
+
+
+def _is_timeout_reason(reason: object) -> bool:
+    if isinstance(reason, (TimeoutError, socket.timeout)):
+        return True
+    return "timed out" in str(reason).lower()
+
+
+def _timeout_message(reason: object) -> str:
+    message = str(reason) or "The read operation timed out"
+    return "The read operation timed out" if "timed out" in message.lower() else message
 
 
 def _safe_extra_headers(headers: dict[str, str]) -> dict[str, str]:

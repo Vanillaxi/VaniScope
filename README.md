@@ -310,7 +310,12 @@ type = "openai_compatible"
 base_url = "https://api.openai.com/v1"
 api_key = "YOUR_API_KEY_HERE"
 model = "gpt-4.1-mini"
+fallback_model = "gpt-4.1-nano"
 timeout_seconds = 30
+
+[llm]
+max_retries_per_call = 1
+retry_on_timeout = true
 ```
 
 Public web mode and real LLM mode are independent switches: enabling one does not enable the other. Real public exploration needs both `configs/runtime.local.toml` public web access and `configs/llm.local.toml` with `router.mode = "real"`.
@@ -322,6 +327,8 @@ Budget control is layered instead of a simple hard fail:
 * soft token/cost limits emit `budget_warning` and the task continues;
 * approval token/cost limits create a Human-in-the-loop `llm_budget` approval and pause the task as `waiting_for_approval`;
 * users may choose continue once, continue for the task, continue with compaction, stop and summarize, or cancel;
+* provider read timeouts emit failed `llm_call_finished` records with `LLM_PROVIDER_TIMEOUT`, retry once by default, and then create an `llm_timeout` approval;
+* timeout approvals let users retry the same model, retry with `fallback_model`, stop and summarize from collected evidence, or cancel;
 * provider context and hard task limits still must be respected through compaction, reduced context, or a partial report.
 
 The user control plane is available from the console and API:

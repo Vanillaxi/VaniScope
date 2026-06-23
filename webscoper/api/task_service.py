@@ -485,7 +485,13 @@ class TaskService:
         )
         return self._control_response(task_id, "cancel", "Task cancellation requested.")
 
-    def stop_and_summarize_task(self, task_id: str) -> TaskControlResponse:
+    def stop_and_summarize_task(
+        self,
+        task_id: str,
+        *,
+        reason: str = "Task stopped by user.",
+        intro: str | None = None,
+    ) -> TaskControlResponse:
         self._ensure_task_exists(task_id)
         current_status = self.get_task_status(task_id).status
         self.control_store.request(task_id, "stop_and_summarize")
@@ -495,10 +501,10 @@ class TaskService:
             task_id,
             "user_stop_requested",
             "User requested stop and summarize",
-            {"run_id": task_id},
+            {"run_id": task_id, "reason": reason},
         )
         if current_status in {"paused", "waiting_for_approval", "requires_approval", "failed"}:
-            self._generate_partial_report_from_artifacts(task_id)
+            self._generate_partial_report_from_artifacts(task_id, intro=intro)
         return self._control_response(
             task_id,
             "stop_and_summarize",
@@ -567,8 +573,16 @@ class TaskService:
             artifacts=status.artifacts,
         )
 
-    def _generate_partial_report_from_artifacts(self, task_id: str) -> None:
+    def _generate_partial_report_from_artifacts(
+        self,
+        task_id: str,
+        *,
+        intro: str | None = None,
+    ) -> None:
         run_dir = self._run_dir(task_id)
+        intro_text = intro or (
+            "Task was stopped by user; this report is generated from evidence collected before stopping."
+        )
         evidence_lines: list[str] = []
         evidence_path = run_dir / "evidence.jsonl"
         if evidence_path.exists():
@@ -588,7 +602,7 @@ class TaskService:
                 [
                     "# VaniScope Partial Task Report",
                     "",
-                    "Task stopped before enough evidence was collected.",
+                    intro or "Task stopped before enough evidence was collected.",
                     "",
                 ]
             )
@@ -596,7 +610,7 @@ class TaskService:
             report_lines = [
                 "# VaniScope Partial Task Report",
                 "",
-                "Task was stopped by user; this report is generated from evidence collected before stopping.",
+                intro_text,
                 "",
                 "## Evidence",
                 "",

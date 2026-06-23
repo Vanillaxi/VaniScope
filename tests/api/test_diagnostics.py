@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import webscoper.api.app as api_module
+from webscoper.api.diagnostics import build_diagnostics
 from webscoper.api.runner_factory import build_handler
 from webscoper.api.schemas import TaskCreateRequest
 from webscoper.api.task_service import TaskService
@@ -62,6 +63,48 @@ def test_api_diagnostics_returns_loaded_runtime_local_config(
     assert web["allowed_domains"] == ["github.com"]
     assert web["navigation_timeout_ms"] == 12000
     assert web["source_path"] == str(runtime_local)
+
+
+def test_diagnostics_exposes_llm_timeout_and_fallback_without_secrets(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    llm_local = tmp_path / "llm.local.toml"
+    llm_local.write_text(
+        "\n".join(
+            [
+                "[router]",
+                'mode = "real"',
+                'default_provider = "qwen"',
+                "",
+                "[llm]",
+                "max_retries_per_call = 1",
+                "retry_on_timeout = true",
+                "",
+                "[providers.qwen]",
+                'type = "openai_compatible"',
+                'base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"',
+                'api_key_env = "DASHSCOPE_API_KEY"',
+                'model = "qwen-plus"',
+                'fallback_model = "qwen-turbo"',
+                "timeout_seconds = 90",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("VANISCOPE_LLM_CONFIG", str(llm_local))
+    monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+
+    payload = build_diagnostics(runs_dir=tmp_path / "runs").model_dump(mode="json")
+
+    llm = payload["llm"]
+    assert llm["provider"] == "qwen"
+    assert llm["timeout_ms"] == 90000
+    assert llm["fallback_model"] == "qwen-turbo"
+    assert llm["budget"]["max_llm_retries_per_call"] == 1
+    assert llm["budget"]["retry_on_llm_timeout"] is True
+    assert llm["api_key_configured"] is False
+    assert "DASHSCOPE_API_KEY" not in str(payload["llm"])
 
 
 def test_task_service_loaded_web_config_is_passed_to_handler(tmp_path) -> None:

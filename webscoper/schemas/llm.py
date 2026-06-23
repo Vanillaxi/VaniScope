@@ -40,6 +40,7 @@ class LLMClientConfig(BaseModel):
     base_url: str = ""
     api_key: str = ""
     model: str
+    fallback_model: str | None = None
     timeout_ms: int = 30000
     temperature: float = 0.0
     max_tokens: int = 2048
@@ -55,6 +56,7 @@ class LLMProviderConfig(BaseModel):
     api_key: str | None = None
     api_key_env: str | None = None
     model: str
+    fallback_model: str | None = None
     timeout_ms: int = 30000
     temperature: float = 0.0
     max_tokens: int = 2048
