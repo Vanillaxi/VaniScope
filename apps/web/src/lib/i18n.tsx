@@ -40,6 +40,7 @@ const messages = {
       taskByIdTitle: "按 ID 查看任务",
       taskId: "任务 ID",
       viewTask: "查看任务",
+      recentTitle: "最近任务",
       evalTitle: "评测结果",
       evalDescription:
         "打开本地 LangGraph eval 命令辅助页，按输出目录查看生成的评测文件。",
@@ -210,6 +211,10 @@ const messages = {
       noTimeline: "暂无时间线项目。",
       noEvidence: "暂无证据。",
       graph: "图谱",
+      details: "详情",
+      openInspector: "打开详情",
+      closeInspector: "关闭详情",
+      taskInfo: "任务信息",
       executionGraph: "执行图谱",
       noGraphNodes: "暂无图谱节点。",
       eventDetail: "事件详情",
@@ -266,6 +271,7 @@ const messages = {
       reportSections: "Report sections",
       reviewIssues: "Review issues",
       realCalls: "真实调用",
+      noReportSummary: "暂无报告摘要。",
     },
     approvals: {
       title: "审批",
@@ -336,6 +342,7 @@ const messages = {
       taskByIdTitle: "View Task by ID",
       taskId: "Task ID",
       viewTask: "View Task",
+      recentTitle: "Recent tasks",
       evalTitle: "Eval Results",
       evalDescription:
         "Open the local LangGraph eval command helper and inspect generated result files by output directory.",
@@ -506,6 +513,10 @@ const messages = {
       noTimeline: "No timeline items yet.",
       noEvidence: "No evidence yet.",
       graph: "Graph",
+      details: "Details",
+      openInspector: "Open inspector",
+      closeInspector: "Close inspector",
+      taskInfo: "Task info",
       executionGraph: "Execution Graph",
       noGraphNodes: "No graph nodes yet.",
       eventDetail: "Event Detail",
@@ -562,6 +573,7 @@ const messages = {
       reportSections: "Report sections",
       reviewIssues: "Review issues",
       realCalls: "Real calls",
+      noReportSummary: "No report summary yet.",
     },
     approvals: {
       title: "Approvals",

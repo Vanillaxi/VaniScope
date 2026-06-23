@@ -81,6 +81,8 @@ def status_from_transcript(run_dir: Path) -> tuple[str, str | None]:
                         "succeeded_partial",
                     }:
                         status = state_status
+        elif event_type in {"task_blocked", "risk_blocked"}:
+            status = "blocked"
         elif event_type == "partial_report_generated":
             status = "succeeded_partial"
             error = None

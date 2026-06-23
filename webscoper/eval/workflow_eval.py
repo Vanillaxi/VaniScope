@@ -390,7 +390,12 @@ def _collect_result(
 
 def _status_for_run(context: Any | None, run_dir: Path | None) -> tuple[str, str | None]:
     if context is not None:
-        return status_from_context_state(context.state.status), context.state.error_message
+        status = status_from_context_state(context.state.status)
+        if status == "failed" and run_dir is not None:
+            transcript_status, transcript_error = status_from_transcript(run_dir)
+            if transcript_status == "blocked":
+                return transcript_status, transcript_error or context.state.error_message
+        return status, context.state.error_message
     if run_dir is not None:
         return status_from_transcript(run_dir)
     return "failed", "Missing run context."

@@ -1,23 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { StepDetailPanel } from "@/components/tasks/StepDetailPanel";
 import { TimelineItem } from "@/components/tasks/TimelineItem";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { useI18n } from "@/lib/i18n";
 import { categoryLabel } from "@/lib/localizedDisplay";
 import type {
-  RuntimeEvidenceLink,
   RuntimeInspectorSummary,
   RuntimeTimelineItem,
 } from "@/lib/types";
 
 type TimelinePanelProps = {
-  taskId: string;
   items: RuntimeTimelineItem[];
   summary?: RuntimeInspectorSummary | null;
-  evidence?: RuntimeEvidenceLink[];
+  onInspectItem?: (item: RuntimeTimelineItem) => void;
 };
 
 const FILTERS = [
@@ -54,10 +51,9 @@ const KEY_EVENTS = new Set([
 ]);
 
 export function TimelinePanel({
-  taskId,
   items,
   summary,
-  evidence = [],
+  onInspectItem,
 }: TimelinePanelProps) {
   const { language, t } = useI18n();
   const [showLowLevel, setShowLowLevel] = useState(false);
@@ -76,7 +72,7 @@ export function TimelinePanel({
     filteredItems.find((item) => item.id === selectedId) ?? filteredItems[0] ?? null;
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_430px]">
+    <div className="grid gap-5">
       <Card className="p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -117,7 +113,10 @@ export function TimelinePanel({
                 key={timelineItemKey(item, index)}
                 item={item}
                 selected={selectedItem?.id === item.id}
-                onSelect={(nextItem) => setSelectedId(nextItem.id)}
+                onSelect={(nextItem) => {
+                  setSelectedId(nextItem.id);
+                  onInspectItem?.(nextItem);
+                }}
               />
             ))
           ) : (
@@ -125,12 +124,6 @@ export function TimelinePanel({
           )}
         </div>
       </Card>
-      <StepDetailPanel
-        taskId={taskId}
-        title={t.inspector.eventDetail}
-        item={selectedItem}
-        evidence={evidence}
-      />
     </div>
   );
 }

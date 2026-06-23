@@ -18,6 +18,7 @@ type StepDetailPanelProps = {
   node?: RuntimeGraphNode | null;
   item?: RuntimeTimelineItem | null;
   evidence?: RuntimeEvidenceLink[];
+  framed?: boolean;
 };
 
 export function StepDetailPanel({
@@ -26,6 +27,7 @@ export function StepDetailPanel({
   node,
   item,
   evidence = [],
+  framed = true,
 }: StepDetailPanelProps) {
   const { language, t } = useI18n();
   const detail = normalizeDetail(node, item);
@@ -40,8 +42,8 @@ export function StepDetailPanel({
   );
   const screenshots = screenshotCandidates(detail.raw, relatedEvidence);
 
-  return (
-    <Card className="p-5">
+  const content = (
+    <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">{title}</h2>
@@ -154,8 +156,9 @@ export function StepDetailPanel({
           </div>
         </div>
       )}
-    </Card>
+    </>
   );
+  return framed ? <Card className="p-5">{content}</Card> : content;
 }
 
 function SignalGrid({

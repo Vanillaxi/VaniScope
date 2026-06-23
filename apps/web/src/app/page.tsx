@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { getDiagnostics, getHealth } from "@/lib/api";
 import { formatDateTime, statusTone } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
+import { statusLabel } from "@/lib/localizedDisplay";
 import { loadTaskHistory, type TaskHistoryItem } from "@/lib/taskHistory";
 import type { DiagnosticsResponse, HealthResponse } from "@/lib/types";
 
@@ -56,13 +57,13 @@ export default function Home() {
 
   return (
     <>
-      <section className="rounded-lg border border-[var(--line)] bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+      <section className="rounded-lg border border-[var(--line)] bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <div className="text-sm font-semibold uppercase text-[var(--brand)]">
               {t.home.heroEyebrow}
             </div>
-            <h1 className="mt-2 text-3xl font-semibold">{t.home.title}</h1>
+            <h1 className="mt-2 text-2xl font-semibold">{t.home.title}</h1>
             <p className="mt-3 text-[var(--muted)]">{t.home.description}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -84,7 +85,7 @@ export default function Home() {
                       : "neutral"
                 }
               >
-                Web Mode: {String(diagnostics.web.mode)}
+                {t.nav.webMode}: {String(diagnostics.web.mode)}
               </Badge>
             ) : null}
             {diagnostics?.llm?.mode ? (
@@ -103,7 +104,17 @@ export default function Home() {
         ) : null}
       </section>
 
-      <SkillLauncher />
+      <section className="flex flex-col gap-3 rounded-lg border border-[var(--line)] bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase text-[var(--muted)]">
+            {t.nav.skills}
+          </h2>
+          <Link href="/tasks/new" className="text-sm font-semibold text-[var(--brand-dark)]">
+            {t.nav.newTask}
+          </Link>
+        </div>
+        <SkillLauncher />
+      </section>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="p-5">
@@ -127,7 +138,9 @@ export default function Home() {
                       {formatDateTime(task.created_at, language)}
                     </div>
                   </div>
-                  <Badge tone={statusTone(task.status)}>{task.status}</Badge>
+                  <Badge tone={statusTone(task.status)}>
+                    {statusLabel(task.status, language)}
+                  </Badge>
                 </Link>
               ))}
             </div>

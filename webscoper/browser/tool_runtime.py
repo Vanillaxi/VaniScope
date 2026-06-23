@@ -569,7 +569,10 @@ class StatefulBrowserToolRuntime:
             async def recover_click(candidate=None):
                 if candidate is None:
                     return await self.action_executor.click(page, action)
-                return await self.action_executor.click_candidate(page, action, candidate)
+                selected = getattr(candidate, "selected", candidate)
+                if selected is None:
+                    return await self.action_executor.click(page, action)
+                return await self.action_executor.click_candidate(page, action, selected)
 
             async def recover_verify():
                 return await self.effect_verifier.verify(

@@ -3,28 +3,22 @@
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
-import { StepDetailPanel } from "@/components/tasks/StepDetailPanel";
 import { formatDateTime } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { graphNodeDisplay } from "@/lib/localizedDisplay";
-import type {
-  RuntimeEvidenceLink,
-  RuntimeExecutionGraphResponse,
-} from "@/lib/types";
+import type { RuntimeExecutionGraphResponse } from "@/lib/types";
 
 type ExecutionGraphPanelProps = {
-  taskId: string;
   graph?: RuntimeExecutionGraphResponse | null;
-  evidence?: RuntimeEvidenceLink[];
+  onInspectNode?: (node: NonNullable<RuntimeExecutionGraphResponse["nodes"]>[number]) => void;
 };
 
 const ROW_HEIGHT = 126;
 const NODE_WIDTH = 520;
 
 export function ExecutionGraphPanel({
-  taskId,
   graph,
-  evidence = [],
+  onInspectNode,
 }: ExecutionGraphPanelProps) {
   const { language, t } = useI18n();
   const nodes = useMemo(() => graph?.nodes ?? [], [graph?.nodes]);
@@ -35,7 +29,7 @@ export function ExecutionGraphPanel({
   );
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_430px]">
+    <div className="grid gap-5">
       <Card className="p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -79,7 +73,10 @@ export function ExecutionGraphPanel({
                 <button
                   key={node.id}
                   type="button"
-                  onClick={() => setSelectedId(node.id)}
+                  onClick={() => {
+                    setSelectedId(node.id);
+                    onInspectNode?.(node);
+                  }}
                   className={`absolute left-0 w-full rounded-md border bg-white p-3 text-left shadow-sm transition ${
                     selectedNode?.id === node.id
                       ? "border-[var(--brand)] ring-2 ring-[#cde8ea]"
@@ -124,13 +121,6 @@ export function ExecutionGraphPanel({
           </div>
         )}
       </Card>
-
-      <StepDetailPanel
-        taskId={taskId}
-        title={t.inspector.nodeDetail}
-        node={selectedNode}
-        evidence={evidence}
-      />
     </div>
   );
 }

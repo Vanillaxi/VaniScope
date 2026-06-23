@@ -58,12 +58,18 @@
         },
         {
           "call_id": "call_002",
+          "tool_id": "browser_observe",
+          "arguments": {"include_screenshot": true},
+          "reason": "Collect a final page observation for reporting."
+        },
+        {
+          "call_id": "call_003",
           "tool_id": "tool_search",
           "arguments": {"query": "github issue", "purpose": "Find a lazy GitHub issue reader."},
           "reason": "Search lazy tool descriptors."
         },
         {
-          "call_id": "call_003",
+          "call_id": "call_004",
           "tool_id": "finish_task",
           "arguments": {"summary_instruction": "Lazy tool search completed."},
           "reason": "Finish."
@@ -96,12 +102,18 @@
         },
         {
           "call_id": "call_003",
+          "tool_id": "tool_load",
+          "arguments": {"tool_id": "docs_extract"},
+          "reason": "Load the lazy docs extraction tool before execution."
+        },
+        {
+          "call_id": "call_004",
           "tool_id": "docs_extract",
           "arguments": {"query": "installation"},
           "reason": "Extract documentation content from the observation."
         },
         {
-          "call_id": "call_004",
+          "call_id": "call_005",
           "tool_id": "finish_task",
           "arguments": {"summary_instruction": "Docs research extraction completed."},
           "reason": "Finish."

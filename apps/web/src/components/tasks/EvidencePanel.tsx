@@ -8,9 +8,14 @@ import type { RuntimeEvidenceLink } from "@/lib/types";
 type EvidencePanelProps = {
   taskId: string;
   evidence: RuntimeEvidenceLink[];
+  onInspectEvidence?: (item: RuntimeEvidenceLink) => void;
 };
 
-export function EvidencePanel({ taskId, evidence }: EvidencePanelProps) {
+export function EvidencePanel({
+  taskId,
+  evidence,
+  onInspectEvidence,
+}: EvidencePanelProps) {
   const { t } = useI18n();
 
   return (
@@ -26,14 +31,29 @@ export function EvidencePanel({ taskId, evidence }: EvidencePanelProps) {
           {evidence.map((item) => (
             <div
               key={item.evidence_id}
-              className="rounded-md border border-[var(--line)] bg-white p-4"
+              className="rounded-md border border-[var(--line)] bg-white p-4 transition hover:border-[#9fb1bf]"
             >
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold text-[var(--brand-dark)]">
-                  {item.evidence_id}
-                </span>
-                {item.page_title ? (
-                  <span className="text-sm text-[var(--muted)]">{item.page_title}</span>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => onInspectEvidence?.(item)}
+                  className="min-w-0 text-left"
+                >
+                  <span className="font-semibold text-[var(--brand-dark)]">
+                    {item.evidence_id}
+                  </span>
+                  {item.page_title ? (
+                    <span className="ml-2 text-sm text-[var(--muted)]">{item.page_title}</span>
+                  ) : null}
+                </button>
+                {onInspectEvidence ? (
+                  <button
+                    type="button"
+                    onClick={() => onInspectEvidence(item)}
+                    className="rounded px-2 py-1 text-xs font-semibold text-[var(--brand-dark)] hover:bg-[var(--panel-soft)]"
+                  >
+                    {t.inspector.details}
+                  </button>
                 ) : null}
               </div>
               {item.source_url ? (

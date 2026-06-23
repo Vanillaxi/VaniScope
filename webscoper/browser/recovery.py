@@ -436,7 +436,7 @@ def _add_recovery_evidence(
     if evidence_store is None:
         return
     evidence_store.add_item(
-        kind="recovery_note",
+        kind="tool_result",
         source_url=attempt.after_url,
         text=result.message,
         step_id=attempt.attempt_id,

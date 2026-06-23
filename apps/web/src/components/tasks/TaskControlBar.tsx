@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import {
   cancelTask,
   pauseTask,
@@ -47,21 +46,21 @@ export function TaskControlBar({ task, onChanged }: TaskControlBarProps) {
   };
 
   return (
-    <Card className="p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-sm font-semibold">{t.controls.title}</div>
-          <div className="mt-1 text-xs text-[var(--muted)]">
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <div className="min-w-0 text-right">
+        <div className="text-xs text-[var(--muted)]">
             {task.status === "stop_requested"
               ? t.controls.stopRequested
               : terminal
                 ? t.controls.completeDisabled
                 : t.controls.checkpointHint}
-          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+      </div>
+      {!terminal ? (
+        <div className="flex flex-wrap gap-1.5">
           <Button
             variant="secondary"
+            className="min-h-8 px-2.5 text-xs"
             disabled={!canPause || busy !== null}
             onClick={() => void run("pause", () => pauseTask(task.task_id))}
           >
@@ -69,6 +68,7 @@ export function TaskControlBar({ task, onChanged }: TaskControlBarProps) {
           </Button>
           <Button
             variant="secondary"
+            className="min-h-8 px-2.5 text-xs"
             disabled={!canResume || busy !== null}
             onClick={() => void run("resume", () => resumeTask(task.task_id))}
           >
@@ -76,6 +76,7 @@ export function TaskControlBar({ task, onChanged }: TaskControlBarProps) {
           </Button>
           <Button
             variant="secondary"
+            className="min-h-8 px-2.5 text-xs"
             disabled={!canStop || busy !== null}
             onClick={() => void run("stop", () => stopAndSummarizeTask(task.task_id))}
           >
@@ -83,19 +84,20 @@ export function TaskControlBar({ task, onChanged }: TaskControlBarProps) {
           </Button>
           <Button
             variant="danger"
+            className="min-h-8 px-2.5 text-xs"
             disabled={!canCancel || busy !== null}
             onClick={() => void run("cancel", () => cancelTask(task.task_id))}
           >
             {t.controls.cancel}
           </Button>
         </div>
-      </div>
+      ) : null}
       {message ? <div className="mt-3 text-sm text-[var(--muted)]">{message}</div> : null}
       {error ? (
-        <div className="mt-3 rounded-md border border-[#fecdca] bg-[#fef3f2] p-3 text-sm text-[var(--danger)]">
+        <div className="basis-full rounded-md border border-[#fecdca] bg-[#fef3f2] p-2 text-xs text-[var(--danger)]">
           {error}
         </div>
       ) : null}
-    </Card>
+    </div>
   );
 }
