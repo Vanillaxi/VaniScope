@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from webscoper.runtime.execution.context import WebAgentContext
+from webscoper.runtime.execution.state import WebAgentContext
 from webscoper.workflows.langgraph_approval import LangGraphApprovalBridge
 from webscoper.workflows.langgraph_backend.state_io import to_json_safe_state
 from webscoper.workflows.state import VaniScopeGraphState

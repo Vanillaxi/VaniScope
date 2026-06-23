@@ -6,7 +6,6 @@ from urllib.parse import urlparse
 
 from webscoper.browser.public_web import PublicWebPolicyError
 from webscoper.browser.tool_runtime import StatefulBrowserToolRuntime
-from webscoper.schemas.browser import ActionContract
 from webscoper.tools.gateway.descriptors import (
     ToolDescriptor,
     ToolInvocationRequest,
@@ -47,8 +46,6 @@ class BrowserToolProvider:
                 "browser_open",
                 "browser_observe",
                 "browser_click",
-                "browser_open_observe",
-                "browser_click_intent",
                 "browser_type",
                 "browser_select",
                 "browser_scroll",
@@ -112,48 +109,6 @@ class BrowserToolProvider:
                 session_id=_optional_str(request.arguments.get("session_id")),
                 reason=_optional_str(request.arguments.get("reason")),
             )
-            status = str(output.get("status", "success"))
-            if status in {"failed", "blocked"}:
-                return _failed(
-                    request,
-                    "browser",
-                    str(output.get("error_type") or "BROWSER_ACTION_FAILED"),
-                    str(output.get("error_message") or "Browser action failed."),
-                    output=output,
-                    status="blocked" if status == "blocked" else "failed",
-                )
-            return _success(request, "browser", output)
-
-        if request.tool_name == "browser_open_observe":
-            url = _normalize_url(str(request.arguments.get("url") or ""))
-            try:
-                observation = await self.browser_runtime.open_observe(url)
-            except PublicWebPolicyError as exc:
-                output = {"public_web_policy": exc.decision.model_dump(mode="json")}
-                if exc.observation is not None:
-                    output["observation"] = exc.observation.model_dump(mode="json")
-                return _failed(
-                    request,
-                    "browser",
-                    "PUBLIC_WEB_BLOCKED",
-                    exc.decision.reason,
-                    output=output,
-                    status="blocked",
-                    metadata={"public_web_policy": exc.decision.model_dump(mode="json")},
-                )
-            return _success(request, "browser", {"observation": observation.model_dump(mode="json")})
-
-        if request.tool_name == "browser_click_intent":
-            action_payload = request.arguments.get("action")
-            if not isinstance(action_payload, dict):
-                return _failed(
-                    request,
-                    "browser",
-                    "ACTION_REQUIRED",
-                    "browser_click_intent requires arguments.action.",
-                )
-            action = ActionContract.model_validate(action_payload)
-            output = await self.browser_runtime.click_intent(action)
             status = str(output.get("status", "success"))
             if status in {"failed", "blocked"}:
                 return _failed(

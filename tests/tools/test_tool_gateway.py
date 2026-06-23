@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from webscoper.runtime.safety.approvals import ApprovalStore
-from webscoper.runtime.safety.pending import PendingApprovalManager
+from webscoper.runtime.safety.approvals import PendingApprovalManager
 from webscoper.tools.gateway import (
     FakeMCPToolProvider,
     LocalToolProvider,

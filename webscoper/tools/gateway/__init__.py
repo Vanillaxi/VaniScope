@@ -1,4 +1,3 @@
-from webscoper.tools.gateway.audit import ToolAuditEvent, ToolGatewayAuditStore
 from webscoper.tools.gateway.descriptors import (
     ToolDescriptor,
     ToolInvocationRequest,
@@ -8,7 +7,7 @@ from webscoper.tools.gateway.descriptors import (
     ToolRiskLevel,
     ToolSchema,
 )
-from webscoper.tools.gateway.gateway import ToolGateway
+from webscoper.tools.gateway.gateway import ToolAuditEvent, ToolGateway, ToolGatewayAuditStore
 from webscoper.tools.gateway.policy import ToolGatewayPolicy
 from webscoper.tools.gateway.providers import (
     BrowserToolProvider,

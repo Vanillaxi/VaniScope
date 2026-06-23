@@ -8,8 +8,7 @@ import pytest
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.runtime.llm.auto_explore import AutoExploreActionPlanner
 from webscoper.runtime.llm.client import BaseLLMClient
-from webscoper.runtime.prompt.builder import DynamicPromptBuilder
-from webscoper.runtime.prompt.tool_exposure import select_prompt_tools
+from webscoper.runtime.prompt.builder import DynamicPromptBuilder, select_prompt_tools
 from webscoper.schemas.browser import PageObservation
 from webscoper.schemas.llm import LLMRequest, LLMResponse
 from webscoper.schemas.runtime import BudgetContext
@@ -33,14 +32,12 @@ def test_initial_auto_explore_prompt_does_not_include_all_registered_browser_too
     result = DynamicPromptBuilder(create_default_tool_registry()).build(context.snapshot())
 
     assert result.core_tool_ids == ["browser_open", "ask_human", "finish_task"]
-    assert "browser_open_observe" not in result.prompt_text
-    assert "browser_click_intent" not in result.prompt_text
     assert "browser_upload_file" not in result.prompt_text
     assert result.prompt_preview_text is not None
     assert "browser_upload_file: disabled/reserved" in result.prompt_preview_text
 
 
-def test_observed_public_web_hides_wrappers_disabled_and_input_tools(
+def test_observed_public_web_hides_disabled_and_input_tools(
     tmp_path: Path,
 ) -> None:
     context = _context(
@@ -68,8 +65,6 @@ def test_observed_public_web_hides_wrappers_disabled_and_input_tools(
         "ask_human",
         "finish_task",
     ]
-    assert selection.hidden_tools["browser_open_observe"] == "compatibility wrapper"
-    assert selection.hidden_tools["browser_click_intent"] == "compatibility wrapper"
     assert selection.hidden_tools["browser_type"] == "hidden on public web by default"
     assert selection.hidden_tools["browser_select"] == "hidden on public web by default"
     assert selection.disabled_tools["browser_upload_file"] == "disabled/reserved"
@@ -151,7 +146,6 @@ def test_prompt_built_event_reports_selected_tools_not_full_registry(
         "ask_human",
         "finish_task",
     ]
-    assert "browser_open_observe" not in event["payload"]["core_tool_ids"]
     assert "browser_upload_file" not in event["payload"]["core_tool_ids"]
     prompt_context = json.loads(
         (context.run_dir / "prompt_context.json").read_text(encoding="utf-8")
@@ -199,8 +193,6 @@ async def test_real_llm_auto_explore_request_uses_selected_observed_tools(
         "finish_task",
     ]
     prompt_text = "\n".join(message.content for message in request.messages)
-    assert "browser_open_observe" not in prompt_text
-    assert "browser_click_intent" not in prompt_text
     assert "browser_upload_file" not in prompt_text
     assert "browser_download" not in prompt_text
     assert "browser_drag" not in prompt_text

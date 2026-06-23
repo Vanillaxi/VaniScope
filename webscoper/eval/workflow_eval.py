@@ -11,7 +11,7 @@ from webscoper.api.task_service import TaskService
 from webscoper.api.task_state import TaskState, status_from_context_state, status_from_transcript
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.runtime.llm.client import BaseLLMClient
-from webscoper.runtime.prompt.reminders import RuntimeReminderStore
+from webscoper.runtime.prompt.builder import RuntimeReminderStore
 from webscoper.runtime.execution.runner import build_task_spec, llm_config_path
 from webscoper.schemas.eval import (
     WorkflowEvalCase,

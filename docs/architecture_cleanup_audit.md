@@ -61,22 +61,21 @@ apps/web
 | Area | Status | Notes |
 | --- | --- | --- |
 | `webscoper/api` | keep | Current FastAPI boundary. `api/schemas.py` remains API-shaped; domain schemas live in `webscoper/schemas`. |
-| `webscoper/browser` | keep | Browser capability layer. It still contains the compatibility methods in `tool_runtime.py`; they are not first-class prompt tools. |
-| `webscoper/browser/recovery` | merge | Recovery is useful but split across several small files. Keep for now because readiness/recovery tests still cover it. |
-| `webscoper/runtime/execution` | merge | Core execution remains, but `handler.py` is still large. `planner.py` and validator now emit v2 tool ids. |
+| `webscoper/browser` | keep | Browser capability layer. Recovery is collapsed into `browser/recovery.py`; old compatibility tool methods were removed. |
+| `webscoper/runtime/execution` | merge | Core execution remains. Context/results/parser/validator helpers were folded into `state.py`, `loop.py`, and `planner.py`. |
 | `webscoper/runtime/llm` | keep | Current fake/real LLM path. `router.py` is large and has budget logic that may later be split. |
-| `webscoper/runtime/prompt` | keep | Official prompt exposure path; compatibility wrappers are hidden here. |
-| `webscoper/runtime/artifacts` | keep | Evidence, report, trace, transcript, compaction pipeline. |
-| `webscoper/runtime/review` | keep | Deterministic and LLM review/revision path. |
-| `webscoper/runtime/safety` | keep | Approval, pending approvals, RiskGate. |
+| `webscoper/runtime/prompt` | keep | Official prompt exposure path is consolidated in `builder.py`. |
+| `webscoper/runtime/artifacts` | keep | Evidence, report, trace/transcript, compaction pipeline. |
+| `webscoper/runtime/review` | keep | Deterministic review, revision, and revise loop are consolidated in `reviewer.py`. |
+| `webscoper/runtime/safety` | keep | Approval, pending approvals, and RiskGate; pending approvals are folded into `approvals.py`. |
 | `webscoper/runtime/inspector` | keep | Timeline, graph, presentation, loader, schemas. |
 | `webscoper/tools/gateway` | keep | Official tool invocation boundary. |
-| `webscoper/tools/registry.py` | keep | Catalog source of truth; snapshot now excludes compatibility/disabled tools from core lists. |
+| `webscoper/tools/registry.py` | keep | Catalog source of truth; old browser compatibility tools are no longer registered. |
 | `webscoper/workflows/langgraph_backend` | keep | LangGraph-only workflow backend. |
 | `webscoper/eval/workflow_eval.py` | keep | Current workflow eval runner. |
 | `scripts` | keep | Old one-off smoke scripts removed. |
-| `tests` | merge | Reduced from 39 test files to 25 high-value files. |
-| `apps/web` | keep | Console retained; Tool Catalog now hides compatibility wrappers. |
+| `tests` | merge | Reduced to 18 high-value test files and 78 collected tests. |
+| `apps/web` | keep | Console retained; Tool Catalog uses Browser Tool Contract v2 tools. |
 
 ## Legacy Scan
 
@@ -99,13 +98,13 @@ Findings:
 | native workflow/backend/runner | Not present as an executable path. |
 | old eval runners | Not present. |
 | old eval modules | Not present; only `webscoper/eval/workflow_eval.py` remains. |
-| `browser_open_observe` / `browser_click_intent` | Retained only as centralized compatibility wrapper ids in registry/provider/runtime compatibility methods and explicit prompt-exposure tests. |
+| old browser compatibility tools | Removed from registry, gateway, runtime execution, prompts, and tests. |
 | old planner path | Deterministic and fake LLM planner output migrated to v2 tool ids. |
-| old prompt path | Prompt exposure hides compatibility wrappers. |
+| old prompt path | Prompt exposure uses v2 tool ids only. |
 | old smoke scripts | Removed `scripts/smoke_open_page.py` and `scripts/smoke_click_intent.py`. |
 | duplicate LLM config loaders | `runtime/llm/config.py` is the main config loader; diagnostics read the resolved router. |
 | duplicate task state definitions | `api/schemas.py` still defines API response status literals while domain task/runtime state stays in `schemas/` and runtime context. |
-| unused recovery files | Recovery files are still covered by readiness/recovery behavior and retained. |
+| unused recovery files | Deleted by collapsing recovery into `webscoper/browser/recovery.py`. |
 | unused inspector files | Inspector files are still used by API/console and retained. |
 | unused test fixtures | Fixture set is already compact and retained. |
 
@@ -147,17 +146,6 @@ tests/tools/test_tool_gateway_policy.py
 
 ## Temporarily Retained
 
-Compatibility wrappers:
-
-```text
-webscoper/tools/registry.py
-webscoper/tools/gateway/providers.py
-webscoper/browser/tool_runtime.py
-webscoper/runtime/execution/tool_executor.py
-```
-
-Reason: existing external callers or saved artifacts may still reference the old tool ids. They are centralized, marked as `compatibility`, excluded from prompt/core snapshot exposure, and not used by the official planner/eval path.
-
 Larger modules retained for a future pass:
 
 ```text
@@ -179,7 +167,6 @@ Must delete:
 
 Recommended delete:
 
-- remaining compatibility wrappers after downstream callers and saved fixtures no longer need them
 - `webscoper/schemas/eval.py` if future workflow eval no longer imports it
 
 Recommended merge:

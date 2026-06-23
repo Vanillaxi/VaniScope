@@ -59,7 +59,7 @@ from webscoper.runtime.execution.events import (
     TaskEventStore,
     TaskEventSubscription,
 )
-from webscoper.runtime.safety.pending import PendingApprovalManager
+from webscoper.runtime.safety.approvals import PendingApprovalManager
 from webscoper.schemas.runtime import TaskEvent, TaskEventKind
 from webscoper.schemas.runtime import ApprovalRequest
 from webscoper.schemas.task import TaskSpec

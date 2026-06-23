@@ -7,7 +7,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from webscoper.runtime.llm.client import BaseLLMClient
-from webscoper.runtime.prompt.tool_exposure import (
+from webscoper.runtime.prompt.builder import (
     PromptToolSelection,
     select_prompt_tools,
 )
@@ -498,9 +498,7 @@ def _normalize_action_type(value: Any) -> str | None:
     normalized = str(value).strip().lower().replace("-", "_")
     aliases = {
         "observe": "browser_observe",
-        "browser_open_observe": "browser_observe",
         "click_intent": "browser_click",
-        "browser_click_intent": "browser_click",
         "click": "browser_click",
         "extract": "browser_extract",
         "finish": "finish_task",

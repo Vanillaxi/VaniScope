@@ -147,7 +147,7 @@ async def test_action_waits_until_hydrated_button_becomes_enabled(tmp_path: Path
 
     await runtime.start()
     try:
-        await runtime.open_observe(page_url)
+        await runtime.open(page_url)
         output = await runtime.click_intent(contract)
     finally:
         await runtime.close()
@@ -156,7 +156,7 @@ async def test_action_waits_until_hydrated_button_becomes_enabled(tmp_path: Path
     assert "Details ready after hydration" in output["observation"]["visible_text_summary"]
     trace_steps = _read_jsonl(recorder.trace_path)
     readiness_steps = [
-        step for step in trace_steps if step["action_type"] == "readiness_check"
+        step for step in trace_steps if step["action_type"] == "post_action_readiness"
     ]
     assert readiness_steps
     assert "readiness" in readiness_steps[0]["observation"]
@@ -208,7 +208,7 @@ async def test_post_action_verifier_waits_for_spa_route_transition(tmp_path: Pat
 
     await runtime.start()
     try:
-        await runtime.open_observe(page_url)
+        await runtime.open(page_url)
         output = await runtime.click_intent(contract)
     finally:
         await runtime.close()
@@ -264,7 +264,7 @@ async def test_action_does_not_click_through_loading_overlay(tmp_path: Path) -> 
 
     await runtime.start()
     try:
-        await runtime.open_observe(page_url)
+        await runtime.open(page_url)
         output = await runtime.click_intent(contract)
     finally:
         await runtime.close()

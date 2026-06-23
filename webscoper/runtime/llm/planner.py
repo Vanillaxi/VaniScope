@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from webscoper.runtime.llm.client import BaseLLMClient
-from webscoper.runtime.execution.tool_call_parser import ToolCallParser
+from webscoper.runtime.execution.planner import ToolCallParser
 from webscoper.schemas.runtime import WebAgentContextSnapshot
 from webscoper.schemas.llm import LLMMessage, LLMRequest, LLMResponse, ParsedToolCalls
 from webscoper.schemas.tool import ExecutionPlan, PlannedStep

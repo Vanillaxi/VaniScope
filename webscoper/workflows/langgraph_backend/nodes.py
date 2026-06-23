@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Callable
 
-from webscoper.runtime.execution.context import WebAgentContext
+from webscoper.runtime.execution.state import WebAgentContext
 from webscoper.runtime.execution.handler import (
     TaskControlInterrupted,
     WebAgentRuntimeComponents,
@@ -14,7 +14,7 @@ from webscoper.runtime.llm.auto_explore import (
     decision_to_tool_call,
 )
 from webscoper.runtime.llm.router import LLMProviderRouter, LLMTimeoutApprovalRequired
-from webscoper.runtime.execution.results import merge_final_output, record_evidence
+from webscoper.runtime.execution.loop import merge_final_output, record_evidence
 from webscoper.runtime.execution.state import state_payload, status_from_loop_error
 from webscoper.schemas.browser import PageObservation
 from webscoper.schemas.runtime import SkillPromptContext

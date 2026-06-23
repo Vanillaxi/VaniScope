@@ -23,7 +23,6 @@ def test_auto_explore_extracts_without_forcing_click(api_client) -> None:
     tool_audit = read_jsonl(Path(status["run_dir"]) / "tool_audit.jsonl")
     tools = [row["tool_name"] for row in tool_audit]
     assert "browser_extract" in tools
-    assert "browser_click_intent" not in tools
 
 
 def test_auto_explore_executes_safe_click_intent(api_client) -> None:

@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from webscoper.browser.public_web import PublicWebRuntimeConfig
 from webscoper.runtime.llm.config import default_llm_config_path
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
-from webscoper.runtime.prompt.reminders import RuntimeReminderStore
+from webscoper.runtime.prompt.builder import RuntimeReminderStore
 from webscoper.schemas.browser import ActionContract, ExpectedEffect, PageObservation
 from webscoper.schemas.task import TaskSpec
 from webscoper.schemas.workflow import WorkflowRunResult

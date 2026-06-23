@@ -25,8 +25,7 @@ from webscoper.browser.recovery import RecoveryManager
 from webscoper.browser.session import BrowserSession
 from webscoper.runtime.execution.events import TaskEventSink
 from webscoper.runtime.artifacts.evidence import EvidenceStore
-from webscoper.runtime.artifacts.trace import TraceRecorder
-from webscoper.runtime.artifacts.transcript import TranscriptStore
+from webscoper.runtime.artifacts.trace import TraceRecorder, TranscriptStore
 from webscoper.schemas.browser import ActionContract, EffectVerificationResult, RiskSignal
 from webscoper.schemas.browser import PageObservation, ReadinessResult
 from webscoper.schemas.artifact import TraceStep
@@ -332,192 +331,11 @@ class StatefulBrowserToolRuntime:
         )
         return output
 
-    async def open_observe(self, url: str) -> PageObservation:
-        step_id = self._next_step_id()
-        screenshot_path = self.trace_recorder.run_dir / f"{step_id}_open.png"
-        start = perf_counter()
-        page_url: str | None = None
-        policy_decision = self.public_web_policy.check(
-            url,
-            pages_opened=self._public_pages_opened,
-        )
-        if not policy_decision.allow:
-            observation = _blocked_policy_observation(url, policy_decision)
-            self.last_observation = observation
-            payload = policy_decision.model_dump(mode="json")
-            self.trace_recorder.record(
-                TraceStep(
-                    step_id=step_id,
-                    run_id=self.trace_recorder.run_id,
-                    phase="browser_tool_runtime",
-                    actor="tool",
-                    action_type="browser_open_observe",
-                    status="blocked",
-                    url_before=None,
-                    url_after=url,
-                    title=observation.title,
-                    observation=observation.model_dump(mode="json"),
-                    error_type="PUBLIC_WEB_BLOCKED",
-                    error_message=policy_decision.reason,
-                    latency_ms=_elapsed_ms(start),
-                )
-            )
-            self._emit_public_web_block(policy_decision)
-            raise PublicWebPolicyError(policy_decision, observation)
-
-        if policy_decision.url_classification == "public_http":
-            self._public_pages_opened += 1
-            if self.public_web_config.request_delay_ms > 0:
-                await asyncio.sleep(self.public_web_config.request_delay_ms / 1000)
-
-        try:
-            if self.page is None:
-                await self.start()
-            page = self._require_page()
-            self._emit(
-                "browser_open_started",
-                "Browser open started",
-                {
-                    "step_id": step_id,
-                    "tool_name": "browser_open_observe",
-                    "url": url,
-                    "navigation_timeout_ms": self.public_web_config.navigation_timeout_ms,
-                },
-            )
-            self._emit(
-                "navigation_started",
-                "Navigation started",
-                {
-                    "step_id": step_id,
-                    "url_before": page.url,
-                    "url_after": url,
-                    "navigation_timeout_ms": self.public_web_config.navigation_timeout_ms,
-                },
-            )
-            url_before = page.url
-            await page.goto(
-                url,
-                wait_until="domcontentloaded",
-                timeout=self.public_web_config.navigation_timeout_ms,
-            )
-            if page.url != url_before:
-                self._emit(
-                    "url_changed",
-                    "Browser URL changed",
-                    {
-                        "step_id": step_id,
-                        "url_before": url_before,
-                        "url_after": page.url,
-                    },
-                )
-            self._emit(
-                "navigation_finished",
-                "Navigation finished",
-                {
-                    "step_id": step_id,
-                    "url_before": url_before,
-                    "url_after": page.url,
-                    "elapsed_ms": _elapsed_ms(start),
-                },
-            )
-            readiness = await self._wait_and_record_readiness(
-                page,
-                action_type="readiness_check",
-                url_before=None,
-                target_hint=None,
-                timeout_ms=4000,
-            )
-            observation = await observe_page(page, screenshot_path=screenshot_path)
-            observation.metadata["readiness"] = readiness.model_dump(mode="json")
-            observation.readiness = readiness.model_dump(mode="json")
-            observation.metadata["public_web_policy"] = policy_decision.model_dump(
-                mode="json"
-            )
-            screenshot_evidence = self._add_screenshot_evidence(
-                kind="page_screenshot",
-                screenshot_path=str(screenshot_path),
-                step_id=step_id,
-                tool_name="browser_open_observe",
-                source_url=observation.url,
-                page_title=observation.title,
-                observation_id=observation.observation_id,
-                metadata={"readiness": readiness.model_dump(mode="json")},
-            )
-            if screenshot_evidence is not None:
-                observation.screenshot_evidence_id = screenshot_evidence.evidence_id
-                observation.metadata["screenshot_evidence_id"] = screenshot_evidence.evidence_id
-            page_url = observation.url
-            self.last_observation = observation
-            self.trace_recorder.record(
-                TraceStep(
-                    step_id=step_id,
-                    run_id=self.trace_recorder.run_id,
-                    phase="browser_tool_runtime",
-                    actor="tool",
-                    action_type="browser_open_observe",
-                    status="success",
-                    url_before=None,
-                    url_after=observation.url,
-                    title=observation.title,
-                    observation=observation.model_dump(mode="json"),
-                    screenshot_path=str(screenshot_path),
-                    latency_ms=_elapsed_ms(start),
-                )
-            )
-            self._emit(
-                "browser_open_finished",
-                "Browser open finished",
-                {
-                    "step_id": step_id,
-                    "tool_name": "browser_open_observe",
-                    "status": "success",
-                    "url_after": observation.url,
-                    "title_after": observation.title,
-                    "screenshot_path": str(screenshot_path),
-                    "screenshot_evidence_id": observation.screenshot_evidence_id,
-                    "duration_ms": _elapsed_ms(start),
-                    "readiness": readiness.model_dump(mode="json"),
-                },
-            )
-            return observation
-        except Exception as exc:
-            self._emit(
-                "navigation_timeout"
-                if type(exc).__name__ in {"TimeoutError", "PlaywrightTimeoutError"}
-                else "browser_open_finished",
-                "Browser open failed",
-                {
-                    "step_id": step_id,
-                    "tool_name": "browser_open_observe",
-                    "status": "failed",
-                    "url_after": page_url,
-                    "error_type": type(exc).__name__,
-                    "error_message": str(exc),
-                    "duration_ms": _elapsed_ms(start),
-                },
-            )
-            self.trace_recorder.record(
-                TraceStep(
-                    step_id=step_id,
-                    run_id=self.trace_recorder.run_id,
-                    phase="browser_tool_runtime",
-                    actor="tool",
-                    action_type="browser_open_observe",
-                    status="failed",
-                    url_before=None,
-                    url_after=page_url,
-                    error_type=type(exc).__name__,
-                    error_message=str(exc),
-                    latency_ms=_elapsed_ms(start),
-                )
-            )
-            raise
-
     def _emit_public_web_block(
         self,
         decision,
         *,
-        tool_name: str = "browser_open_observe",
+        tool_name: str = "browser_open",
     ) -> None:
         if self.event_sink is None:
             return
@@ -540,7 +358,7 @@ class StatefulBrowserToolRuntime:
         self,
         action: ActionContract,
         *,
-        tool_name: str = "browser_click_intent",
+        tool_name: str = "browser_click",
     ) -> dict[str, Any]:
         if self.page is None:
             return _failed_output("PAGE_NOT_OPENED", "Open a page before clicking.")

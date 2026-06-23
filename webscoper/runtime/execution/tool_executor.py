@@ -8,9 +8,8 @@ from webscoper.runtime.control import TaskControlStore
 from webscoper.runtime.safety.approvals import ApprovalStore
 from webscoper.browser.public_web import PublicWebPolicyError
 from webscoper.runtime.execution.events import TaskEventSink
-from webscoper.runtime.safety.pending import PendingApprovalManager
+from webscoper.runtime.safety.approvals import PendingApprovalManager
 from webscoper.runtime.safety.risk_gate import RiskGate
-from webscoper.schemas.browser import ActionContract
 from webscoper.schemas.runtime import WebAgentContextSnapshot
 from webscoper.schemas.runtime import RiskCheckResult
 from webscoper.schemas.tool import ToolCall, ToolResult
@@ -166,26 +165,6 @@ class LocalToolExecutor:
                 session_id=_str_or_none(call.arguments.get("session_id")),
                 reason=_str_or_none(call.arguments.get("reason")),
             )
-
-        if call.tool_id == "browser_open_observe":
-            observation = await self.browser_runtime.open_observe(
-                str(call.arguments.get("url") or "")
-            )
-            return {
-                "status": "success",
-                "observation": observation.model_dump(mode="json"),
-            }
-
-        if call.tool_id == "browser_click_intent":
-            action_payload = call.arguments.get("action")
-            if not isinstance(action_payload, dict):
-                return {
-                    "status": "failed",
-                    "error_type": "ACTION_REQUIRED",
-                    "error_message": "browser_click_intent requires arguments.action.",
-                }
-            action = ActionContract.model_validate(action_payload)
-            return await self.browser_runtime.click_intent(action)
 
         if call.tool_id == "browser_extract":
             return await self.browser_runtime.extract(

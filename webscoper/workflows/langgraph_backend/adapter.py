@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from webscoper.runtime.execution.context import WebAgentContext
+from webscoper.runtime.execution.state import WebAgentContext
 from webscoper.runtime.execution.handler import (
     WebAgentExecutionHandler,
     WebAgentRuntimeComponents,

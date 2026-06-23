@@ -22,12 +22,6 @@ class RiskGate:
         if tool_name in self.policy.read_only_tools:
             return _allowed("Read-only tool is allowed.")
 
-        if tool_name == "browser_click_intent":
-            action_payload = arguments.get("action")
-            if isinstance(action_payload, dict):
-                action = ActionContract.model_validate(action_payload)
-                return self.check_action_contract(task_id, action, page_observation)
-
         if tool_name == "browser_click":
             action = ActionContract(
                 action_type="click",

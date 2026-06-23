@@ -7,7 +7,7 @@ from webscoper.api.schemas import TaskCreateRequest
 from webscoper.browser.public_web import load_public_web_config
 from webscoper.runtime.execution.handler import WebAgentExecutionHandler
 from webscoper.runtime.execution.planner import normalize_planner_mode
-from webscoper.runtime.prompt.reminders import RuntimeReminderStore
+from webscoper.runtime.prompt.builder import RuntimeReminderStore
 from webscoper.runtime.execution.runner import build_task_spec, llm_config_path
 from webscoper.runtime.llm.config import (
     load_llm_router_config_from_file,

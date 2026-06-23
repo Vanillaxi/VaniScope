@@ -160,8 +160,11 @@ def _issue_types(result) -> list[str]:
     return [issue.issue_type for issue in result.issues]
 
 # From test_report_reviser.py
-from webscoper.runtime.review.reviewer import ReportReviewer
-from webscoper.runtime.review.revision import ReportReviser, ReviewRevisionPlanner
+from webscoper.runtime.review.reviewer import (
+    ReportReviewer,
+    ReportReviser,
+    ReviewRevisionPlanner,
+)
 from webscoper.schemas.artifact import EvidenceItem
 
 
@@ -201,9 +204,12 @@ import json
 from pathlib import Path
 
 from webscoper.runtime.llm.reviewer import FakeLLMReportReviewer
-from webscoper.runtime.review.reviewer import ReportReviewer
-from webscoper.runtime.review.revise_loop import ReviewReviseLoop
-from webscoper.runtime.review.revision import ReportReviser, ReviewRevisionPlanner
+from webscoper.runtime.review.reviewer import (
+    ReportReviewer,
+    ReportReviser,
+    ReviewReviseLoop,
+    ReviewRevisionPlanner,
+)
 from webscoper.schemas.artifact import EvidenceItem
 
 

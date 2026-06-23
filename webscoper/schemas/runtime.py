@@ -267,7 +267,6 @@ class RiskPolicy(BaseModel):
         default_factory=lambda: {
             "browser_open",
             "browser_observe",
-            "browser_open_observe",
             "browser_extract",
             "browser_scroll",
             "browser_wait",
