@@ -71,6 +71,12 @@ class WebAgentContextSnapshot(BaseModel):
     budget: BudgetContext
     safety: SafetyContext
     state: RuntimeState = Field(default_factory=RuntimeState)
+    loaded_tools: list[LoadedToolContext] = Field(default_factory=list)
+    skill_session: SkillSession | None = None
+
+    @property
+    def loaded_tool_ids(self) -> list[str]:
+        return [tool.tool_id for tool in self.loaded_tools]
 
 
 TaskEventKind = Literal[
@@ -104,6 +110,8 @@ TaskEventKind = Literal[
     "tool_call_finished",
     "lazy_tool_search_started",
     "lazy_tool_search_finished",
+    "lazy_tool_load_started",
+    "lazy_tool_load_finished",
     "lazy_tool_loaded",
     "lazy_tool_execution_started",
     "lazy_tool_execution_finished",
@@ -222,6 +230,29 @@ class SkillPromptContext(BaseModel):
     plan: dict[str, Any] | None = None
 
 
+class LoadedToolContext(BaseModel):
+    tool_id: str
+    loaded_at: str
+    descriptor_digest: str
+    full_schema: dict[str, Any] = Field(default_factory=dict)
+    usage_rules: list[str] = Field(default_factory=list)
+    source: str = "tool_load"
+
+
+class SkillSession(BaseModel):
+    skill_id: str
+    version: str
+    selected_reason: str
+    active_tools: list[str] = Field(default_factory=list)
+    loaded_tool_ids: list[str] = Field(default_factory=list)
+    evidence_expectations: list[str] = Field(default_factory=list)
+    report_shape: dict[str, Any] = Field(default_factory=dict)
+    budget_hint: str | None = None
+    instruction_digest: str
+    plan: dict[str, Any] | None = None
+    exit_condition: str | None = None
+
+
 class PromptBuildInput(BaseModel):
     identity: str
     task_summary: str
@@ -242,6 +273,9 @@ class PromptBuildResult(BaseModel):
     available_actions: list[str] = Field(default_factory=list)
     hidden_tools: dict[str, str] = Field(default_factory=dict)
     disabled_tools: dict[str, str] = Field(default_factory=dict)
+    loaded_tool_ids: list[str] = Field(default_factory=list)
+    skill_session: SkillSession | None = None
+    prompt_budget: dict[str, Any] = Field(default_factory=dict)
     skill: SkillPromptContext | None = None
     compact_context_metadata: dict[str, Any] | None = None
 

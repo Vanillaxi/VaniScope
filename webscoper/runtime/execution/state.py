@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from webscoper.runtime.artifacts.evidence import EvidenceStore
 from webscoper.runtime.artifacts.trace import TraceRecorder, TranscriptStore
 from webscoper.schemas.browser import PageObservation
 from webscoper.schemas.runtime import (
+    LoadedToolContext,
     RuntimeState,
     SkillPromptContext,
+    SkillSession,
     TraceContext,
     VersionContext,
     WebAgentContextSnapshot,
@@ -27,6 +33,8 @@ class WebAgentContext:
     state: RuntimeState
     evidence_store: EvidenceStore | None = None
     skill_context: SkillPromptContext | None = None
+    skill_session: SkillSession | None = None
+    loaded_tools: list[LoadedToolContext] | None = None
 
     def snapshot(self) -> WebAgentContextSnapshot:
         return WebAgentContextSnapshot(
@@ -41,7 +49,47 @@ class WebAgentContext:
             budget=self.task.budget,
             safety=self.task.safety,
             state=self.state,
+            loaded_tools=self.loaded_tools or [],
+            skill_session=self.skill_session,
         )
+
+    @property
+    def loaded_tool_ids(self) -> list[str]:
+        return [tool.tool_id for tool in self.loaded_tools or []]
+
+    def record_loaded_tool(
+        self,
+        descriptor: dict[str, Any],
+        *,
+        source: str,
+        usage_rules: list[str] | None = None,
+    ) -> LoadedToolContext:
+        tools = list(self.loaded_tools or [])
+        tool_id = str(descriptor.get("tool_id") or descriptor.get("id") or "")
+        existing = next((tool for tool in tools if tool.tool_id == tool_id), None)
+        if existing is not None:
+            return existing
+        loaded = LoadedToolContext(
+            tool_id=tool_id,
+            loaded_at=datetime.now(UTC).isoformat(),
+            descriptor_digest=_digest_descriptor(descriptor),
+            full_schema=descriptor,
+            usage_rules=usage_rules or [],
+            source=source,
+        )
+        tools.append(loaded)
+        self.loaded_tools = tools
+        if self.skill_session is not None and tool_id not in self.skill_session.loaded_tool_ids:
+            active_tools = list(self.skill_session.active_tools)
+            if tool_id not in active_tools:
+                active_tools.append(tool_id)
+            self.skill_session = self.skill_session.model_copy(
+                update={
+                    "loaded_tool_ids": [*self.skill_session.loaded_tool_ids, tool_id],
+                    "active_tools": active_tools,
+                }
+            )
+        return loaded
 
 
 def task_payload(task: TaskSpec) -> dict:
@@ -89,3 +137,8 @@ def observation_summary(observation: PageObservation) -> dict:
         "interactive_elements_count": len(observation.interactive_elements),
         "screenshot_path": observation.screenshot_path,
     }
+
+
+def _digest_descriptor(descriptor: dict[str, Any]) -> str:
+    payload = json.dumps(descriptor, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]

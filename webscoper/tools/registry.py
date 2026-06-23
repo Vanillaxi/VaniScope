@@ -80,6 +80,21 @@ def create_default_tool_registry() -> ToolRegistry:
         )
     )
     registry.register(
+        ToolSpec(
+            tool_id="tool_load",
+            name="Tool Load",
+            description="Load a discovered lazy tool descriptor into the current task context.",
+            prompt="Load a discovered lazy tool into the current task context. It returns the loaded descriptor and never executes the target tool.",
+            loading_mode="core",
+            exposure="core",
+            provider="gateway",
+            schema_summary={"tool_id": "string"},
+            input_schema={"tool_id": "string"},
+            output_schema={"loaded_tool": "compact descriptor", "loaded_tool_id": "string"},
+            tags=["tool", "load", "lazy", "discovery"],
+        )
+    )
+    registry.register(
         _research_tool(
             "github_fetch_issue",
             "GitHub Fetch Issue",

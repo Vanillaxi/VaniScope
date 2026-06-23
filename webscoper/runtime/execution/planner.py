@@ -260,6 +260,7 @@ class PlanValidator:
 
         opened = False
         browser_action_seen = False
+        loaded_tool_ids = set(context.loaded_tool_ids)
         for index, step in enumerate(plan.steps):
             tool_id = step.tool_call.tool_id
             _validate_tool_metadata(
@@ -267,9 +268,14 @@ class PlanValidator:
                 context,
                 self.tool_registry,
                 self.tool_gateway,
+                loaded_tool_ids,
                 issues,
             )
             _validate_required_arguments(step, issues)
+            if tool_id == "tool_load":
+                target_tool_id = step.tool_call.arguments.get("tool_id")
+                if target_tool_id:
+                    loaded_tool_ids.add(str(target_tool_id))
 
             if tool_id in _BROWSER_TOOL_IDS:
                 if not browser_action_seen and tool_id != "browser_open":
@@ -316,6 +322,7 @@ def _validate_tool_metadata(
     context: WebAgentContextSnapshot,
     tool_registry: ToolRegistry,
     tool_gateway: ToolGateway | None,
+    loaded_tool_ids: set[str],
     issues: list[PlanValidationIssue],
 ) -> None:
     tool_id = step.tool_call.tool_id
@@ -333,18 +340,16 @@ def _validate_tool_metadata(
         )
         return
 
-    if tool_gateway is not None:
-        try:
-            tool_gateway.get_tool(tool_id)
-            return
-        except KeyError:
-            pass
-
     if tool.loading_mode == "lazy":
+        if tool_id in loaded_tool_ids:
+            return
         issues.append(
             PlanValidationIssue(
-                issue_type="LAZY_TOOL_NOT_EXECUTABLE",
-                message=f"Lazy tool {tool_id} is not executable in this phase.",
+                issue_type="LAZY_TOOL_NOT_LOADED",
+                message=(
+                    f"Lazy tool {tool_id} must be loaded with tool_load before "
+                    "it is executable in this task context."
+                ),
                 step_id=step.step_id,
                 tool_id=tool_id,
             )
@@ -400,6 +405,15 @@ def _validate_required_arguments(
             PlanValidationIssue(
                 issue_type="MISSING_REQUIRED_ARGUMENT",
                 message="browser_click requires arguments.target_hint.",
+                step_id=step.step_id,
+                tool_id=tool_id,
+            )
+        )
+    if tool_id == "tool_load" and not arguments.get("tool_id"):
+        issues.append(
+            PlanValidationIssue(
+                issue_type="MISSING_REQUIRED_ARGUMENT",
+                message="tool_load requires arguments.tool_id.",
                 step_id=step.step_id,
                 tool_id=tool_id,
             )

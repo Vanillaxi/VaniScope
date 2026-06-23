@@ -47,7 +47,7 @@ async def test_execution_handler_blocks_invalid_plan_before_loop(
         llm_client=LazyToolLLMClient(),
     )
 
-    with pytest.raises(RuntimeError, match="LAZY_TOOL_NOT_EXECUTABLE"):
+    with pytest.raises(RuntimeError, match="LAZY_TOOL_NOT_LOADED"):
         await handler.run(task)
 
     context = handler.last_context
@@ -110,7 +110,7 @@ def test_plan_validator_reports_core_invalid_plan_cases(tmp_path: Path) -> None:
                     },
                 )
             ),
-            "LAZY_TOOL_NOT_EXECUTABLE",
+            "LAZY_TOOL_NOT_LOADED",
         ),
         (
             _task(),
@@ -158,6 +158,35 @@ def test_plan_validator_reports_core_invalid_plan_cases(tmp_path: Path) -> None:
     for task, plan, expected_issue in cases:
         result = _validator().validate(plan, _context(tmp_path, task).snapshot())
         assert expected_issue in _issue_types(result)
+
+
+def test_plan_validator_allows_lazy_tool_after_explicit_tool_load(tmp_path: Path) -> None:
+    task = _task()
+    context = _context(tmp_path, task)
+    context.record_loaded_tool(
+        {
+            "tool_id": "github_fetch_issue",
+            "description": "Fetch GitHub issues.",
+        },
+        source="tool_load",
+    )
+    plan = _plan(
+        ToolCall(
+            call_id="call_001",
+            tool_id="tool_load",
+            arguments={"tool_id": "github_fetch_issue"},
+        ),
+        ToolCall(
+            call_id="call_002",
+            tool_id="github_fetch_issue",
+            arguments={"url": "https://github.com/apache/dubbo-go/issues/4821"},
+        ),
+    )
+
+    result = _validator().validate(plan, context.snapshot())
+
+    assert result.ok
+    assert result.issues == []
 
 
 def _validator() -> PlanValidator:

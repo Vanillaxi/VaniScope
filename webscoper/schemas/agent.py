@@ -16,6 +16,7 @@ AutoExploreActionType = Literal[
     "browser_extract",
     "browser_screenshot",
     "tool_search",
+    "tool_load",
     "ask_human",
     "finish_task",
 ]
@@ -72,6 +73,7 @@ class AutoExploreAction(BaseModel):
     instruction: str | None = None
     query: str | None = None
     purpose: str | None = None
+    tool_id: str | None = None
     limit: int | None = None
     summary_instruction: str | None = None
     expected_effect: AutoExploreExpectedEffect = Field(default_factory=AutoExploreExpectedEffect)
@@ -92,6 +94,7 @@ class AutoExploreAction(BaseModel):
         "instruction",
         "query",
         "purpose",
+        "tool_id",
         "summary_instruction",
         "summary",
         "question",
@@ -120,6 +123,8 @@ class AutoExploreAction(BaseModel):
             raise ValueError("browser_extract requires instruction")
         if self.type == "tool_search" and not (self.query or self.instruction):
             raise ValueError("tool_search requires query")
+        if self.type == "tool_load" and not self.tool_id:
+            raise ValueError("tool_load requires tool_id")
         if self.type != "browser_click" and self.target_hint:
             _reject_forbidden_text(self.target_hint, field_name="target_hint")
         return self

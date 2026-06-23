@@ -31,7 +31,13 @@ def test_initial_auto_explore_prompt_does_not_include_all_registered_browser_too
     )
     result = DynamicPromptBuilder(create_default_tool_registry()).build(context.snapshot())
 
-    assert result.core_tool_ids == ["browser_open", "ask_human", "finish_task", "tool_search"]
+    assert result.core_tool_ids == [
+        "browser_open",
+        "ask_human",
+        "finish_task",
+        "tool_search",
+        "tool_load",
+    ]
     assert "browser_upload_file" not in result.prompt_text
     assert result.prompt_preview_text is not None
     assert "browser_upload_file: disabled/reserved" in result.prompt_preview_text
@@ -65,6 +71,7 @@ def test_observed_public_web_hides_disabled_and_input_tools(
         "ask_human",
         "finish_task",
         "tool_search",
+        "tool_load",
     ]
     assert selection.hidden_tools["browser_type"] == "hidden on public web by default"
     assert selection.hidden_tools["browser_select"] == "hidden on public web by default"
@@ -150,6 +157,7 @@ def test_prompt_built_event_reports_selected_tools_not_full_registry(
         "ask_human",
         "finish_task",
         "tool_search",
+        "tool_load",
     ]
     assert "browser_upload_file" not in event["payload"]["core_tool_ids"]
     prompt_context = json.loads(
@@ -197,6 +205,7 @@ async def test_real_llm_auto_explore_request_uses_selected_observed_tools(
         "ask_human",
         "finish_task",
         "tool_search",
+        "tool_load",
     ]
     prompt_text = "\n".join(message.content for message in request.messages)
     assert "browser_upload_file" not in prompt_text
@@ -205,6 +214,36 @@ async def test_real_llm_auto_explore_request_uses_selected_observed_tools(
     assert "browser_type" not in request.metadata["available_actions"]
     assert "browser_select" not in request.metadata["available_actions"]
     assert len(prompt_text) < context.task.budget.max_prompt_tokens * 4
+
+
+def test_loaded_lazy_tool_schema_is_rendered_separately(tmp_path: Path) -> None:
+    context = _context(
+        tmp_path,
+        TaskSpec(
+            task_id="loaded_tool_public",
+            raw_input="Extract docs from this page.",
+            target_url="https://example.com/docs",
+            mode="auto_explore",
+        ),
+    )
+    context.record_loaded_tool(
+        {
+            "tool_id": "docs_extract",
+            "description": "Extract documentation text.",
+            "input_schema": {"html": "string optional", "query": "string optional"},
+            "output_schema": {"content_text": "string"},
+        },
+        source="tool_load",
+        usage_rules=["Invoke through ToolGateway only."],
+    )
+
+    result = DynamicPromptBuilder(create_default_tool_registry()).build(context.snapshot())
+
+    assert "docs_extract" in result.loaded_tool_ids
+    assert "docs_extract" in result.core_tool_ids
+    assert "# Loaded Tools" in result.prompt_text
+    assert "Invoke through ToolGateway only." in result.prompt_text
+    assert "input_schema" in result.prompt_text
 
 
 class RecordingClient(BaseLLMClient):

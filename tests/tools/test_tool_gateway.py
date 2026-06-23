@@ -38,7 +38,14 @@ async def test_tool_gateway_search_loads_and_executes_research_lazy_tool(
         )
     )
     match_ids = [match["id"] for match in search.output["matches"]]
-    issue_descriptor = gateway.load_tool("github_fetch_issue", context={"task_id": "task"})
+    load = await gateway.invoke(
+        ToolInvocationRequest(
+            task_id="task",
+            tool_name="tool_load",
+            arguments={"tool_id": "github_fetch_issue"},
+            run_dir=str(tmp_path),
+        )
+    )
     html = Path("tests/fixtures/mock_site/github_issue_research.html").read_text(
         encoding="utf-8"
     )
@@ -55,12 +62,16 @@ async def test_tool_gateway_search_loads_and_executes_research_lazy_tool(
     )
 
     assert "github_fetch_issue" in match_ids
-    assert issue_descriptor.tool_id == "github_fetch_issue"
+    assert load.status == "success"
+    assert load.output["loaded_tool_id"] == "github_fetch_issue"
+    assert load.output["loaded_tool"]["tool_id"] == "github_fetch_issue"
     assert issue.status == "success"
     assert issue.output["title"]
     assert "common/url.go" in issue.output["body_text"]
     assert "lazy_tool_search_started" in events
     assert "lazy_tool_search_finished" in events
+    assert "lazy_tool_load_started" in events
+    assert "lazy_tool_load_finished" in events
     assert "lazy_tool_loaded" in events
     assert "lazy_tool_execution_started" in events
     assert "lazy_tool_execution_finished" in events

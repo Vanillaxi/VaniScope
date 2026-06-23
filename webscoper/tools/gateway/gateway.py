@@ -76,7 +76,10 @@ class ToolGateway:
         self.event_sink = event_sink
 
     def list_tools(self) -> list[ToolDescriptor]:
-        tools: list[ToolDescriptor] = [_tool_search_descriptor()]
+        tools: list[ToolDescriptor] = [
+            _tool_search_descriptor(),
+            _tool_load_descriptor(),
+        ]
         for provider in self.providers:
             tools.extend(provider.list_tools())
         return tools
@@ -136,30 +139,81 @@ class ToolGateway:
         tool_name: str,
         *,
         context: dict[str, Any] | None = None,
-    ) -> ToolDescriptor:
-        descriptor = self.get_tool(tool_name)
+    ) -> dict[str, Any]:
+        task_id = _context_task_id(context)
+        self._emit(
+            "lazy_tool_load_started",
+            "Lazy tool load started",
+            {
+                "task_id": task_id,
+                "tool_name": tool_name,
+            },
+        )
+        try:
+            descriptor = self.get_tool(tool_name)
+        except KeyError:
+            self._emit(
+                "lazy_tool_rejected",
+                "Lazy tool rejected",
+                {
+                    "task_id": task_id,
+                    "tool_name": tool_name,
+                    "reason": "unknown tool",
+                },
+            )
+            self._emit(
+                "lazy_tool_load_finished",
+                "Lazy tool load finished",
+                {
+                    "task_id": task_id,
+                    "tool_name": tool_name,
+                    "status": "failed",
+                    "error_type": "UNKNOWN_TOOL",
+                },
+            )
+            raise
         if not _loadable_tool(descriptor):
             self._emit(
                 "lazy_tool_rejected",
                 "Lazy tool rejected",
                 {
-                    "task_id": _context_task_id(context),
+                    "task_id": task_id,
                     "tool_name": tool_name,
                     "reason": descriptor.reason_if_disabled or descriptor.exposure,
                 },
             )
+            self._emit(
+                "lazy_tool_load_finished",
+                "Lazy tool load finished",
+                {
+                    "task_id": task_id,
+                    "tool_name": tool_name,
+                    "status": "blocked",
+                    "error_type": "TOOL_LOAD_REJECTED",
+                },
+            )
             raise PermissionError(f"Tool cannot be loaded: {tool_name}")
+        loaded = _loaded_descriptor(descriptor)
         self._emit(
             "lazy_tool_loaded",
             "Lazy tool loaded",
             {
-                "task_id": _context_task_id(context),
+                "task_id": task_id,
                 "tool_name": descriptor.tool_id,
                 "provider": descriptor.provider,
                 "risk_level": descriptor.risk_level,
             },
         )
-        return descriptor
+        self._emit(
+            "lazy_tool_load_finished",
+            "Lazy tool load finished",
+            {
+                "task_id": task_id,
+                "tool_name": descriptor.tool_id,
+                "status": "success",
+            },
+        )
+        return loaded
 
     async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
         started = perf_counter()
@@ -213,6 +267,10 @@ class ToolGateway:
 
         if request.tool_name == "tool_search":
             result = self._invoke_tool_search(request, descriptor, started_at)
+            return self._finish(request, descriptor, result, started, policy_decision.risk_check)
+
+        if request.tool_name == "tool_load":
+            result = self._invoke_tool_load(request, descriptor, started_at)
             return self._finish(request, descriptor, result, started, policy_decision.risk_check)
 
         if policy_decision.decision == "blocked" or descriptor is None or provider is None:
@@ -341,6 +399,8 @@ class ToolGateway:
     def _resolve(self, tool_name: str) -> tuple[ToolDescriptor | None, ToolProvider | None]:
         if tool_name == "tool_search":
             return _tool_search_descriptor(), None
+        if tool_name == "tool_load":
+            return _tool_load_descriptor(), None
         for provider in self.providers:
             descriptor = provider.get_tool(tool_name)
             if descriptor is not None:
@@ -365,16 +425,6 @@ class ToolGateway:
             _compact_descriptor(tool)
             for tool in matches
         ]
-        for tool in matches:
-            self._emit(
-                "lazy_tool_loaded",
-                "Lazy tool descriptor loaded",
-                {
-                    "task_id": request.task_id,
-                    "tool_name": tool.tool_id,
-                    "provider": tool.provider,
-                },
-            )
         return ToolInvocationResult(
             task_id=request.task_id,
             tool_name=request.tool_name,
@@ -386,6 +436,70 @@ class ToolGateway:
                 "query": query,
                 "purpose": request.arguments.get("purpose"),
                 "matches": loaded,
+            },
+            started_at=started_at,
+        )
+
+    def _invoke_tool_load(
+        self,
+        request: ToolInvocationRequest,
+        descriptor: ToolDescriptor,
+        started_at: str,
+    ) -> ToolInvocationResult:
+        tool_id = str(
+            request.arguments.get("tool_id")
+            or request.arguments.get("tool_name")
+            or request.arguments.get("id")
+            or ""
+        ).strip()
+        if not tool_id:
+            return ToolInvocationResult(
+                task_id=request.task_id,
+                tool_name=request.tool_name,
+                call_id=request.call_id,
+                provider_type=descriptor.provider_type,
+                decision="blocked",
+                status="blocked",
+                error_type="MISSING_TOOL_ID",
+                error_message="tool_load requires arguments.tool_id.",
+                started_at=started_at,
+            )
+        try:
+            loaded = self.load_tool(tool_id, context={"task_id": request.task_id})
+        except KeyError:
+            return ToolInvocationResult(
+                task_id=request.task_id,
+                tool_name=request.tool_name,
+                call_id=request.call_id,
+                provider_type=descriptor.provider_type,
+                decision="blocked",
+                status="blocked",
+                error_type="UNKNOWN_TOOL",
+                error_message=f"Unknown tool: {tool_id}",
+                started_at=started_at,
+            )
+        except PermissionError as exc:
+            return ToolInvocationResult(
+                task_id=request.task_id,
+                tool_name=request.tool_name,
+                call_id=request.call_id,
+                provider_type=descriptor.provider_type,
+                decision="blocked",
+                status="blocked",
+                error_type="TOOL_LOAD_REJECTED",
+                error_message=str(exc),
+                started_at=started_at,
+            )
+        return ToolInvocationResult(
+            task_id=request.task_id,
+            tool_name=request.tool_name,
+            call_id=request.call_id,
+            provider_type=descriptor.provider_type,
+            decision="allowed",
+            status="success",
+            output={
+                "loaded_tool_id": loaded["tool_id"],
+                "loaded_tool": loaded,
             },
             started_at=started_at,
         )
@@ -536,6 +650,26 @@ def _tool_search_descriptor() -> ToolDescriptor:
     )
 
 
+def _tool_load_descriptor() -> ToolDescriptor:
+    return ToolDescriptor(
+        tool_id="tool_load",
+        name="Tool Load",
+        description="Load a discovered lazy tool descriptor into the current task context.",
+        provider_type="local",
+        loading_mode="core",
+        provider="gateway",
+        input_schema={"schema": {"tool_id": "string"}},
+        output_schema={
+            "schema": {
+                "loaded_tool_id": "string",
+                "loaded_tool": "compact executable descriptor",
+            }
+        },
+        schema_summary={"tool_id": "string"},
+        tags=["tool", "load", "lazy", "discovery"],
+    )
+
+
 def _searchable_lazy_tool(tool: ToolDescriptor) -> bool:
     return (
         tool.loading_mode == "lazy"
@@ -546,11 +680,17 @@ def _searchable_lazy_tool(tool: ToolDescriptor) -> bool:
 
 
 def _loadable_tool(tool: ToolDescriptor) -> bool:
-    return tool.enabled and tool.exposure not in {"hidden", "disabled", "compatibility"}
+    return (
+        tool.loading_mode == "lazy"
+        and tool.exposure == "lazy"
+        and tool.enabled
+        and not tool.compatibility_wrapper
+    )
 
 
 def _compact_descriptor(tool: ToolDescriptor) -> dict[str, Any]:
     return {
+        "tool_id": tool.tool_id,
         "id": tool.tool_id,
         "description": tool.description,
         "loading_mode": tool.loading_mode,
@@ -560,6 +700,26 @@ def _compact_descriptor(tool: ToolDescriptor) -> dict[str, Any]:
         "required_context": tool.required_context,
         "schema_summary": tool.schema_summary or tool.input_schema.schema,
     }
+
+
+def _loaded_descriptor(tool: ToolDescriptor) -> dict[str, Any]:
+    descriptor = _compact_descriptor(tool)
+    descriptor.update(
+        {
+            "name": tool.name,
+            "provider_type": tool.provider_type,
+            "permission": tool.permission,
+            "input_schema": tool.input_schema.schema,
+            "output_schema": tool.output_schema.schema,
+            "produces_evidence": tool.produces_evidence,
+            "requires_session": tool.requires_session,
+            "usage_rules": [
+                "Invoke through ToolGateway only.",
+                "Preserve source URLs and evidence ids when the tool extracts content.",
+            ],
+        }
+    )
+    return descriptor
 
 
 def _context_task_id(context: dict[str, Any] | None) -> str | None:

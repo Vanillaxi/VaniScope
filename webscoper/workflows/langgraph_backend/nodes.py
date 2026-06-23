@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any, Callable
 
@@ -17,7 +18,7 @@ from webscoper.runtime.llm.router import LLMProviderRouter, LLMTimeoutApprovalRe
 from webscoper.runtime.execution.loop import merge_final_output, record_evidence
 from webscoper.runtime.execution.state import state_payload, status_from_loop_error
 from webscoper.schemas.browser import PageObservation
-from webscoper.schemas.runtime import SkillPromptContext
+from webscoper.schemas.runtime import SkillPromptContext, SkillSession
 from webscoper.schemas.tool import ExecutionLoopResult, ExecutionPlan
 from webscoper.schemas.task import TaskSpec
 from webscoper.schemas.tool import ToolCall, ToolExecutionRecord, ToolResult
@@ -104,8 +105,10 @@ class LangGraphWorkflowNodes:
             self.workflow.skill = None
             self.workflow.skill_plan = None
             context.skill_context = None
+            context.skill_session = None
             state["skill_context"] = None
             state["skill_plan"] = None
+            state["skill_session"] = None
             self.workflow.handler._emit_event(
                 "skill_not_selected",
                 "No skill selected",
@@ -122,11 +125,34 @@ class LangGraphWorkflowNodes:
                 instruction=route.skill.definition.instruction.content,
                 plan=skill_plan.model_dump(mode="json"),
             )
+            skill_session = SkillSession(
+                skill_id=route.skill.definition.skill_id,
+                version=route.skill.definition.version,
+                selected_reason=route.reason,
+                active_tools=list(
+                    dict.fromkeys(
+                        [
+                            *route.skill.definition.required_tools,
+                            *route.skill.definition.optional_tools,
+                        ]
+                    )
+                ),
+                evidence_expectations=list(skill_plan.required_evidence),
+                report_shape=dict(route.skill.definition.default_report_shape),
+                budget_hint=route.skill.definition.budget_hint,
+                instruction_digest=_digest_text(
+                    route.skill.definition.instruction.content
+                ),
+                plan=skill_plan.model_dump(mode="json"),
+                exit_condition="final report is evidence-backed and passes review",
+            )
             self.workflow.skill = route.skill
             self.workflow.skill_plan = skill_plan
             context.skill_context = skill_context
+            context.skill_session = skill_session
             state["skill_context"] = skill_context.model_dump(mode="json")
             state["skill_plan"] = skill_plan.model_dump(mode="json")
+            state["skill_session"] = skill_session.model_dump(mode="json")
             context.version.skill_version = (
                 f"{route.skill.definition.skill_id}@{route.skill.definition.version}"
             )
@@ -347,6 +373,7 @@ class LangGraphWorkflowNodes:
                 workflow_backend="langgraph",
             )
             gateway_result = await runtime.tool_gateway.invoke(gateway_request)
+            _record_loaded_tool_from_gateway_result(context, gateway_result)
             self.workflow.handler.check_control_state(
                 context,
                 "after_tool_call",
@@ -437,6 +464,7 @@ class LangGraphWorkflowNodes:
                     update={"approval_override_id": approval_override_id}
                 )
                 gateway_result = await runtime.tool_gateway.invoke(resumed_request)
+                _record_loaded_tool_from_gateway_result(context, gateway_result)
                 self.workflow.handler.check_control_state(
                     context,
                     "after_tool_call",
@@ -1013,6 +1041,7 @@ class LangGraphWorkflowNodes:
                 workflow_backend="langgraph",
             )
         )
+        _record_loaded_tool_from_gateway_result(context, gateway_result)
         tool_result = _tool_result_from_gateway(gateway_result)
         self.workflow.handler.check_control_state(
             context,
@@ -1346,6 +1375,27 @@ def _gateway_request(
     )
 
 
+def _record_loaded_tool_from_gateway_result(
+    context: WebAgentContext,
+    result: ToolInvocationResult,
+) -> None:
+    if result.tool_name != "tool_load" or result.status != "success":
+        return
+    loaded_tool = result.output.get("loaded_tool")
+    if not isinstance(loaded_tool, dict):
+        return
+    usage_rules = loaded_tool.get("usage_rules")
+    loaded = context.record_loaded_tool(
+        loaded_tool,
+        source="tool_load",
+        usage_rules=usage_rules if isinstance(usage_rules, list) else None,
+    )
+    context.transcript_store.append(
+        "lazy_tool_loaded",
+        loaded.model_dump(mode="json"),
+    )
+
+
 def _tool_result_from_gateway(result: ToolInvocationResult) -> ToolResult:
     status = "blocked" if result.status == "approval_required" else result.status
     return ToolResult(
@@ -1370,6 +1420,10 @@ def _history_item(tool_call: ToolCall, tool_result: ToolResult) -> dict[str, Any
         "error_type": tool_result.error_type,
         "error_message": tool_result.error_message,
     }
+
+
+def _digest_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
 
 
 def _last_validation_call_id(planner: AutoExploreActionPlanner) -> str | None:

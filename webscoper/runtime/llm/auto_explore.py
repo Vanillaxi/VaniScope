@@ -83,6 +83,7 @@ class AutoExploreActionPlanner:
                 "available_actions": tool_selection.available_actions,
                 "hidden_tools": tool_selection.hidden_tools,
                 "lazy_tool_ids": tool_selection.lazy_tool_ids,
+                "loaded_tool_ids": context.loaded_tool_ids,
                 "disabled_tools": tool_selection.disabled_tools,
             },
         )
@@ -172,6 +173,7 @@ class AutoExploreActionPlanner:
                     "available_actions": tool_selection.available_actions,
                     "hidden_tools": tool_selection.hidden_tools,
                     "lazy_tool_ids": tool_selection.lazy_tool_ids,
+                    "loaded_tool_ids": context.loaded_tool_ids,
                     "disabled_tools": tool_selection.disabled_tools,
                 },
             )
@@ -329,6 +331,13 @@ def decision_to_tool_call(decision: AutoExploreDecision, call_id: str) -> ToolCa
             },
             reason=reason or "Search lazy tool descriptors.",
         )
+    if action.type == "tool_load":
+        return ToolCall(
+            call_id=call_id,
+            tool_id="tool_load",
+            arguments={"tool_id": action.tool_id},
+            reason=reason or "Load a lazy tool descriptor into the task context.",
+        )
     raise RuntimeError(f"LLM_ACTION_SCHEMA_INVALID: unsupported action {action.type}.")
 
 
@@ -458,6 +467,11 @@ def _normalize_decision_payload(
         action["query"] = normalized["query"]
     if "purpose" in normalized and "purpose" not in action:
         action["purpose"] = normalized["purpose"]
+    for source in ("tool_id", "id", "load_tool_id", "selected_tool_id"):
+        if source in normalized and "tool_id" not in action:
+            action["tool_id"] = normalized[source]
+        if source in action and "tool_id" not in action:
+            action["tool_id"] = action[source]
     if "limit" in normalized and "limit" not in action:
         action["limit"] = normalized["limit"]
     if action.get("type") in {"browser_extract", "finish_task"} and not action.get("instruction"):
@@ -479,6 +493,10 @@ def _normalize_decision_payload(
         )
     if action.get("type") == "tool_search" and not action.get("query"):
         action["query"] = action.get("instruction") or user_goal or "lazy research tools"
+    if action.get("type") == "tool_load" and not action.get("tool_id"):
+        query = action.get("query") or action.get("instruction")
+        if query:
+            action["tool_id"] = query
     if action.get("type") == "finish_task" and not (
         action.get("instruction") or action.get("summary") or action.get("summary_instruction")
     ):
@@ -503,6 +521,7 @@ def _normalize_decision_payload(
         "instruction",
         "query",
         "purpose",
+        "tool_id",
         "limit",
         "summary_instruction",
         "expected_effect",
@@ -531,6 +550,9 @@ def _normalize_action_type(value: Any) -> str | None:
         "screenshot": "browser_screenshot",
         "toolsearch": "tool_search",
         "tool_search": "tool_search",
+        "toolload": "tool_load",
+        "tool_load": "tool_load",
+        "load_tool": "tool_load",
     }
     return aliases.get(normalized, normalized)
 
@@ -699,6 +721,10 @@ def _system_prompt(available_actions: list[str]) -> str:
         '    "amount": "small | medium | large optional",\n'
         '    "condition": "readiness | url_changes | content_appears | network_quiet | fixed_delay optional",\n'
         '    "instruction": "string optional",\n'
+        '    "query": "string optional for tool_search",\n'
+        '    "purpose": "string optional for tool_search",\n'
+        '    "tool_id": "string optional for tool_load",\n'
+        '    "limit": "integer optional for tool_search",\n'
         '    "expected_effect": {\n'
         '      "type": "none | content_or_url_changes | content_appears | url_contains",\n'
         '      "value": "string optional"\n'
@@ -815,6 +841,7 @@ def _user_prompt(
             else None,
             "interactive_elements": elements,
             "collected_evidence": _history_evidence(history),
+            "loaded_tool_ids": context.loaded_tool_ids,
             "risk_signals": [
                 signal.model_dump(mode="json")
                 for signal in (observation.risk_signals if observation is not None else [])

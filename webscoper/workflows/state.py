@@ -14,6 +14,7 @@ class VaniScopeGraphState(TypedDict, total=False):
     task_type: str | None
     skill_context: dict[str, Any] | None
     skill_plan: dict[str, Any] | None
+    skill_session: dict[str, Any] | None
 
     prompt_markdown: str | None
     prompt_context: dict[str, Any] | None

@@ -343,6 +343,11 @@ class WebAgentExecutionHandler:
                 "available_actions": prompt_result.available_actions,
                 "hidden_tools": prompt_result.hidden_tools,
                 "disabled_tools": prompt_result.disabled_tools,
+                "loaded_tool_ids": prompt_result.loaded_tool_ids,
+                "skill_session": prompt_result.skill_session.model_dump(mode="json")
+                if prompt_result.skill_session is not None
+                else None,
+                "prompt_budget": prompt_result.prompt_budget,
             },
         )
         self._emit_event(
@@ -357,6 +362,11 @@ class WebAgentExecutionHandler:
                 "available_actions": prompt_result.available_actions,
                 "hidden_tools": prompt_result.hidden_tools,
                 "disabled_tools": prompt_result.disabled_tools,
+                "loaded_tool_ids": prompt_result.loaded_tool_ids,
+                "skill_session": prompt_result.skill_session.model_dump(mode="json")
+                if prompt_result.skill_session is not None
+                else None,
+                "prompt_budget": prompt_result.prompt_budget,
             },
         )
         return prompt_result

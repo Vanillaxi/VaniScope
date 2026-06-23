@@ -9,9 +9,11 @@ from webscoper.schemas.artifact import ContextPack
 from webscoper.schemas.runtime import WebAgentContextSnapshot
 from webscoper.schemas.runtime import (
     AgentsMdInstruction,
+    LoadedToolContext,
     PromptBuildResult,
     RuntimeReminder,
     SkillPromptContext,
+    SkillSession,
 )
 from webscoper.schemas.tool import ToolSpec
 from webscoper.skills.registry import SkillRegistry, create_default_skill_registry
@@ -20,7 +22,17 @@ from webscoper.tools.registry import ToolRegistry
 
 MAX_AGENTS_MD_FILES = 5
 MAX_AGENTS_MD_CHARS = 8000
-INITIAL_AUTO_EXPLORE_TOOLS = {"browser_open", "tool_search", "ask_human", "finish_task"}
+MAX_LOADED_TOOLS_IN_PROMPT = 4
+MAX_LOADED_TOOL_SCHEMA_CHARS = 1800
+MAX_SKILL_SESSION_CHARS = 1800
+MAX_SKILL_INSTRUCTION_CHARS = 5000
+INITIAL_AUTO_EXPLORE_TOOLS = {
+    "browser_open",
+    "tool_search",
+    "tool_load",
+    "ask_human",
+    "finish_task",
+}
 OBSERVED_AUTO_EXPLORE_TOOLS = {
     "browser_observe",
     "browser_click",
@@ -29,6 +41,7 @@ OBSERVED_AUTO_EXPLORE_TOOLS = {
     "browser_extract",
     "browser_screenshot",
     "tool_search",
+    "tool_load",
     "ask_human",
     "finish_task",
 }
@@ -126,6 +139,7 @@ def select_prompt_tools(
     public_web = not local_fixture
     input_allowed = _input_tools_allowed(task, observation, local_fixture=local_fixture)
     stage_tools = _stage_tool_ids(task, opened=opened, input_allowed=input_allowed)
+    stage_tools.update(str(tool_id) for tool_id in getattr(context, "loaded_tool_ids", []))
     stage_tools.update(selected_tool_ids or set())
     selection = PromptToolSelection()
 
@@ -332,7 +346,11 @@ class DynamicPromptBuilder:
             self.tool_registry,
             context=context,
             observation=observation,
-            selected_tool_ids=_selected_skill_tool_ids(self.skill_registry, skill),
+            selected_tool_ids=_selected_prompt_tool_ids(
+                self.skill_registry,
+                skill,
+                context.loaded_tool_ids,
+            ),
         )
 
         sections = {
@@ -343,8 +361,10 @@ class DynamicPromptBuilder:
             "permission_mode": context.safety.mode,
             "runtime_version": _runtime_version_section(context),
             "available_tools": _available_tools_section(tool_selection.available_tools),
+            "loaded_tools": _loaded_tools_section(context.loaded_tools),
             "lazy_tools": _lazy_tools_section(tool_selection.lazy_tools),
             "skill_catalog": _skill_catalog_section(self.skill_registry, skill),
+            "skill_session": _skill_session_section(context.skill_session),
             "skill_instruction": _skill_instruction_section(skill),
             "agents_md": _agents_md_section(agents_md_instructions),
             "runtime_reminders": _runtime_reminders_section(runtime_reminders),
@@ -358,8 +378,10 @@ class DynamicPromptBuilder:
             "permission_mode",
             "runtime_version",
             "available_tools",
+            "loaded_tools",
             "lazy_tools",
             "skill_catalog",
+            "skill_session",
             "skill_instruction",
             "agents_md",
             "runtime_reminders",
@@ -384,6 +406,13 @@ class DynamicPromptBuilder:
             available_actions=tool_selection.available_actions,
             hidden_tools=tool_selection.hidden_tools,
             disabled_tools=tool_selection.disabled_tools,
+            loaded_tool_ids=context.loaded_tool_ids,
+            skill_session=context.skill_session,
+            prompt_budget=_prompt_budget_metadata(
+                context=context,
+                prompt_text=prompt_text,
+                loaded_tools=context.loaded_tools,
+            ),
             skill=skill,
             compact_context_metadata=context_pack.model_dump(mode="json")
             if context_pack is not None
@@ -459,7 +488,7 @@ def _skill_instruction_section(skill: SkillPromptContext | None) -> str:
             f"- version: {skill.version}",
             f"- description: {skill.description}",
             "",
-            skill.instruction.strip(),
+            _cap_text(skill.instruction.strip(), MAX_SKILL_INSTRUCTION_CHARS),
         ]
     )
     if skill.plan is not None:
@@ -477,6 +506,18 @@ def _skill_instruction_section(skill: SkillPromptContext | None) -> str:
             lines.append("- required_evidence:")
             for item in required_evidence:
                 lines.append(f"  - {item}")
+    return "\n".join(lines)
+
+
+def _skill_session_section(session: SkillSession | None) -> str:
+    lines = ["# Skill Session", ""]
+    if session is None:
+        lines.append("No skill session is active.")
+        return "\n".join(lines)
+    payload = session.model_dump(mode="json")
+    payload["plan"] = _compact_json_value(payload.get("plan"), 700)
+    text = json_dumps_compact(payload)
+    lines.append(_cap_text(text, MAX_SKILL_SESSION_CHARS))
     return "\n".join(lines)
 
 
@@ -562,11 +603,43 @@ def _available_tools_section(tools: list[ToolSpec]) -> str:
     return "\n".join(lines).rstrip()
 
 
+def _loaded_tools_section(tools: list[LoadedToolContext]) -> str:
+    lines = [
+        "# Loaded Tools",
+        "",
+        "These lazy tools were explicitly loaded for this task. Invoke them through ToolGateway only.",
+        "",
+    ]
+    if not tools:
+        lines.append("- none")
+        return "\n".join(lines)
+    for loaded in tools[:MAX_LOADED_TOOLS_IN_PROMPT]:
+        schema = dict(loaded.full_schema)
+        schema_text = _cap_text(
+            json_dumps_compact(schema),
+            MAX_LOADED_TOOL_SCHEMA_CHARS,
+        )
+        lines.extend(
+            [
+                f"## {loaded.tool_id}",
+                f"- loaded_at: {loaded.loaded_at}",
+                f"- descriptor_digest: {loaded.descriptor_digest}",
+                f"- source: {loaded.source}",
+                f"- usage_rules: {', '.join(loaded.usage_rules) or 'none'}",
+                f"- schema: {schema_text}",
+                "",
+            ]
+        )
+    if len(tools) > MAX_LOADED_TOOLS_IN_PROMPT:
+        lines.append(f"- truncated_loaded_tool_count: {len(tools) - MAX_LOADED_TOOLS_IN_PROMPT}")
+    return "\n".join(lines).rstrip()
+
+
 def _lazy_tools_section(tools: list[ToolSpec]) -> str:
     lines = [
         "# Lazy Tools",
         "",
-        "If a lazy tool is needed, call tool_search first. Search returns descriptors only; execution must still go through ToolGateway.",
+        "If a lazy tool is needed, call tool_search first, then tool_load with the selected tool_id. Search returns descriptors only; execution must still go through ToolGateway.",
         "",
     ]
     for tool in tools:
@@ -739,12 +812,14 @@ def _schema_summary_text(tool: ToolSpec) -> str:
     return ", ".join(f"{key}={value}" for key, value in summary.items())
 
 
-def _selected_skill_tool_ids(
+def _selected_prompt_tool_ids(
     registry: SkillRegistry,
     skill: SkillPromptContext | None,
+    loaded_tool_ids: list[str],
 ) -> set[str]:
+    selected = set(loaded_tool_ids)
     if skill is None:
-        return set()
+        return selected
     try:
         definition = next(
             item.definition
@@ -752,5 +827,45 @@ def _selected_skill_tool_ids(
             if item.definition.skill_id == skill.skill_id
         )
     except StopIteration:
-        return set()
-    return set(definition.required_tools) | set(definition.optional_tools)
+        return selected
+    selected.update(definition.required_tools)
+    selected.update(definition.optional_tools)
+    return selected
+
+
+def _prompt_budget_metadata(
+    *,
+    context: WebAgentContextSnapshot,
+    prompt_text: str,
+    loaded_tools: list[LoadedToolContext],
+) -> dict[str, Any]:
+    estimated_tokens = max(1, (len(prompt_text) + 3) // 4)
+    return {
+        "estimated_prompt_tokens": estimated_tokens,
+        "max_prompt_tokens_per_call": context.budget.max_prompt_tokens_per_call,
+        "max_loaded_tools_in_prompt": MAX_LOADED_TOOLS_IN_PROMPT,
+        "max_loaded_tool_schema_chars": MAX_LOADED_TOOL_SCHEMA_CHARS,
+        "loaded_tool_count": len(loaded_tools),
+        "loaded_tool_context_truncated": len(loaded_tools) > MAX_LOADED_TOOLS_IN_PROMPT,
+    }
+
+
+def json_dumps_compact(value: Any) -> str:
+    import json
+
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _compact_json_value(value: Any, limit: int) -> Any:
+    if value is None:
+        return None
+    text = json_dumps_compact(value)
+    if len(text) <= limit:
+        return value
+    return _cap_text(text, limit)
+
+
+def _cap_text(value: str, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    return value[: max(0, limit - 16)].rstrip() + " ...[truncated]"
