@@ -5,7 +5,6 @@ import { useI18n } from "@/lib/i18n";
 
 export type InspectorTabId =
   | "overview"
-  | "timeline"
   | "graph"
   | "report"
   | "evidence"
@@ -21,7 +20,6 @@ export function RuntimeInspectorTabs({ children }: RuntimeInspectorTabsProps) {
   const [activeTab, setActiveTab] = useState<InspectorTabId>("overview");
   const tabs: { id: InspectorTabId; label: string }[] = [
     { id: "overview", label: t.inspector.overview },
-    { id: "timeline", label: t.inspector.timeline },
     { id: "graph", label: t.inspector.graph },
     { id: "report", label: t.inspector.report },
     { id: "evidence", label: t.inspector.evidence },

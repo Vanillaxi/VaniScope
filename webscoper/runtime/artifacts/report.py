@@ -38,6 +38,7 @@ class FinalReportBuilder:
         )
         labels = _labels(language)
         findings = _findings(task_spec, evidence_items, final_observation, language)
+        analysis = _analysis(task_spec, evidence_items, final_observation, language)
         details = _details(task_spec, evidence_items, final_observation, language)
         limitations = _limitations(final_observation, evidence_items, language)
         lines = [
@@ -53,6 +54,10 @@ class FinalReportBuilder:
             f"## {labels['findings']}",
             "",
             findings,
+            "",
+            f"## {labels['analysis']}",
+            "",
+            analysis,
             "",
             f"## {labels['details']}",
             "",
@@ -146,6 +151,39 @@ def _details(
         if summary:
             details.append(f"- {summary} [{item.evidence_id}]")
     return details or ["- There is not enough evidence to extract additional important details."]
+
+
+def _analysis(
+    task_spec: TaskSpec,
+    evidence_items: list[EvidenceItem],
+    final_observation: PageObservation | None,
+    language: str,
+) -> str:
+    refs = _evidence_refs(evidence_items)
+    source = _source_title(final_observation, evidence_items) or task_spec.target_url
+    names = _proper_names(evidence_items, final_observation)
+    goal = _goal(task_spec)
+    if not evidence_items and final_observation is None:
+        return (
+            "当前缺少可验证材料，因此只能判断任务尚未形成可靠分析结果。"
+            if is_zh(language)
+            else "There is not enough verifiable material to produce a reliable interpretation yet."
+        )
+    if is_zh(language):
+        if names:
+            return (
+                f"从任务目标“{goal}”看，{source} 的公开内容主要围绕 "
+                f"{', '.join(names[:4])} 展开。更合理的解读不是罗列页面字段，"
+                f"而是把这些可见信息视为回答任务目标的证据集合；当前结论应以这些证据为边界{refs}。"
+            )
+        return f"从已采集材料看，{source} 能支持任务目标的初步判断，但结论范围应限制在可见证据内{refs}。"
+    if names:
+        return (
+            f"For the goal {goal!r}, {source} is best interpreted through the visible signals around "
+            f"{', '.join(names[:4])}. The useful conclusion is not the raw page fields themselves, "
+            f"but what those fields collectively indicate within the captured evidence boundary{refs}."
+        )
+    return f"The captured material supports a limited interpretation of {source}; conclusions should stay within the visible evidence boundary{refs}."
 
 
 def _limitations(
@@ -262,6 +300,7 @@ def _labels(language: str) -> dict[str, str]:
             "title": "VaniScope 任务报告",
             "overview": "任务概览",
             "findings": "核心结论",
+            "analysis": "分析解读",
             "details": "关键信息",
             "evidence": "证据链",
             "risks": "风险与限制",
@@ -278,6 +317,7 @@ def _labels(language: str) -> dict[str, str]:
         "title": "VaniScope Task Report",
         "overview": "Task Overview",
         "findings": "Key Findings",
+        "analysis": "Analysis",
         "details": "Important Details",
         "evidence": "Evidence",
         "risks": "Risks and Limitations",

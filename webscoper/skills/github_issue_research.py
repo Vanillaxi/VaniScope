@@ -284,6 +284,15 @@ def _en_report(task: TaskSpec, analysis: IssueAnalysis) -> str:
                 f"{analysis.contribution_value}. {refs}"
             ),
             "",
+            "## Analysis",
+            "",
+            (
+                f"- This issue should be interpreted as a scoped contribution decision, "
+                f"not just a metadata summary. The recommendation follows from the balance "
+                f"between affected modules, expected performance value, benchmark needs, "
+                f"and implementation risk. {refs}"
+            ),
+            "",
             "## Issue Summary",
             "",
             f"- {analysis.summary} {refs}",
@@ -354,6 +363,14 @@ def _zh_report(task: TaskSpec, analysis: IssueAnalysis) -> str:
                 f"- 建议：{_zh_recommendation(analysis.recommendation)}；"
                 f"难度：{_zh_level(analysis.difficulty)}；"
                 f"贡献价值：{_zh_level(analysis.contribution_value)}。{refs}"
+            ),
+            "",
+            "## 分析解读",
+            "",
+            (
+                "- 这个 issue 更适合作为一个有边界的贡献决策来理解，而不是简单的字段摘要。"
+                "当前建议综合了影响模块、潜在性能收益、benchmark 要求以及实现风险；"
+                f"因此结论重点在于是否值得投入，而不是仅复述页面内容。{refs}"
             ),
             "",
             "## Issue 摘要",

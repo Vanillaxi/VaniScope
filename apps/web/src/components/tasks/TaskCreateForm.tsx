@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
@@ -8,10 +9,11 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { createTask, getDiagnostics } from "@/lib/api";
+import { formatDateTime, statusTone } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
-import { localeCode } from "@/lib/localizedDisplay";
-import { type ConsoleSkill, type ConsoleSkillId, skillById } from "@/lib/skills";
-import { upsertTaskHistory } from "@/lib/taskHistory";
+import { localeCode, statusLabel } from "@/lib/localizedDisplay";
+import { type ConsoleSkill, type ConsoleSkillId, skillById, skillIdFromTask } from "@/lib/skills";
+import { loadTaskHistory, upsertTaskHistory, type TaskHistoryItem } from "@/lib/taskHistory";
 import type { DiagnosticsResponse, PlannerMode, TaskLanguage, TaskMode } from "@/lib/types";
 
 export function TaskCreateForm() {
@@ -56,6 +58,7 @@ function TaskCreateFormBody({ selectedSkill }: { selectedSkill: ConsoleSkill }) 
   const [riskMode, setRiskMode] = useState("read_only");
   const [dryRun, setDryRun] = useState(false);
   const [diagnostics, setDiagnostics] = useState<DiagnosticsResponse | null>(null);
+  const [history, setHistory] = useState<TaskHistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -77,6 +80,25 @@ function TaskCreateFormBody({ selectedSkill }: { selectedSkill: ConsoleSkill }) 
       .then((result) => setDiagnostics(result))
       .catch(() => setDiagnostics(null));
   }, []);
+
+  useEffect(() => {
+    const refreshHistory = () => setHistory(loadTaskHistory());
+    refreshHistory();
+    window.addEventListener("storage", refreshHistory);
+    window.addEventListener("vaniscope:task-history", refreshHistory);
+    return () => {
+      window.removeEventListener("storage", refreshHistory);
+      window.removeEventListener("vaniscope:task-history", refreshHistory);
+    };
+  }, []);
+
+  const skillHistory = useMemo(
+    () =>
+      history
+        .filter((task) => skillIdFromTask(task.task_type, task.skill_id) === selectedSkill.id)
+        .slice(0, 4),
+    [history, selectedSkill.id],
+  );
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -357,6 +379,36 @@ function TaskCreateFormBody({ selectedSkill }: { selectedSkill: ConsoleSkill }) 
                 {t.taskCreate[preset.labelKey]}
               </button>
             ))}
+          </div>
+        </Card>
+        <Card className="p-5">
+          <h2 className="text-lg font-semibold">{t.taskCreate.recentSkillTasks}</h2>
+          <div className="mt-4 grid gap-2">
+            {skillHistory.length ? (
+              skillHistory.map((task) => (
+                <Link
+                  key={task.task_id}
+                  href={`/tasks/${encodeURIComponent(task.task_id)}`}
+                  className="rounded-md border border-[var(--line)] bg-white px-3 py-2 hover:bg-[var(--panel-soft)]"
+                >
+                  <div className="truncate text-sm font-semibold text-[#26323f]">
+                    {task.title}
+                  </div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <Badge tone={statusTone(task.status)}>
+                      {statusLabel(task.status, language)}
+                    </Badge>
+                    <span className="truncate text-xs text-[var(--muted)]">
+                      {formatDateTime(task.last_opened_at, language)}
+                    </span>
+                  </div>
+                </Link>
+              ))
+            ) : (
+              <div className="rounded-md border border-dashed border-[var(--line)] p-4 text-sm text-[var(--muted)]">
+                {t.taskCreate.noRecentSkillTasks}
+              </div>
+            )}
           </div>
         </Card>
       </aside>

@@ -11,7 +11,6 @@ import { LlmCallsPanel } from "@/components/tasks/LlmCallsPanel";
 import { RuntimeInspectorTabs } from "@/components/tasks/RuntimeInspectorTabs";
 import { StepDetailPanel } from "@/components/tasks/StepDetailPanel";
 import { TaskControlBar } from "@/components/tasks/TaskControlBar";
-import { TimelinePanel } from "@/components/tasks/TimelinePanel";
 import { ToolCatalogPanel } from "@/components/tasks/ToolCatalogPanel";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
@@ -146,15 +145,6 @@ export default function TaskPage({ params }: TaskPageProps) {
       )}
       <RuntimeInspectorTabs>
         {(activeTab) => {
-          if (activeTab === "timeline") {
-            return (
-              <TimelinePanel
-                items={inspector?.timeline_items ?? []}
-                summary={inspector?.summary}
-                onInspectItem={(item) => setDrawer({ kind: "timeline", item })}
-              />
-            );
-          }
           if (activeTab === "graph") {
             return (
               <ExecutionGraphPanel

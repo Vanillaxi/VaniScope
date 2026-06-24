@@ -17,6 +17,7 @@ type MarkdownBlock =
 type ReportSectionKey =
   | "overview"
   | "findings"
+  | "analysis"
   | "details"
   | "evidence"
   | "risks"
@@ -222,6 +223,7 @@ function shapeReportSections(
   const buckets: Record<ReportSectionKey, MarkdownBlock[]> = {
     overview: [],
     findings: [],
+    analysis: [],
     details: [],
     evidence: [],
     risks: [],
@@ -237,10 +239,18 @@ function shapeReportSections(
   if (!Object.values(buckets).some((value) => value.length)) {
     buckets.findings = blocks.filter((block) => block.kind !== "heading");
   }
+  if (!buckets.analysis.length) {
+    const fallback = analyticalFallback([
+      ...buckets.findings,
+      ...buckets.details,
+    ], t);
+    if (fallback) buckets.analysis.push(fallback);
+  }
 
   const labels: Record<ReportSectionKey, string> = {
     overview: t.inspector.taskOverview,
     findings: t.inspector.keyFindings,
+    analysis: t.inspector.analysis,
     details: t.inspector.importantDetails,
     evidence: t.inspector.evidenceSupport,
     risks: t.inspector.risksLimitations,
@@ -251,6 +261,7 @@ function shapeReportSections(
   return ([
     "overview",
     "findings",
+    "analysis",
     "details",
     "evidence",
     "risks",
@@ -296,6 +307,20 @@ function sectionKey(heading: string): ReportSectionKey {
     ])
   ) {
     return "overview";
+  }
+  if (
+    includesAny(normalized, [
+      "analysis",
+      "interpretation",
+      "synthesis",
+      "insight",
+      "分析",
+      "解读",
+      "综合",
+      "洞察",
+    ])
+  ) {
+    return "analysis";
   }
   if (
     includesAny(normalized, [
@@ -363,6 +388,25 @@ function sectionKey(heading: string): ReportSectionKey {
 
 function includesAny(value: string, candidates: string[]) {
   return candidates.some((candidate) => value.includes(candidate));
+}
+
+function analyticalFallback(
+  blocks: MarkdownBlock[],
+  t: ReturnType<typeof useI18n>["t"],
+): MarkdownBlock | null {
+  const text = blocks
+    .flatMap((block) => {
+      if (block.kind === "paragraph") return [block.text];
+      if (block.kind === "list") return block.items;
+      return [];
+    })
+    .map((value) => value.trim())
+    .find((value) => value.length > 40);
+  if (!text) return null;
+  return {
+    kind: "paragraph",
+    text: `${t.inspector.analysisFallbackPrefix}${text}`,
+  };
 }
 
 function sectionsToPlainText(

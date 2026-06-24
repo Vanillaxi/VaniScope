@@ -103,6 +103,7 @@ class DocsResearchSkill:
         findings = _findings(query, relevant_items, task.language)
         limitations = _limitations(query, relevant_items, task.language)
         summary = _summary(query, relevant_items, task.language)
+        analysis = _analysis(query, relevant_items, task.language)
 
         labels = _report_labels(task.language)
         lines = [
@@ -127,6 +128,10 @@ class DocsResearchSkill:
             f"## {labels['result']}",
             "",
             summary,
+            "",
+            f"## {labels['analysis']}",
+            "",
+            analysis,
             "",
             f"## {labels['findings']}",
             "",
@@ -252,6 +257,32 @@ def _summary(query: str, evidence_items: list[EvidenceItem], language: str) -> s
     if _is_zh(language):
         return f"没有在页面证据中找到足够信息回答“{query}”。"
     return f"The captured page evidence is not sufficient to answer {query!r}."
+
+
+def _analysis(query: str, evidence_items: list[EvidenceItem], language: str) -> str:
+    if not evidence_items:
+        if _is_zh(language):
+            return f"由于缺少与“{query}”直接相关的页面证据，目前不能做出可靠解读。"
+        return f"Without direct page evidence for {query!r}, no reliable interpretation can be made."
+    refs = ", ".join(f"[{item.evidence_id}]" for item in evidence_items[:3])
+    sources = [
+        item.page_title or item.source_url
+        for item in evidence_items
+        if item.page_title or item.source_url
+    ]
+    source = sources[0] if sources else ("该页面" if _is_zh(language) else "the page")
+    if _is_zh(language):
+        return (
+            f"从文档研究角度看，{source} 对“{query}”的价值在于提供可执行或可验证的"
+            f"说明，而不是单纯展示页面文本。当前结论应优先围绕这些直接证据展开，并把未覆盖内容"
+            f"视为后续需要补充验证的范围。主要依据：{refs}。"
+        )
+    return (
+        f"From a documentation-research perspective, {source} is useful for {query!r} because it "
+        f"provides actionable or verifiable guidance rather than just page text. The conclusion "
+        f"should stay centered on those direct signals and treat uncovered details as follow-up "
+        f"validation needs. Primary evidence: {refs}."
+    )
 
 
 def _limitations(
@@ -383,6 +414,7 @@ def _report_labels(language: str) -> dict[str, str]:
             "source_url": "来源页面",
             "summary": "摘要",
             "result": "核心结论",
+            "analysis": "分析解读",
             "findings": "关键信息",
             "evidence": "证据链",
             "limitations": "风险与限制",
@@ -405,6 +437,7 @@ def _report_labels(language: str) -> dict[str, str]:
         "source_url": "Source URL",
         "summary": "Summary",
         "result": "Result",
+        "analysis": "Analysis",
         "findings": "Key Findings",
         "evidence": "Evidence",
         "limitations": "Limitations",

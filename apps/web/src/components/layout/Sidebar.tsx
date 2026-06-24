@@ -8,7 +8,7 @@ import { getDiagnostics, getHealth } from "@/lib/api";
 import { formatDateTime, statusTone } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { statusLabel } from "@/lib/localizedDisplay";
-import { CONSOLE_SKILLS } from "@/lib/skills";
+import { CONSOLE_SKILLS, skillById, skillIdFromTask } from "@/lib/skills";
 import {
   clearTaskHistory,
   loadTaskHistory,
@@ -52,6 +52,26 @@ export function Sidebar() {
   }, []);
 
   const recentTasks = useMemo(() => history.slice(0, 20), [history]);
+  const activeHistoryTask = useMemo(
+    () =>
+      history.find(
+        (task) => pathname === `/tasks/${encodeURIComponent(task.task_id)}`,
+      ),
+    [history, pathname],
+  );
+  const activeSkillId =
+    pathname === "/tasks/new"
+      ? skillById(searchParams.get("skill")).id
+      : activeHistoryTask
+        ? skillIdFromTask(activeHistoryTask.task_type, activeHistoryTask.skill_id)
+        : null;
+  const activeSkill = activeSkillId ? skillById(activeSkillId) : null;
+  const visibleTasks = useMemo(() => {
+    if (!activeSkill) return recentTasks;
+    return recentTasks.filter(
+      (task) => skillIdFromTask(task.task_type, task.skill_id) === activeSkill.id,
+    );
+  }, [activeSkill, recentTasks]);
 
   return (
     <aside className="border-b border-[var(--line)] bg-white px-4 py-3 md:fixed md:inset-y-0 md:left-0 md:flex md:w-72 md:flex-col md:border-b-0 md:border-r md:px-4 md:py-4">
@@ -63,7 +83,7 @@ export function Sidebar() {
           </div>
         </Link>
         <Link
-          href="/tasks/new"
+          href={activeSkill ? `/tasks/new?skill=${activeSkill.id}` : "/tasks/new"}
           className="inline-flex min-h-9 rounded-md bg-[var(--brand)] px-3 py-2 text-sm font-semibold text-white hover:bg-[var(--brand-dark)] md:mt-4 md:w-full md:justify-center"
         >
           + {t.nav.newTask}
@@ -73,8 +93,15 @@ export function Sidebar() {
       <div className="mt-4 flex min-h-0 flex-1 flex-col gap-3">
         <section className="min-h-0 flex-1 overflow-hidden">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="text-xs font-semibold uppercase text-[var(--muted)]">
-              {t.nav.recentTasks}
+            <div className="min-w-0">
+              <div className="text-xs font-semibold uppercase text-[var(--muted)]">
+                {activeSkill ? t.nav.skillRecentTasks : t.nav.recentTasks}
+              </div>
+              {activeSkill ? (
+                <div className="mt-1 truncate text-sm font-semibold text-[#26323f]">
+                  {t.skills[activeSkill.nameKey]}
+                </div>
+              ) : null}
             </div>
             {recentTasks.length ? (
               <button
@@ -90,8 +117,8 @@ export function Sidebar() {
             ) : null}
           </div>
           <div className="flex gap-2 overflow-x-auto md:max-h-full md:flex-col md:overflow-y-auto md:pr-1">
-            {recentTasks.length ? (
-              recentTasks.map((task) => {
+            {visibleTasks.length ? (
+              visibleTasks.map((task) => {
                 const active = pathname === `/tasks/${encodeURIComponent(task.task_id)}`;
                 return (
                   <Link
@@ -119,40 +146,59 @@ export function Sidebar() {
               })
             ) : (
               <div className="rounded-md border border-dashed border-[var(--line)] px-3 py-4 text-sm text-[var(--muted)]">
-                {t.nav.emptyHistory}
+                {activeSkill ? t.nav.emptySkillHistory : t.nav.emptyHistory}
               </div>
             )}
           </div>
         </section>
 
         <section className="border-t border-[var(--line)] pt-2">
-          <div className="px-2 py-2 text-xs font-semibold uppercase text-[var(--muted)]">
-            {t.nav.skills}
-          </div>
-          <nav className="mt-1 flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
-            {CONSOLE_SKILLS.map((skill) => {
-              const href = `/tasks/new?skill=${skill.id}`;
-              const active =
-                pathname === "/tasks/new" &&
-                searchParams.get("skill") === skill.id;
-              return (
+          {activeSkill ? (
+            <div className="rounded-md border border-[#b9d9dd] bg-[#eef7f8] p-3">
+              <div className="text-xs font-semibold uppercase text-[var(--muted)]">
+                {t.nav.currentWorkspace}
+              </div>
+              <div className="mt-1 text-sm font-semibold text-[var(--brand-dark)]">
+                {t.skills[activeSkill.nameKey]}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
                 <Link
-                  key={skill.id}
-                  href={href}
-                  className={`whitespace-nowrap rounded-md border px-3 py-2 text-sm font-semibold text-[#26323f] transition hover:bg-[var(--panel-soft)] ${
-                    active
-                      ? "border-[#b9d9dd] bg-[#eef7f8] text-[var(--brand-dark)]"
-                      : "border-transparent"
-                  }`}
+                  href="/tasks/new"
+                  className="rounded border border-[var(--line)] bg-white px-2 py-1 text-xs font-semibold text-[#344054] hover:bg-[var(--panel-soft)]"
                 >
-                  <span className="block">{t.skills[skill.nameKey]}</span>
-                  <span className="mt-0.5 block max-w-56 truncate text-xs font-normal text-[var(--muted)]">
-                    {t.skills[skill.exampleKey]}
-                  </span>
+                  {t.nav.allWorkspaces}
                 </Link>
-              );
-            })}
-          </nav>
+                {CONSOLE_SKILLS.filter((skill) => skill.id !== activeSkill.id).map(
+                  (skill) => (
+                    <Link
+                      key={skill.id}
+                      href={`/tasks/new?skill=${skill.id}`}
+                      className="rounded border border-transparent px-2 py-1 text-xs font-semibold text-[#344054] hover:bg-white"
+                    >
+                      {t.skills[skill.nameKey]}
+                    </Link>
+                  ),
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="px-2 py-2 text-xs font-semibold uppercase text-[var(--muted)]">
+                {t.nav.skills}
+              </div>
+              <nav className="flex flex-wrap gap-2 px-2">
+                {CONSOLE_SKILLS.map((skill) => (
+                  <Link
+                    key={skill.id}
+                    href={`/tasks/new?skill=${skill.id}`}
+                    className="rounded-md border border-[var(--line)] bg-white px-2 py-1 text-xs font-semibold text-[#344054] hover:bg-[var(--panel-soft)]"
+                  >
+                    {t.skills[skill.nameKey]}
+                  </Link>
+                ))}
+              </nav>
+            </>
+          )}
           <Link
             href="/evals"
             className="mt-1 inline-flex rounded-md px-3 py-1.5 text-sm font-medium text-[#26323f] hover:bg-[var(--panel-soft)]"

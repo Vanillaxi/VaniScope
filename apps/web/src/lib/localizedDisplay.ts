@@ -185,8 +185,14 @@ function graphNodeTitle(key: string, node: RuntimeGraphNode, language: Language)
   if (key.includes("tool_call") || node.type === "tool") {
     return zh ? "工具调用" : "Tool call";
   }
+  if (key.includes("tool_search") || key.includes("lazy_tool")) {
+    return zh ? "工具搜索" : "Tool search";
+  }
   if (key.includes("browser_open") || key.includes("navigation")) {
     return zh ? "页面打开" : "Page open";
+  }
+  if (key.includes("browser_observe") || key.includes("observe")) {
+    return zh ? "页面观察" : "Page observation";
   }
   if (key.includes("browser") || key.includes("action_")) {
     return zh ? "浏览器动作" : "Browser action";
@@ -203,6 +209,7 @@ function graphNodeTitle(key: string, node: RuntimeGraphNode, language: Language)
   if (key.includes("evidence") || node.type === "evidence") {
     return zh ? "证据采集" : "Evidence capture";
   }
+  if (key.includes("review") || node.type === "review") return zh ? "结果审查" : "Result review";
   if (node.type === "llm") return zh ? "LLM 推理" : "LLM reasoning";
   if (node.type === "budget") return zh ? "预算检查" : "Budget check";
   if (node.type === "approval") return zh ? "人工审批" : "Human approval";
@@ -238,10 +245,20 @@ function graphNodeResponsibility(
       ? "执行浏览器、研究或运行时工具，并记录结果与审计信息。"
       : "Runs browser, research, or runtime tools and records results plus audit data.";
   }
+  if (key.includes("tool_search") || key.includes("lazy_tool")) {
+    return zh
+      ? "查找当前任务可用的 lazy tool，并决定是否加载到工具上下文。"
+      : "Finds available lazy tools for the task and decides whether to load them into context.";
+  }
   if (key.includes("browser_open") || key.includes("navigation")) {
     return zh
       ? "访问目标页面，建立初始页面状态并收集可观察信息。"
       : "Opens the target page, establishes page state, and captures initial observations.";
+  }
+  if (key.includes("browser_observe") || key.includes("observe")) {
+    return zh
+      ? "提取当前页面的可见信息、交互线索、风险信号和可引用证据。"
+      : "Extracts visible page information, interaction cues, risk signals, and citable evidence.";
   }
   if (key.includes("browser") || key.includes("action_")) {
     return zh
@@ -267,6 +284,11 @@ function graphNodeResponsibility(
     return zh
       ? "保存截图、文本或页面片段，作为报告结论的支撑材料。"
       : "Saves screenshots, text, or page snippets as support for report conclusions.";
+  }
+  if (key.includes("review") || node.type === "review") {
+    return zh
+      ? "检查报告结论是否被证据支撑，并指出遗漏、风险或需要修订的内容。"
+      : "Checks whether report conclusions are evidence-backed and flags omissions, risks, or revision needs.";
   }
   if (node.type === "llm") {
     return zh
