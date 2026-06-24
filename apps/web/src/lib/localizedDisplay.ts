@@ -38,11 +38,15 @@ export function graphNodeDisplay(node: RuntimeGraphNode, language: Language) {
       : typeof node.metadata.tool_id === "string"
         ? node.metadata.tool_id
         : "";
-  const label =
-    language === "zh"
-      ? `${type}${tool ? `：${tool}` : ""}`
-      : `${type}${tool ? `: ${tool}` : ""}`;
-  return { label, status, type };
+  const key = graphNodeKey(node);
+  const title = graphNodeTitle(key, node, language);
+  const responsibility = graphNodeResponsibility(key, node, language);
+  const label = tool
+    ? language === "zh"
+      ? `${title}：${tool}`
+      : `${title}: ${tool}`
+    : title;
+  return { label, responsibility, status, type };
 }
 
 function fallbackEventTitle(item: RuntimeTimelineItem, language: Language) {
@@ -122,6 +126,8 @@ const ZH_CATEGORY: Record<string, string> = {
   report: "报告",
   budget: "预算",
   planner: "规划器",
+  verifier: "验证器",
+  task: "任务",
 };
 
 const EN_CATEGORY: Record<string, string> = {
@@ -140,7 +146,147 @@ const EN_CATEGORY: Record<string, string> = {
   report: "Report",
   budget: "Budget",
   planner: "Planner",
+  verifier: "Verifier",
+  task: "Task",
 };
+
+function graphNodeKey(node: RuntimeGraphNode) {
+  const raw = node.metadata.raw;
+  const rawAction =
+    typeof raw === "object" && raw !== null && !Array.isArray(raw)
+      ? String(
+          (raw as Record<string, unknown>).action_type ??
+            (raw as Record<string, unknown>).kind ??
+            "",
+        )
+      : "";
+  return [
+    String(node.metadata.kind ?? ""),
+    rawAction,
+    node.label,
+    node.id,
+    node.type,
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function graphNodeTitle(key: string, node: RuntimeGraphNode, language: Language) {
+  const zh = language === "zh";
+  if (key.includes("route_skill") || key.includes("skill_selected")) {
+    return zh ? "技能路由" : "Skill routing";
+  }
+  if (key.includes("build_prompt") || key.includes("prompt")) {
+    return zh ? "构建提示词" : "Prompt assembly";
+  }
+  if (key.includes("planner") || key.includes("plan")) {
+    return zh ? "任务规划" : "Task planning";
+  }
+  if (key.includes("tool_call") || node.type === "tool") {
+    return zh ? "工具调用" : "Tool call";
+  }
+  if (key.includes("browser_open") || key.includes("navigation")) {
+    return zh ? "页面打开" : "Page open";
+  }
+  if (key.includes("browser") || key.includes("action_")) {
+    return zh ? "浏览器动作" : "Browser action";
+  }
+  if (key.includes("readiness")) {
+    return zh ? "页面就绪检查" : "Readiness check";
+  }
+  if (key.includes("verification") || key.includes("verifier")) {
+    return zh ? "效果验证" : "Effect verification";
+  }
+  if (key.includes("report") || node.type === "report") {
+    return zh ? "报告生成" : "Report generation";
+  }
+  if (key.includes("evidence") || node.type === "evidence") {
+    return zh ? "证据采集" : "Evidence capture";
+  }
+  if (node.type === "llm") return zh ? "LLM 推理" : "LLM reasoning";
+  if (node.type === "budget") return zh ? "预算检查" : "Budget check";
+  if (node.type === "approval") return zh ? "人工审批" : "Human approval";
+  if (node.type === "recovery") return zh ? "恢复处理" : "Recovery";
+  if (node.type === "error") return zh ? "错误处理" : "Error handling";
+  if (node.type === "task") return zh ? "任务状态" : "Task state";
+  return zh ? categoryLabel(node.type, language) : node.label || categoryLabel(node.type, language);
+}
+
+function graphNodeResponsibility(
+  key: string,
+  node: RuntimeGraphNode,
+  language: Language,
+) {
+  const zh = language === "zh";
+  if (key.includes("route_skill") || key.includes("skill_selected")) {
+    return zh
+      ? "根据任务目标选择最合适的技能，并把任务交给对应工作流。"
+      : "Selects the best skill for the task goal and routes the workflow.";
+  }
+  if (key.includes("build_prompt") || key.includes("prompt")) {
+    return zh
+      ? "组装当前任务上下文、工具约束、输出语言和报告要求。"
+      : "Assembles task context, tool constraints, output language, and report requirements.";
+  }
+  if (key.includes("planner") || key.includes("plan")) {
+    return zh
+      ? "决定下一步动作，并把可执行意图交给浏览器或工具层。"
+      : "Chooses the next action and passes executable intent to browser or tool layers.";
+  }
+  if (key.includes("tool_call") || node.type === "tool") {
+    return zh
+      ? "执行浏览器、研究或运行时工具，并记录结果与审计信息。"
+      : "Runs browser, research, or runtime tools and records results plus audit data.";
+  }
+  if (key.includes("browser_open") || key.includes("navigation")) {
+    return zh
+      ? "访问目标页面，建立初始页面状态并收集可观察信息。"
+      : "Opens the target page, establishes page state, and captures initial observations.";
+  }
+  if (key.includes("browser") || key.includes("action_")) {
+    return zh
+      ? "在页面上执行读取或交互动作，并保存前后状态。"
+      : "Executes read or interaction actions on the page and saves before/after state.";
+  }
+  if (key.includes("readiness")) {
+    return zh
+      ? "判断页面是否已达到可读取或可操作状态。"
+      : "Checks whether the page is ready enough to read or operate on.";
+  }
+  if (key.includes("verification") || key.includes("verifier")) {
+    return zh
+      ? "验证动作效果是否符合预期，并标记失败或降级情况。"
+      : "Verifies whether the action effect matched expectations and marks failures or degraded state.";
+  }
+  if (key.includes("report") || node.type === "report") {
+    return zh
+      ? "根据已采集证据产出最终分析报告，并保留证据引用。"
+      : "Produces the final analytical report from captured evidence and keeps evidence references.";
+  }
+  if (key.includes("evidence") || node.type === "evidence") {
+    return zh
+      ? "保存截图、文本或页面片段，作为报告结论的支撑材料。"
+      : "Saves screenshots, text, or page snippets as support for report conclusions.";
+  }
+  if (node.type === "llm") {
+    return zh
+      ? "生成或审查推理内容；调用详情保留在折叠详情中。"
+      : "Generates or reviews reasoning content; call details stay in collapsed details.";
+  }
+  if (node.type === "budget") {
+    return zh ? "检查本次运行是否符合预算策略。" : "Checks whether the run fits the budget policy.";
+  }
+  if (node.type === "approval") {
+    return zh ? "暂停高风险操作并等待人工决策。" : "Pauses risky actions and waits for a human decision.";
+  }
+  if (node.type === "recovery") {
+    return zh ? "尝试从错误、超时或页面异常中恢复。" : "Attempts to recover from errors, timeouts, or page issues.";
+  }
+  if (node.type === "error") {
+    return zh ? "记录失败原因，帮助定位任务中断点。" : "Records failure context to locate where the task stopped.";
+  }
+  return zh ? "记录该运行节点的状态、摘要和相关调试信息。" : "Records this runtime node's state, summary, and related debug context.";
+}
 
 const ZH_EVENT: Record<string, { title: string; description: string }> = {
   workflow_node_started: { title: "工作流节点开始", description: "工作流进入新的执行节点。" },

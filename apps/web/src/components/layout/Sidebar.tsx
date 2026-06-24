@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { getDiagnostics, getHealth } from "@/lib/api";
 import { formatDateTime, statusTone } from "@/lib/format";
-import type { Language } from "@/lib/i18n";
 import { useI18n } from "@/lib/i18n";
 import { statusLabel } from "@/lib/localizedDisplay";
 import { CONSOLE_SKILLS } from "@/lib/skills";
@@ -18,14 +17,13 @@ import {
 import type { DiagnosticsResponse, HealthResponse } from "@/lib/types";
 
 export function Sidebar() {
-  const { language, setLanguage, t } = useI18n();
+  const { language, t } = useI18n();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [history, setHistory] = useState<TaskHistoryItem[]>([]);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [diagnostics, setDiagnostics] = useState<DiagnosticsResponse | null>(null);
   const [healthError, setHealthError] = useState(false);
-  const [skillsOpen, setSkillsOpen] = useState(false);
 
   useEffect(() => {
     const refreshHistory = () => setHistory(loadTaskHistory());
@@ -128,35 +126,33 @@ export function Sidebar() {
         </section>
 
         <section className="border-t border-[var(--line)] pt-2">
-          <button
-            type="button"
-            onClick={() => setSkillsOpen((value) => !value)}
-            className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-xs font-semibold uppercase text-[var(--muted)] hover:bg-[var(--panel-soft)]"
-          >
-            <span>{t.nav.skills}</span>
-            <span className="text-sm">{skillsOpen ? "⌄" : "›"}</span>
-          </button>
-          {skillsOpen ? (
-            <nav className="mt-1 flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
-              {CONSOLE_SKILLS.map((skill) => {
-                const href = `/tasks/new?skill=${skill.id}`;
-                const active =
-                  pathname === "/tasks/new" &&
-                  searchParams.get("skill") === skill.id;
-                return (
+          <div className="px-2 py-2 text-xs font-semibold uppercase text-[var(--muted)]">
+            {t.nav.skills}
+          </div>
+          <nav className="mt-1 flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
+            {CONSOLE_SKILLS.map((skill) => {
+              const href = `/tasks/new?skill=${skill.id}`;
+              const active =
+                pathname === "/tasks/new" &&
+                searchParams.get("skill") === skill.id;
+              return (
                 <Link
                   key={skill.id}
                   href={href}
-                  className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-[#26323f] hover:bg-[var(--panel-soft)] ${
-                    active ? "bg-[var(--panel-soft)] text-[var(--brand-dark)]" : ""
+                  className={`whitespace-nowrap rounded-md border px-3 py-2 text-sm font-semibold text-[#26323f] transition hover:bg-[var(--panel-soft)] ${
+                    active
+                      ? "border-[#b9d9dd] bg-[#eef7f8] text-[var(--brand-dark)]"
+                      : "border-transparent"
                   }`}
                 >
-                  {t.skills[skill.nameKey]}
+                  <span className="block">{t.skills[skill.nameKey]}</span>
+                  <span className="mt-0.5 block max-w-56 truncate text-xs font-normal text-[var(--muted)]">
+                    {t.skills[skill.exampleKey]}
+                  </span>
                 </Link>
-                );
-              })}
-            </nav>
-          ) : null}
+              );
+            })}
+          </nav>
           <Link
             href="/evals"
             className="mt-1 inline-flex rounded-md px-3 py-1.5 text-sm font-medium text-[#26323f] hover:bg-[var(--panel-soft)]"
@@ -167,25 +163,6 @@ export function Sidebar() {
       </div>
 
       <div className="mt-3 grid gap-2 border-t border-[var(--line)] pt-3">
-        <div className="flex items-center justify-between gap-2 text-sm">
-          <span className="font-medium text-[var(--muted)]">{t.nav.language}</span>
-          <div className="grid h-8 w-24 grid-cols-2 rounded-md border border-[var(--line)] bg-[var(--panel-soft)] p-0.5">
-            {(["zh", "en"] as Language[]).map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => setLanguage(item)}
-                className={`rounded px-1 text-xs font-semibold transition ${
-                  language === item
-                    ? "bg-white text-[var(--brand-dark)] shadow-sm"
-                    : "text-[#475467] hover:bg-white/70"
-                }`}
-              >
-                {item === "zh" ? t.nav.zh : t.nav.en}
-              </button>
-            ))}
-          </div>
-        </div>
         <div className="flex items-center justify-between gap-2 text-sm">
           <span className="font-medium text-[var(--muted)]">{t.nav.apiHealth}</span>
           {health ? (

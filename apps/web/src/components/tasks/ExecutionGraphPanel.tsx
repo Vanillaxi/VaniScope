@@ -13,9 +13,6 @@ type ExecutionGraphPanelProps = {
   onInspectNode?: (node: NonNullable<RuntimeExecutionGraphResponse["nodes"]>[number]) => void;
 };
 
-const ROW_HEIGHT = 126;
-const NODE_WIDTH = 520;
-
 export function ExecutionGraphPanel({
   graph,
   onInspectNode,
@@ -23,9 +20,12 @@ export function ExecutionGraphPanel({
   const { language, t } = useI18n();
   const nodes = useMemo(() => graph?.nodes ?? [], [graph?.nodes]);
   const [selectedId, setSelectedId] = useState<string | null>(nodes[0]?.id ?? null);
+  const [expandedRaw, setExpandedRaw] = useState<Record<string, boolean>>({});
+  const effectiveSelectedId =
+    nodes.some((node) => node.id === selectedId) ? selectedId : nodes[0]?.id;
   const selectedNode = useMemo(
-    () => nodes.find((node) => node.id === (selectedId ?? nodes[0]?.id)) ?? nodes[0],
-    [nodes, selectedId],
+    () => nodes.find((node) => node.id === effectiveSelectedId) ?? nodes[0],
+    [nodes, effectiveSelectedId],
   );
 
   return (
@@ -43,76 +43,105 @@ export function ExecutionGraphPanel({
         </div>
 
         {nodes.length ? (
-          <div className="overflow-x-auto rounded-md border border-[var(--line)] bg-[#fbfcfd] p-4">
-            <div
-              className="relative mx-auto"
-              style={{
-                width: NODE_WIDTH,
-                height: Math.max(ROW_HEIGHT, nodes.length * ROW_HEIGHT),
-              }}
-            >
-              <svg
-                className="pointer-events-none absolute inset-0"
-                width={NODE_WIDTH}
-                height={Math.max(ROW_HEIGHT, nodes.length * ROW_HEIGHT)}
-                aria-hidden="true"
-              >
-                {nodes.slice(0, -1).map((node, index) => (
-                  <line
-                    key={`line-${node.id}`}
-                    x1={NODE_WIDTH / 2}
-                    y1={index * ROW_HEIGHT + 92}
-                    x2={NODE_WIDTH / 2}
-                    y2={(index + 1) * ROW_HEIGHT + 18}
-                    stroke="#b8c2cc"
-                    strokeWidth="2"
-                  />
-                ))}
-              </svg>
-              {nodes.map((node, index) => (
-                <button
-                  key={node.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedId(node.id);
-                    onInspectNode?.(node);
-                  }}
-                  className={`absolute left-0 w-full rounded-md border bg-white p-3 text-left shadow-sm transition ${
-                    selectedNode?.id === node.id
-                      ? "border-[var(--brand)] ring-2 ring-[#cde8ea]"
-                      : "border-[var(--line)] hover:border-[#9fb1bf]"
-                  }`}
-                  style={{ top: index * ROW_HEIGHT, minHeight: 100 }}
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={`h-2.5 w-2.5 rounded-full ${statusDotClass(node.status)}`}
-                    />
-                    <Badge tone={typeTone(node.type)}>
-                      {graphNodeDisplay(node, language).type}
-                    </Badge>
-                    <Badge tone={statusTone(node.status)}>
-                      {graphNodeDisplay(node, language).status}
-                    </Badge>
-                    <span className="text-xs text-[var(--muted)]">
-                      {formatDateTime(node.timestamp, language, "")}
-                    </span>
-                    {node.duration_ms !== null && node.duration_ms !== undefined ? (
-                      <span className="text-xs font-semibold text-[#344054]">
-                        {formatDuration(node.duration_ms)}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="mt-2 overflow-hidden text-ellipsis whitespace-nowrap font-semibold text-[#26323f]">
-                    {graphNodeDisplay(node, language).label}
-                  </div>
-                  {node.summary ? (
-                    <div className="mt-1 max-h-10 overflow-hidden text-sm leading-5 text-[var(--muted)]">
-                      {node.summary}
+          <div className="rounded-md border border-[var(--line)] bg-[#fbfcfd] p-4">
+            <div className="grid gap-3">
+              {nodes.map((node, index) => {
+                const display = graphNodeDisplay(node, language);
+                const rawOpen = expandedRaw[node.id] === true;
+                return (
+                  <article
+                    key={node.id}
+                    className={`rounded-md border bg-white p-4 shadow-sm transition ${
+                      selectedNode?.id === node.id
+                        ? "border-[var(--brand)] ring-2 ring-[#cde8ea]"
+                        : "border-[var(--line)]"
+                    }`}
+                  >
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedId(node.id);
+                          onInspectNode?.(node);
+                        }}
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={`h-2.5 w-2.5 rounded-full ${statusDotClass(node.status)}`}
+                          />
+                          <span className="text-xs font-semibold text-[var(--muted)]">
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
+                          <Badge tone={typeTone(node.type)}>{display.type}</Badge>
+                          <Badge tone={statusTone(node.status)}>{display.status}</Badge>
+                          <span className="text-xs text-[var(--muted)]">
+                            {formatDateTime(node.timestamp, language, "")}
+                          </span>
+                          {node.duration_ms !== null && node.duration_ms !== undefined ? (
+                            <span className="text-xs font-semibold text-[#344054]">
+                              {formatDuration(node.duration_ms)}
+                            </span>
+                          ) : null}
+                        </div>
+                        <h3 className="mt-2 truncate font-semibold text-[#26323f]">
+                          {display.label}
+                        </h3>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedRaw((current) => ({
+                            ...current,
+                            [node.id]: !rawOpen,
+                          }))
+                        }
+                        className="inline-flex min-h-8 shrink-0 items-center rounded-md border border-[var(--line)] px-3 text-xs font-semibold text-[var(--brand-dark)] hover:bg-[var(--panel-soft)]"
+                      >
+                        {rawOpen ? t.inspector.hideDetails : t.inspector.showDetails}
+                      </button>
                     </div>
-                  ) : null}
-                </button>
-              ))}
+
+                    <div className="mt-3 grid gap-3 text-sm lg:grid-cols-2">
+                      <div className="rounded-md bg-[var(--panel-soft)] p-3">
+                        <div className="text-xs font-semibold uppercase text-[var(--muted)]">
+                          {t.inspector.nodeResponsibility}
+                        </div>
+                        <div className="mt-1 leading-6 text-[#344054]">
+                          {display.responsibility}
+                        </div>
+                      </div>
+                      <div className="rounded-md bg-[var(--panel-soft)] p-3">
+                        <div className="text-xs font-semibold uppercase text-[var(--muted)]">
+                          {t.inspector.nodeSummary}
+                        </div>
+                        <div className="mt-1 leading-6 text-[#344054]">
+                          {node.summary || node.label || node.id}
+                        </div>
+                      </div>
+                    </div>
+
+                    {rawOpen ? (
+                      <div className="mt-3">
+                        <div className="mb-2 text-xs font-semibold uppercase text-[var(--muted)]">
+                          {t.inspector.rawDetails}
+                        </div>
+                        <pre className="max-h-96 overflow-auto rounded-md bg-[#101828] p-3 text-xs leading-5 text-[#f8fafc]">
+                          {JSON.stringify(
+                            {
+                              id: node.id,
+                              label: node.label,
+                              metadata: node.metadata,
+                            },
+                            null,
+                            2,
+                          )}
+                        </pre>
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
             </div>
           </div>
         ) : (

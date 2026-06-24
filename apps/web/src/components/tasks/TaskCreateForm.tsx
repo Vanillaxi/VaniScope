@@ -131,14 +131,16 @@ function TaskCreateFormBody({ selectedSkill }: { selectedSkill: ConsoleSkill }) 
         <form onSubmit={onSubmit} className="flex flex-col gap-5">
           <div>
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <Badge tone="info">{t.taskCreate.selectedSkill}</Badge>
+              <Badge tone="info">{t.taskCreate.skillWorkspace}</Badge>
               <span className="text-sm font-semibold text-[var(--brand-dark)]">
                 {skillText[selectedSkill.nameKey]}
               </span>
             </div>
-            <h1 className="text-2xl font-semibold">{t.taskCreate.title}</h1>
+            <h1 className="text-2xl font-semibold">
+              {skillText[selectedSkill.nameKey]}
+            </h1>
             <p className="mt-1 text-sm text-[var(--muted)]">
-              {t.taskCreate.demoHint}
+              {skillText[selectedSkill.descriptionKey]}
             </p>
           </div>
 
